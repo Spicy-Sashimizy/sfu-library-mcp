@@ -1,0 +1,231 @@
+# Pommel service for ClaudeBox sfu-library-mcp
+# Provides semantic code search with Ollama proxy for batch splitting
+
+name: claudebox-sfu-library-mcp-pommel
+
+services:
+  pommel:
+    container_name: claudebox-sfu-library-mcp-pommel
+    image: debian:bookworm-slim
+    volumes:
+      - .:/workspace
+      - pommel-data:/pommel-data
+    working_dir: /workspace
+    entrypoint: ["/bin/bash", "-c"]
+    command:
+      - |
+        set -e
+        echo "=========================================="
+        echo "  Pommel Setup for sfu-library-mcp"
+        echo "=========================================="
+
+        # Install dependencies
+        echo "Installing dependencies..."
+        apt-get update -qq && apt-get install -y -qq curl socat git python3 libsqlite3-dev build-essential >/dev/null 2>&1
+
+        # Install Pommel from pre-built release
+        if [ ! -f /usr/local/bin/pommeld ]; then
+            echo "Installing Pommel..."
+            POMMEL_VERSION="v0.5.2"
+            curl -fsSL "https://github.com/dbinky/Pommel/releases/download/$${POMMEL_VERSION}/pommel-$${POMMEL_VERSION}-linux-amd64.tar.gz" -o /tmp/pommel.tar.gz
+            tar -xzf /tmp/pommel.tar.gz -C /tmp
+            mv /tmp/pm-linux-amd64 /usr/local/bin/pm
+            mv /tmp/pommeld-linux-amd64 /usr/local/bin/pommeld
+            chmod +x /usr/local/bin/pm /usr/local/bin/pommeld
+            cp -r /tmp/languages /workspace/ 2>/dev/null || true
+            rm -rf /tmp/pommel.tar.gz /tmp/pm-linux-amd64 /tmp/pommeld-linux-amd64 /tmp/languages
+            echo "Pommel installed"
+        fi
+
+        # Create Ollama proxy script for batch splitting
+        echo "Setting up Ollama proxy..."
+        cat > /usr/local/bin/ollama-proxy.py << 'PROXY_EOF'
+        #!/usr/bin/env python3
+        """Ollama API proxy for Pommel - handles batch splitting and format transformation."""
+        from http.server import HTTPServer, BaseHTTPRequestHandler
+        import urllib.request, urllib.error, json, sys
+
+        class OllamaProxyHandler(BaseHTTPRequestHandler):
+            OLLAMA_UPSTREAM = "http://host.docker.internal:11434"
+
+            def log_message(self, format, *args):
+                print(f"[PROXY] {format % args}", file=sys.stderr)
+
+            def _forward_batch_request(self, url, req_data, headers, max_batch_size):
+                input_array = req_data.get('input', [])
+                model = req_data.get('model', 'nomic-embed-text')
+                all_embeddings = []
+                total_batches = (len(input_array) + max_batch_size - 1) // max_batch_size
+
+                for i in range(0, len(input_array), max_batch_size):
+                    batch_num = i // max_batch_size + 1
+                    batch_chunks = input_array[i:i + max_batch_size]
+                    print(f"[PROXY] Batch {batch_num}/{total_batches}: {len(batch_chunks)} chunks", file=sys.stderr)
+
+                    batch_data = {'model': model, 'input': batch_chunks}
+                    json_body = json.dumps(batch_data).encode('utf-8')
+                    req = urllib.request.Request(url, data=json_body, headers=headers, method='POST')
+
+                    try:
+                        with urllib.request.urlopen(req, timeout=60) as response:
+                            if response.getcode() != 200:
+                                return response.getcode(), response.read(), response.headers
+                            resp_data = json.loads(response.read().decode())
+                            embeddings = resp_data.get('embeddings', resp_data.get('embedding', []))
+                            if isinstance(embeddings, list) and len(embeddings) > 0:
+                                if isinstance(embeddings[0], list):
+                                    all_embeddings.extend(embeddings)
+                                else:
+                                    all_embeddings.append(embeddings)
+                    except Exception as e:
+                        return 500, json.dumps({'error': str(e)}).encode(), {}
+
+                return 200, json.dumps({'embeddings': all_embeddings}).encode(), {}
+
+            def _forward_request(self, method, path, data=None):
+                url = f"{self.OLLAMA_UPSTREAM}{path}"
+                headers = {'Content-Type': self.headers.get('Content-Type', 'application/json')}
+
+                if data:
+                    try:
+                        req_data = json.loads(data.decode() if isinstance(data, bytes) else data)
+                        input_data = req_data.get('input')
+                        if isinstance(input_data, list) and len(input_data) > 10:
+                            return self._forward_batch_request(url, req_data, headers, 10)
+                    except: pass
+
+                req = urllib.request.Request(url, data=data, headers=headers, method=method)
+                try:
+                    with urllib.request.urlopen(req, timeout=30) as response:
+                        body = response.read()
+                        if 'embed' in path:
+                            try:
+                                ollama_resp = json.loads(body.decode())
+                                if 'embedding' in ollama_resp and 'embeddings' not in ollama_resp:
+                                    embedding = ollama_resp['embedding']
+                                    if isinstance(embedding, list) and len(embedding) > 0 and isinstance(embedding[0], (int, float)):
+                                        ollama_resp['embeddings'] = [embedding]
+                                        del ollama_resp['embedding']
+                                        body = json.dumps(ollama_resp).encode()
+                            except: pass
+                        return response.getcode(), body, response.headers
+                except urllib.error.HTTPError as e:
+                    return e.code, e.read(), e.headers
+                except Exception as e:
+                    return 500, json.dumps({'error': str(e)}).encode(), {}
+
+            def do_GET(self):
+                code, body, headers = self._forward_request('GET', self.path)
+                self.send_response(code)
+                self.end_headers()
+                self.wfile.write(body)
+
+            def do_POST(self):
+                content_length = int(self.headers.get('Content-Length', 0))
+                body = self.rfile.read(content_length) if content_length > 0 else None
+                code, resp_body, headers = self._forward_request('POST', self.path, body)
+                self.send_response(code)
+                self.end_headers()
+                self.wfile.write(resp_body)
+
+        if __name__ == '__main__':
+            print("Ollama proxy starting on port 11434...", file=sys.stderr)
+            HTTPServer(('', 11434), OllamaProxyHandler).serve_forever()
+        PROXY_EOF
+        chmod +x /usr/local/bin/ollama-proxy.py
+
+        # Start Ollama proxy in background
+        echo "Starting Ollama proxy..."
+        python3 /usr/local/bin/ollama-proxy.py &
+        PROXY_PID=$$!
+        sleep 2
+
+        # Verify proxy is running
+        if ! kill -0 $$PROXY_PID 2>/dev/null; then
+            echo "ERROR: Ollama proxy failed to start"
+            exit 1
+        fi
+        echo "Ollama proxy running (PID $$PROXY_PID)"
+
+        # Initialize Pommel
+        cd /workspace
+        export HOME=/pommel-data
+        mkdir -p /pommel-data/.pommel
+
+        # Remove stale workspace .pommel
+        rm -rf /workspace/.pommel 2>/dev/null || true
+        ln -sf /pommel-data/.pommel /workspace/.pommel 2>/dev/null || true
+
+        # Remove stale PID files (causes "Daemon already running" error on restart)
+        rm -f /pommel-data/.pommel/daemon.pid 2>/dev/null || true
+        rm -f /workspace/.pommel/daemon.pid 2>/dev/null || true
+        rm -f /pommel-data/.pommel/pommel.pid 2>/dev/null || true
+        rm -f /workspace/.pommel/pommel.pid 2>/dev/null || true
+
+        # Initialize if needed
+        if [ ! -f "/pommel-data/.pommel/config.yaml" ]; then
+            echo "Initializing Pommel..."
+            rm -f /pommel-data/.pommel/pommel.db 2>/dev/null || true
+            pm init
+            pm config set embedding.ollama_url http://localhost:11434
+            pm config set daemon.host 0.0.0.0
+            pm config set daemon.port 7420
+        fi
+
+        # Create .pommelignore
+        cat > /workspace/.pommelignore << 'IGNORE_EOF'
+        node_modules/
+        .git/
+        *.log
+        .claude/
+        __pycache__/
+        *.pyc
+        .pommel/
+        venv/
+        .venv/
+        dist/
+        build/
+        IGNORE_EOF
+
+        # Trigger initial reindex
+        echo "Triggering initial index..."
+        pm reindex || true
+
+        echo "=========================================="
+        echo "  Pommel Ready - Starting daemon"
+        echo "=========================================="
+
+        # Final PID cleanup right before daemon start
+        rm -f /pommel-data/.pommel/daemon.pid 2>/dev/null || true
+        rm -f /workspace/.pommel/daemon.pid 2>/dev/null || true
+        rm -f /pommel-data/.pommel/pommel.pid 2>/dev/null || true
+        rm -f /workspace/.pommel/pommel.pid 2>/dev/null || true
+
+        # Start Pommel daemon (exec replaces bash, making pommeld PID 1)
+        exec pommeld -project /workspace
+    environment:
+      - OLLAMA_HOST=http://localhost:11434
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    ports:
+      - "7424:7420"
+    networks:
+      - claudebox-shared
+    labels:
+      - "com.claudebox.managed=true"
+      - "com.claudebox.service=pommel"
+      - "com.claudebox.project=sfu-library-mcp"
+    restart: unless-stopped
+
+networks:
+  claudebox-shared:
+    external: true
+    name: claudebox-shared-net
+
+volumes:
+  pommel-data:
+    name: claudebox-sfu-library-mcp-pommel-data
+    labels:
+      com.claudebox.managed: "true"
+      com.claudebox.project: "sfu-library-mcp"
+

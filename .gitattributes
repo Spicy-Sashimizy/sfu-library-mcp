@@ -1,0 +1,29 @@
+# ============================================
+# GIT-CRYPT ENCRYPTION PATTERNS
+# ============================================
+# Files matching these patterns are encrypted on GitHub
+
+# Environment files
+.env filter=git-crypt diff=git-crypt
+.env.* filter=git-crypt diff=git-crypt
+!.env.example
+!.env.template
+
+# Credential files
+credentials.json filter=git-crypt diff=git-crypt
+*credentials*.json filter=git-crypt diff=git-crypt
+*secrets*.json filter=git-crypt diff=git-crypt
+*token*.json filter=git-crypt diff=git-crypt
+oauth*.json filter=git-crypt diff=git-crypt
+client_secret*.json filter=git-crypt diff=git-crypt
+service_account*.json filter=git-crypt diff=git-crypt
+
+# API keys and certificates
+*.key filter=git-crypt diff=git-crypt
+*.pem filter=git-crypt diff=git-crypt
+*.p12 filter=git-crypt diff=git-crypt
+
+# Secrets directories
+secrets/** filter=git-crypt diff=git-crypt
+.secrets/** filter=git-crypt diff=git-crypt
+

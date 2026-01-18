@@ -1,0 +1,11 @@
+node_modules/
+.git/
+*.log
+.claude/
+__pycache__/
+*.pyc
+.pommel/
+venv/
+.venv/
+dist/
+build/

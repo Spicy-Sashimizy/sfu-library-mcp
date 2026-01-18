@@ -1,0 +1,55 @@
+{
+  "name": "sfu-library-mcp",
+  "dockerComposeFile": "docker-compose.yml",
+  "service": "app",
+  "workspaceFolder": "/workspaces/sfu-library-mcp",
+  "shutdownAction": "stopCompose",
+
+  "features": {
+    "ghcr.io/devcontainers/features/git:1": {},
+    "ghcr.io/devcontainers/features/node:1": { "version": "20" },
+    "ghcr.io/devcontainers/features/python:1": { "version": "3.13" },
+    "ghcr.io/devcontainers/features/go:1": { "version": "latest" },
+    "ghcr.io/devcontainers/features/rust:1": { "version": "latest" },
+    "ghcr.io/devcontainers/features/docker-in-docker:2": {}
+  },
+
+  "containerEnv": {
+    "CLAUDE_CONFIG_DIR": "/home/vscode/.claude"
+  },
+
+  "customizations": {
+    "vscode": {
+      "settings": {
+        "terminal.integrated.defaultProfile.linux": "bash",
+        "python.defaultInterpreterPath": "/usr/local/bin/python",
+        "python.formatting.provider": "none",
+        "editor.formatOnSave": true
+      },
+      "extensions": [
+        "ms-python.python",
+        "ms-python.vscode-pylance",
+        "charliermarsh.ruff",
+        "dbaeumer.vscode-eslint",
+        "esbenp.prettier-vscode",
+        "golang.go",
+        "rust-lang.rust-analyzer",
+        "ms-azuretools.vscode-docker"
+      ]
+    }
+  },
+
+  "postCreateCommand": "bash .devcontainer/post-create.sh",
+
+  "forwardPorts": [3000, 5050, 5432, 6379, 8000, 8080],
+  "portsAttributes": {
+    "3000": { "label": "Web App" },
+    "5050": { "label": "API/WebSocket" },
+    "5432": { "label": "PostgreSQL" },
+    "6379": { "label": "Redis" },
+    "8000": { "label": "Dev Server" },
+    "8080": { "label": "Alt Server" }
+  },
+
+  "remoteUser": "vscode"
+}
