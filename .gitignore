@@ -80,7 +80,6 @@ private/
 .secrets/
 .private/
 .credentials/
-keys/
 certs/
 
 # ============================================
@@ -125,3 +124,5 @@ local_settings.*
 # Local overrides
 *.local
 
+!keys/
+!.git-crypt/
