@@ -12,10 +12,10 @@ services:
       - claude-config:/home/vscode/.claude:cached
       - pommel_data:/home/vscode/.pommel-data:cached
       - gh-cli-config:/home/vscode/.config/gh:cached
-      - ${CLAUDEBOX_ROOT}/mcp-servers/pommel/devcontainer-server.py:/usr/local/bin/pommel-mcp-server.py:ro
-      - ${USERPROFILE}/.ssh:/home/vscode/.ssh
+      - C:\Users\gordo\.claudebox\mcp-servers\pommel\devcontainer-server.py:/usr/local/bin/pommel-mcp-server.py:ro
+      - C:/Users/gordo/.ssh:/home/vscode/.ssh
       - ./entrypoint.sh:/usr/local/bin/claudebox-entrypoint.sh:ro
-      - ${USERPROFILE}/.claudebox/git-credentials/.git-credentials:/mnt/claudebox-git-creds/.git-credentials:ro
+      - C:/Users/gordo/.claudebox/git-credentials/.git-credentials:/mnt/claudebox-git-creds/.git-credentials:ro
       - claude-local:/home/vscode/.local:cached
       - C:/Users/gordo/.claudebox/credentials.json:/home/vscode/.claudebox-credentials/credentials.json:ro
     entrypoint: ["/bin/bash", "/usr/local/bin/claudebox-entrypoint.sh"]
@@ -29,8 +29,16 @@ services:
       - CLAUDE_CONFIG_DIR=/home/vscode/.claude
       - CLAUDE_BACKEND=${CLAUDE_BACKEND:-anthropic}
       - CLAUDEBOX_CREDENTIALS_FILE=/home/vscode/.claudebox-credentials/credentials.json
+      - OLLAMA_HOST=http://host.docker.internal:11434
+      - POMMEL_DATA_DIR=/home/vscode/.pommel-data
+      - PROJECT_NAME=sfu-library-mcp
+      - POMMEL_HOST=claudebox-sfu-library-mcp-pommel
+      - POMMEL_PORT=7420
     networks:
       - claudebox-sfu-library-mcp-net
+      - claudebox-shared
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
     labels:
       - "com.claudebox.project=sfu-library-mcp"
       - "com.claudebox.service=app"
@@ -106,6 +114,9 @@ networks:
     labels:
       - "com.claudebox.project=sfu-library-mcp"
       - "com.claudebox.managed=true"
+  claudebox-shared:
+    external: true
+    name: claudebox-shared-net
 
 volumes:
   postgres_data:
@@ -118,14 +129,21 @@ volumes:
     labels:
       com.claudebox.project: sfu-library-mcp
       com.claudebox.managed: "true"
+  pommel_data:
+    name: claudebox-sfu-library-mcp-pommel
+    labels:
+      com.claudebox.project: sfu-library-mcp
+      com.claudebox.managed: "true"
+  gh-cli-config:
+    name: claudebox-sfu-library-mcp-gh-cli
+    labels:
+      com.claudebox.project: sfu-library-mcp
+      com.claudebox.managed: "true"
   claude-config:
     name: claudebox-shared-config
-    labels:
-      com.claudebox.managed: "true"
+    external: true
   claude-local:
-    name: claudebox-${PROJECT_NAME}-local
+    name: claudebox-sfu-library-mcp-local
     labels:
-      com.claudebox.project: ${PROJECT_NAME}
+      com.claudebox.project: sfu-library-mcp
       com.claudebox.managed: "true"
-
-
