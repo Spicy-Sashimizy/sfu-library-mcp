@@ -1,4 +1,4 @@
-﻿#!/bin/bash
+#!/bin/bash
 set -e
 
 # ==========================================
@@ -652,9 +652,10 @@ cd "$WORKSPACE_DIR"
 if command -v git-crypt >/dev/null 2>&1; then
     # Ensure git filter config uses Linux paths (not Windows paths)
     # This fixes issues where Windows git config is copied to container
-    git config filter.git-crypt.clean "git-crypt clean" 2>/dev/null || true
-    git config filter.git-crypt.smudge "git-crypt smudge" 2>/dev/null || true
-    git config filter.git-crypt.required "false" 2>/dev/null || true
+    # Also make git-crypt non-blocking so it doesn't break OAuth git operations
+    git config --global filter.git-crypt.clean "git-crypt clean" 2>/dev/null || true
+    git config --global filter.git-crypt.smudge "git-crypt smudge" 2>/dev/null || true
+    git config --global filter.git-crypt.required "false" 2>/dev/null || true
 
     # Create key storage directory
     mkdir -p "$GITCRYPT_KEY_DIR"
@@ -736,6 +737,47 @@ else
 fi
 
 # ========================================
+# SSH Key Permission Setup
+# ========================================
+echo ""
+echo "Setting up SSH key permissions for Git..."
+
+SSH_DIR="/home/vscode/.ssh"
+if [ -d "$SSH_DIR" ]; then
+    # Fix ownership of SSH keys (mounted from Windows host)
+    # This is needed because Windows files are owned by root in the container
+    if [ -w "$SSH_DIR" ]; then
+        echo "  Fixing SSH key ownership and permissions..."
+        chown -R vscode:vscode "$SSH_DIR" 2>/dev/null || true
+        chmod 700 "$SSH_DIR" 2>/dev/null || true
+        chmod 600 "$SSH_DIR"/id_* 2>/dev/null || true
+        chmod 644 "$SSH_DIR"/*.pub 2>/dev/null || true
+
+        # Fix SSH config if it exists
+        if [ -f "$SSH_DIR/config" ]; then
+            chmod 600 "$SSH_DIR/config" 2>/dev/null || true
+        fi
+
+        echo "  ✓ SSH key permissions fixed"
+    else
+        echo "  ⚠ SSH directory is read-only (mounted with :ro flag)"
+        echo "    To fix: Remove :ro from docker-compose.yml SSH mount"
+    fi
+
+    # Test SSH connection to GitHub
+    if command -v ssh >/dev/null 2>&1; then
+        if ssh -o BatchMode=yes -o StrictHostKeyChecking=no -o ConnectTimeout=5 -T git@github.com 2>&1 | grep -q "successfully authenticated"; then
+            echo "  ✓ SSH authentication to GitHub working"
+        else
+            echo "  ⚠ SSH authentication to GitHub not working"
+            echo "    You may need to: add SSH key to GitHub account"
+        fi
+    fi
+else
+    echo "  ⚠ No SSH directory found"
+fi
+
+# ========================================
 # GitHub OAuth Authentication Setup
 # ========================================
 echo ""
@@ -793,11 +835,39 @@ else
     echo "  ✓ Skipping OAuth setup in container (host will handle git auth)"
 fi
 
-# Configure git to use the host's credential helper
-echo "  Configuring git credential helper..."
-if ! git config --global credential.helper >/dev/null 2>&1; then
-    # Note: This doesn't work directly in containers, but documents intent
-    echo "    (Container relies on host machine for git authentication)"
+# ========================================
+# Configure Git for OAuth Authentication
+# ========================================
+# Set up OAuth credentials from the mounted volume for automatic git operations
+OAUTH_CREDS="/mnt/claudebox-git-creds/.git-credentials"
+
+if [ -f "$OAUTH_CREDS" ]; then
+    echo "  Configuring git to use OAuth credentials..."
+
+    # Copy OAuth credentials to a writable location
+    mkdir -p /home/vscode/.git-creds
+    cp "$OAUTH_CREDS" /home/vscode/.git-credentials
+    chmod 600 /home/vscode/.git-credentials
+
+    # Configure git to use the OAuth credentials file
+    git config --global credential.helper "store --file=/home/vscode/.git-credentials"
+    git config --global credential.helper store
+
+    echo "  ✓ OAuth credentials configured"
+    echo "    Git push/pull will work automatically without authentication prompts"
+else
+    echo "  No OAuth credentials found in /mnt/claudebox-git-creds"
+    echo "  Git operations will use SSH keys for authentication"
+    echo "  If HTTPS remotes fail, switch to SSH: git remote set-url origin git@github.com:user/repo.git"
+fi
+
+# Configure git to prefer SSH over HTTPS when SSH keys are available
+if [ -f "$SSH_DIR/id_ed25519" ] || [ -f "$SSH_DIR/id_rsa" ]; then
+    echo ""
+    echo "  SSH keys detected - configuring URL rewriting to use SSH..."
+    # This automatically converts https://github.com/ to git@github.com: for git operations
+    git config --global url."git@github.com:".insteadOf "https://github.com/"
+    echo "  ✓ Git will use SSH for GitHub operations"
 fi
 
 echo ""

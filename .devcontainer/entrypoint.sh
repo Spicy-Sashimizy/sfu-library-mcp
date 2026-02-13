@@ -232,6 +232,68 @@ test_github_connection() {
 }
 
 # ========================================
+# Claude Code Native Installer
+# ========================================
+# Installs or updates Claude Code using the native installer
+# which supports built-in auto-updates. The binary is persisted
+# in the claude-local volume (~/.local/bin/claude).
+install_or_update_claude_code() {
+    local CLAUDE_BIN="/home/vscode/.local/bin/claude"
+    local VERSION_JSON="/usr/local/share/claude-version.json"
+
+    # Ensure ~/.local/bin exists and is owned by vscode
+    mkdir -p /home/vscode/.local/bin
+    chown -R vscode:vscode /home/vscode/.local
+
+    if [ -x "$CLAUDE_BIN" ]; then
+        # Claude Code already installed (persisted from volume)
+        local current_version
+        current_version=$(su - vscode -c "$CLAUDE_BIN --version" 2>/dev/null || echo "unknown")
+        echo "[entrypoint] Claude Code already installed: $current_version (native, auto-update enabled)"
+
+        # Update version JSON
+        cat > "$VERSION_JSON" << VEOF
+{"version":"$current_version","installedAt":"$(date -u +%Y-%m-%dT%H:%M:%SZ)","installerType":"native","autoUpdate":true}
+VEOF
+    else
+        # Install via native installer as vscode user
+        echo "[entrypoint] Installing Claude Code via native installer..."
+
+        if su - vscode -c "curl -fsSL https://claude.ai/install.sh | bash" 2>&1; then
+            local installed_version
+            installed_version=$(su - vscode -c "$CLAUDE_BIN --version" 2>/dev/null || echo "unknown")
+            echo "[entrypoint] Claude Code installed: $installed_version (native installer)"
+
+            cat > "$VERSION_JSON" << VEOF
+{"version":"$installed_version","installedAt":"$(date -u +%Y-%m-%dT%H:%M:%SZ)","installerType":"native","autoUpdate":true}
+VEOF
+        else
+            echo "[entrypoint] Native installer failed, falling back to npm..."
+            npm install -g @anthropic-ai/claude-code 2>&1 || echo "[entrypoint] npm install also failed"
+
+            local npm_version
+            npm_version=$(claude --version 2>/dev/null || echo "unknown")
+            cat > "$VERSION_JSON" << VEOF
+{"version":"$npm_version","installedAt":"$(date -u +%Y-%m-%dT%H:%M:%SZ)","installerType":"npm","autoUpdate":false}
+VEOF
+            echo "[entrypoint] Claude Code installed via npm fallback: $npm_version"
+        fi
+    fi
+
+    # Ensure ~/.local/bin is in PATH for vscode user
+    if ! grep -q '\.local/bin' /home/vscode/.bashrc 2>/dev/null; then
+        echo 'export PATH="$HOME/.local/bin:$PATH"' >> /home/vscode/.bashrc
+        chown vscode:vscode /home/vscode/.bashrc
+    fi
+
+    # Also add to profile for login shells
+    if ! grep -q '\.local/bin' /home/vscode/.profile 2>/dev/null; then
+        echo 'export PATH="$HOME/.local/bin:$PATH"' >> /home/vscode/.profile 2>/dev/null || true
+        chown vscode:vscode /home/vscode/.profile 2>/dev/null || true
+    fi
+}
+
+# ========================================
 # Socat Ollama Proxy (for Pommel)
 # ========================================
 start_ollama_proxy() {
@@ -258,6 +320,7 @@ main() {
     configure_git
     configure_git_credentials
     configure_gh_cli
+    install_or_update_claude_code
     start_ollama_proxy
 
     # Test connection (non-blocking)
