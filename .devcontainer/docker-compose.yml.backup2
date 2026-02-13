@@ -11,7 +11,19 @@ services:
       - ..:/workspaces/sfu-library-mcp:cached
       - claude-config:/home/vscode/.claude:cached
       - C:/Users/gordo/.claudebox/credentials.json:/home/vscode/.claudebox-credentials/credentials.json:ro
-    command: sleep infinity
+      # SSH keys for Git operations (GitHub authentication)
+      # Mounted writable to allow permission fixes in entrypoint.sh
+      - C:/Users/gordo/.ssh:/home/vscode/.ssh
+      # GitHub CLI config (writable volume, configured by entrypoint.sh)
+      - gh-cli-config:/home/vscode/.config/gh:cached
+      # Git credentials for HTTPS authentication (OAuth token)
+      - C:/Users/gordo/.claudebox/git-credentials/.git-credentials:/mnt/claudebox-git-creds/.git-credentials:ro
+      # Entrypoint script for persistent SSH/Git setup
+      - ./entrypoint.sh:/usr/local/bin/claudebox-entrypoint.sh:ro
+    entrypoint: ["/bin/bash", "/usr/local/bin/claudebox-entrypoint.sh"]
+    command: ["sleep", "infinity"]
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
     env_file:
       - ../.env
     environment:
@@ -21,8 +33,10 @@ services:
       - CLAUDE_CONFIG_DIR=/home/vscode/.claude
       - CLAUDE_BACKEND=${CLAUDE_BACKEND:-anthropic}
       - CLAUDEBOX_CREDENTIALS_FILE=/home/vscode/.claudebox-credentials/credentials.json
+      - PROJECT_NAME=sfu-library-mcp
     networks:
       - claudebox-sfu-library-mcp-net
+      - claudebox-shared
     labels:
       - "com.claudebox.project=sfu-library-mcp"
       - "com.claudebox.service=app"
@@ -99,7 +113,21 @@ networks:
       - "com.claudebox.project=sfu-library-mcp"
       - "com.claudebox.managed=true"
 
+  claudebox-shared:
+    external: true
+    name: claudebox-shared-net
+
 volumes:
+  gh-cli-config:
+    name: claudebox-sfu-library-mcp-gh-cli
+    labels:
+      com.claudebox.project: sfu-library-mcp
+      com.claudebox.managed: "true"
+  pommel_data:
+    name: claudebox-sfu-library-mcp-pommel
+    labels:
+      com.claudebox.project: sfu-library-mcp
+      com.claudebox.managed: "true"
   postgres_data:
     name: claudebox-sfu-library-mcp-postgres
     labels:
