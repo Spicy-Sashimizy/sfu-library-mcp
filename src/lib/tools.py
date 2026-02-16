@@ -35,6 +35,11 @@ _request_semaphore = asyncio.Semaphore(5)
 # PERF-004: Simple metrics counters
 _metrics: dict[str, dict[str, Any]] = {}
 
+# Strategy B: Search result cache indexed by record ID.
+# Populated by every search call so that generate_citation / get_full_text_links
+# can fall back to cached PNX data when get_item_details fails for CDI records.
+_record_cache: dict[str, dict] = {}
+
 
 def _record_metric(tool_name: str, latency: float, success: bool) -> None:
     """Record a metric for a tool call."""
@@ -55,6 +60,26 @@ def _record_metric(tool_name: str, latency: float, success: bool) -> None:
 def get_metrics() -> dict:
     """Return current metrics snapshot."""
     return dict(_metrics)
+
+
+def _cache_search_docs(docs: list[dict]) -> None:
+    """Strategy B: Cache docs from search results by record ID."""
+    for doc in docs:
+        pnx = doc.get("pnx", {})
+        control = pnx.get("control", {})
+        record_id = control.get("recordid", [""])[0] if control.get("recordid") else ""
+        if record_id:
+            _record_cache[record_id] = doc
+    # Cap cache to prevent unbounded growth
+    if len(_record_cache) > 500:
+        keys = list(_record_cache.keys())
+        for k in keys[:len(keys) - 500]:
+            del _record_cache[k]
+
+
+def _lookup_cached_record(record_id: str) -> dict | None:
+    """Strategy B: Look up a previously searched record from cache."""
+    return _record_cache.get(record_id)
 
 
 # ─── Tool definitions ───────────────────────────────────────────
@@ -413,6 +438,10 @@ async def _handle_search_library(args: dict, client) -> list[TextContent]:
                     field=field, sort=sort, tab=tab, scope=scope,
                 )
 
+    # Strategy B: Cache all returned docs by record ID
+    if results and results.get("docs"):
+        _cache_search_docs(results["docs"])
+
     formatted = format_search_results(results)
     return [TextContent(type="text", text=formatted)]
 
@@ -461,6 +490,8 @@ async def _handle_search_by_author(args: dict, client) -> list[TextContent]:
         return [TextContent(type="text", text="Authentication failed.")]
     async with _request_semaphore:
         results = client.search(query=author, limit=limit, field="creator")
+    if results and results.get("docs"):
+        _cache_search_docs(results["docs"])
     formatted = format_search_results(results)
     return [TextContent(type="text", text=formatted)]
 
@@ -472,6 +503,8 @@ async def _handle_search_by_subject(args: dict, client) -> list[TextContent]:
         return [TextContent(type="text", text="Authentication failed.")]
     async with _request_semaphore:
         results = client.search(query=subject, limit=limit, field="sub")
+    if results and results.get("docs"):
+        _cache_search_docs(results["docs"])
     formatted = format_search_results(results)
     return [TextContent(type="text", text=formatted)]
 
@@ -482,6 +515,8 @@ async def _handle_search_by_isbn(args: dict, client) -> list[TextContent]:
         return [TextContent(type="text", text="Authentication failed.")]
     async with _request_semaphore:
         results = client.search(query=isbn, limit=5, field="isbn")
+    if results and results.get("docs"):
+        _cache_search_docs(results["docs"])
     formatted = format_search_results(results)
     return [TextContent(type="text", text=formatted)]
 
@@ -496,6 +531,8 @@ async def _handle_search_electronic(args: dict, client) -> list[TextContent]:
             query=query, limit=limit,
             tab="online_only_tab", scope="ElectronicOnly_scope",
         )
+    if results and results.get("docs"):
+        _cache_search_docs(results["docs"])
     formatted = format_search_results(results)
     return [TextContent(type="text", text=formatted)]
 
@@ -512,6 +549,9 @@ async def _handle_get_full_text_links(args: dict, client) -> list[TextContent]:
 
     async with _request_semaphore:
         item = client.get_item_details(record_id)
+    if not item:
+        # Strategy B: Try cached search result before expensive API fallback
+        item = _lookup_cached_record(record_id)
     if not item:
         async with _request_semaphore:
             results = client.search(query=record_id, limit=1)
@@ -571,6 +611,9 @@ async def _handle_generate_citation(args: dict, client) -> list[TextContent]:
     async with _request_semaphore:
         item = client.get_item_details(record_id)
     if not item:
+        # Strategy B: Try cached search result before expensive API fallback
+        item = _lookup_cached_record(record_id)
+    if not item:
         async with _request_semaphore:
             results = client.search(query=record_id, limit=1)
         if results and results.get("docs"):
@@ -615,6 +658,9 @@ async def _handle_batch_citations(args: dict, client) -> list[TextContent]:
         async with _request_semaphore:
             item = client.get_item_details(rid)
         if not item:
+            # Strategy B: Try cached search result first
+            item = _lookup_cached_record(rid)
+        if not item:
             async with _request_semaphore:
                 results = client.search(query=rid, limit=1)
             if results and results.get("docs"):
@@ -658,6 +704,7 @@ async def _handle_export_search(args: dict, client) -> list[TextContent]:
 
     docs = results.get("docs", [])
     total = results.get("info", {}).get("total", 0)
+    _cache_search_docs(docs)
 
     if export_format == "json":
         export_data = []
@@ -743,6 +790,7 @@ async def _handle_batch_isbn(args: dict, client) -> list[TextContent]:
         async with _request_semaphore:
             results = client.search(query=isbn_clean, limit=1, field="isbn")
         if results and results.get("docs"):
+            _cache_search_docs(results["docs"])
             return isbn, results["docs"][0]
         return isbn, None
 
