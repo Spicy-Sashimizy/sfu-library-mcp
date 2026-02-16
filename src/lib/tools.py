@@ -18,6 +18,7 @@ from mcp.types import Tool, TextContent
 from lib.citations import (
     extract_metadata,
     extract_full_text_links,
+    enrich_metadata_from_crossref,
     format_apa_citation,
     format_mla_citation,
     format_chicago_citation,
@@ -623,6 +624,8 @@ async def _handle_generate_citation(args: dict, client) -> list[TextContent]:
         return [TextContent(type="text", text=f"Could not find item with record ID: {record_id}")]
 
     metadata = extract_metadata(item)
+    # Strategy D: Enrich with CrossRef if key fields are missing
+    metadata = enrich_metadata_from_crossref(metadata)
 
     format_names = {
         "apa": "APA 7th Edition",
@@ -680,6 +683,7 @@ async def _handle_batch_citations(args: dict, client) -> list[TextContent]:
             output.append(f"{i}. [Error: Could not find record {rid}]\n")
             continue
         metadata = extract_metadata(item)
+        metadata = enrich_metadata_from_crossref(metadata)
         citation = _format_single_citation(metadata, citation_format)
         if citation_format == "bibtex":
             output.append(f"{citation}\n")
@@ -761,12 +765,12 @@ async def _handle_export_search(args: dict, client) -> list[TextContent]:
         return [TextContent(type="text", text=header + "\n".join(lines))]
 
     elif export_format == "bibtex":
-        entries = [format_bibtex_entry(extract_metadata(doc)) for doc in docs]
+        entries = [format_bibtex_entry(enrich_metadata_from_crossref(extract_metadata(doc))) for doc in docs]
         header = f"% BibTeX Export: {len(docs)} of {total:,} results for '{query}'\n\n"
         return [TextContent(type="text", text=header + "\n\n".join(entries))]
 
     elif export_format == "ris":
-        entries = [format_ris_entry(extract_metadata(doc)) for doc in docs]
+        entries = [format_ris_entry(enrich_metadata_from_crossref(extract_metadata(doc))) for doc in docs]
         header = f"# RIS Export: {len(docs)} of {total:,} results for '{query}'\n\n"
         return [TextContent(type="text", text=header + "\n\n".join(entries))]
 

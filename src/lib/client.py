@@ -674,3 +674,92 @@ class SFULibraryClient:
             "expiresIn": f"{hours}h {minutes}m",
             "expiresAt": datetime.fromtimestamp(exp).isoformat(),
         }
+
+
+def fetch_crossref_metadata(doi: str, timeout: int = 10) -> dict | None:
+    """Strategy D: Fetch metadata from CrossRef API by DOI.
+
+    Free, no authentication required. Returns a normalized metadata dict
+    compatible with extract_metadata() output, or None on failure.
+    """
+    if not doi:
+        return None
+
+    # Normalize DOI — strip URL prefix if present
+    if doi.startswith("https://doi.org/"):
+        doi = doi[len("https://doi.org/"):]
+    elif doi.startswith("http://doi.org/"):
+        doi = doi[len("http://doi.org/"):]
+
+    url = f"https://api.crossref.org/works/{doi}"
+    headers = {
+        "Accept": "application/json",
+        "User-Agent": "SFULibraryMCP/1.0 (mailto:REDACTED_SFU_USERNAME@sfu.ca)",
+    }
+
+    try:
+        response = requests.get(url, headers=headers, timeout=timeout)
+        if response.status_code != 200:
+            logger.debug("CrossRef returned %d for DOI %s", response.status_code, doi)
+            return None
+
+        data = response.json()
+        work = data.get("message", {})
+
+        # Extract authors
+        authors = []
+        for author in work.get("author", []):
+            family = author.get("family", "")
+            given = author.get("given", "")
+            if family and given:
+                authors.append(f"{family}, {given}")
+            elif family:
+                authors.append(family)
+
+        # Extract date
+        date_parts = work.get("published-print", work.get("published-online", {}))
+        date = ""
+        if date_parts and date_parts.get("date-parts"):
+            parts = date_parts["date-parts"][0]
+            date = str(parts[0]) if parts else ""
+
+        # Extract journal
+        journal = ""
+        container = work.get("container-title", [])
+        if container:
+            journal = container[0]
+
+        # Extract pages
+        pages = work.get("page", "")
+        spage, epage = "", ""
+        if "-" in pages:
+            parts = pages.split("-", 1)
+            spage, epage = parts[0].strip(), parts[1].strip()
+
+        return {
+            "title": work.get("title", [""])[0] if work.get("title") else "",
+            "authors": authors,
+            "creators": authors,
+            "contributors": [],
+            "date": date,
+            "publisher": work.get("publisher", ""),
+            "type": work.get("type", ""),
+            "source": journal,
+            "isbn": "",
+            "issn": work.get("ISSN", [""])[0] if work.get("ISSN") else "",
+            "doi": doi,
+            "volume": work.get("volume", ""),
+            "issue": work.get("issue", ""),
+            "spage": spage,
+            "epage": epage,
+            "pages": pages,
+            "record_id": "",
+            "is_cdi": False,
+            "resource_type": "article" if "article" in work.get("type", "") else "other",
+        }
+    except requests.Timeout:
+        logger.debug("CrossRef request timed out for DOI %s", doi)
+        return None
+    except Exception as e:
+        logger.debug("CrossRef lookup failed for DOI %s: %s", doi, e)
+        return None

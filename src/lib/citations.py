@@ -2,6 +2,7 @@
 
 Extracted from the monolith. Supports APA, MLA, Chicago, BibTeX, and RIS formats.
 Implements DATA-005: citation format validation.
+Strategies A/C/D for CDI record support.
 """
 
 import logging
@@ -10,6 +11,51 @@ import re
 from lib.validators import normalize_encoding
 
 logger = logging.getLogger("sfu_library_mcp")
+
+
+def enrich_metadata_from_crossref(metadata: dict) -> dict:
+    """Strategy D: Fill in missing citation fields using CrossRef API.
+
+    Only called when key fields (authors, date, source) are missing
+    and a DOI is available. Returns the same metadata dict, enriched.
+    """
+    doi = metadata.get("doi", "")
+    if not doi:
+        return metadata
+
+    # Only call CrossRef if critical fields are missing
+    missing_authors = not metadata.get("authors")
+    missing_date = not metadata.get("date")
+    missing_source = not metadata.get("source")
+
+    if not (missing_authors or missing_date or missing_source):
+        return metadata
+
+    try:
+        from lib.client import fetch_crossref_metadata
+        cr = fetch_crossref_metadata(doi)
+    except Exception:
+        return metadata
+
+    if not cr:
+        return metadata
+
+    logger.info("Enriching metadata from CrossRef for DOI %s", doi)
+
+    if missing_authors and cr.get("authors"):
+        metadata["authors"] = cr["authors"]
+        metadata["creators"] = cr["authors"]
+    if missing_date and cr.get("date"):
+        metadata["date"] = cr["date"]
+    if missing_source and cr.get("source"):
+        metadata["source"] = cr["source"]
+
+    # Also fill in other missing fields
+    for field in ("volume", "issue", "spage", "epage", "pages", "publisher"):
+        if not metadata.get(field) and cr.get(field):
+            metadata[field] = cr[field]
+
+    return metadata
 
 
 def _is_cdi_record(control: dict) -> bool:
