@@ -39,6 +39,19 @@ RUN curl -fsSL https://deb.nodesource.com/setup_20.x | bash - \
 # Initialize version JSON placeholder (updated at runtime by entrypoint)
 RUN echo "{\"version\":\"pending\",\"installedAt\":\"pending\",\"installerType\":\"native\",\"autoUpdate\":true}" > /usr/local/share/claude-version.json
 
+# Install Google Chrome + ChromeDriver (required for Selenium-based SFU CAS/Duo MFA auth)
+RUN wget -q -O - https://dl.google.com/linux/linux_signing_key.pub | gpg --dearmor -o /usr/share/keyrings/google-chrome.gpg \
+    && echo "deb [arch=amd64 signed-by=/usr/share/keyrings/google-chrome.gpg] http://dl.google.com/linux/chrome/deb/ stable main" > /etc/apt/sources.list.d/google-chrome.list \
+    && apt-get update \
+    && apt-get install -y google-chrome-stable \
+    && CHROME_VERSION=$(google-chrome --version | grep -oP '\d+\.\d+\.\d+\.\d+') \
+    && wget -q "https://storage.googleapis.com/chrome-for-testing-public/${CHROME_VERSION}/linux64/chromedriver-linux64.zip" -O /tmp/chromedriver.zip \
+    && unzip -o /tmp/chromedriver.zip -d /tmp \
+    && mv /tmp/chromedriver-linux64/chromedriver /usr/local/bin/chromedriver \
+    && chmod +x /usr/local/bin/chromedriver \
+    && rm -rf /tmp/chromedriver* \
+    && apt-get clean -y && rm -rf /var/lib/apt/lists/*
+
 # Install Python and quality tools (CodePro features)
 # These enable the dashboard quality-status and quality-check APIs
 RUN apt-get update && apt-get install -y python3-full python3-pip python3-venv \
