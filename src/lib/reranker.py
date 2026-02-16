@@ -31,7 +31,8 @@ def _tokenize(text: str) -> set[str]:
 def _score_title_relevance(doc: dict, query_tokens: set[str]) -> float:
     """Score 0-1 based on query term overlap with title."""
     pnx = doc.get("pnx", {})
-    title = pnx.get("display", {}).get("title", [""])[0]
+    titles = pnx.get("display", {}).get("title", [])
+    title = titles[0] if titles else ""
     title_tokens = _tokenize(title)
     if not query_tokens or not title_tokens:
         return 0.0
@@ -42,7 +43,8 @@ def _score_title_relevance(doc: dict, query_tokens: set[str]) -> float:
 def _score_recency(doc: dict) -> float:
     """Score 0-1 based on publication year. Current year = 1.0, decays 0.05/yr."""
     pnx = doc.get("pnx", {})
-    date_str = pnx.get("display", {}).get("creationdate", [""])[0]
+    dates = pnx.get("display", {}).get("creationdate", [])
+    date_str = dates[0] if dates else ""
     if not date_str:
         return 0.0
     try:
@@ -72,7 +74,8 @@ def _score_fulltext(doc: dict) -> float:
 def _score_type_match(doc: dict) -> float:
     """Score based on resource type. Peer-reviewed articles score highest."""
     pnx = doc.get("pnx", {})
-    doc_type = pnx.get("display", {}).get("type", [""])[0].lower()
+    types = pnx.get("display", {}).get("type", [])
+    doc_type = types[0].lower() if types else ""
 
     if doc_type in ("article", "journal_article", "review"):
         return 1.0
