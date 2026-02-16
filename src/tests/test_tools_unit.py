@@ -15,6 +15,7 @@ class MockClient:
         self._search_result = search_result
         self._item_result = item_result
         self.token_cleared = False
+        self.search_calls: list[dict] = []
 
     def ensure_authenticated(self, force=False):
         return self._authenticated
@@ -22,6 +23,10 @@ class MockClient:
     def search(self, query="", limit=10, offset=0, field="any",
                precision="contains", sort="rank", tab="default_tab",
                scope="default_scope"):
+        self.search_calls.append({
+            "query": query, "limit": limit, "offset": offset,
+            "field": field, "sort": sort, "tab": tab, "scope": scope,
+        })
         return self._search_result
 
     def get_item_details(self, doc_id, context="L"):
@@ -266,6 +271,33 @@ class TestToolDispatch:
             mock_client,
         )
         assert "No ISBN" in result[0].text
+
+    @pytest.mark.asyncio
+    async def test_search_with_expanded_terms(self, mock_client_with_results):
+        result = await handle_tool_call(
+            "search_library",
+            {
+                "query": "machine learning",
+                "expanded_terms": "deep learning OR neural networks",
+            },
+            mock_client_with_results,
+        )
+        assert "Found" in result[0].text
+        # Verify the combined query was sent to the client
+        assert len(mock_client_with_results.search_calls) >= 1
+        sent_query = mock_client_with_results.search_calls[0]["query"]
+        assert "(machine learning) OR (deep learning OR neural networks)" == sent_query
+
+    @pytest.mark.asyncio
+    async def test_search_without_expanded_terms(self, mock_client_with_results):
+        result = await handle_tool_call(
+            "search_library",
+            {"query": "machine learning"},
+            mock_client_with_results,
+        )
+        assert "Found" in result[0].text
+        sent_query = mock_client_with_results.search_calls[0]["query"]
+        assert sent_query == "machine learning"
 
 
 class TestMetrics:

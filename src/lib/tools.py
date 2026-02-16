@@ -138,6 +138,16 @@ TOOL_DEFINITIONS: list[Tool] = [
                     "description": "Type of resources: 'all' (everything), 'electronic' (online only — use when user needs immediate access), 'courses' (course reserves)",
                     "enum": ["all", "electronic", "courses"],
                     "default": "all"
+                },
+                "expanded_terms": {
+                    "type": "string",
+                    "description": (
+                        "Optional: additional search terms to OR with the main query. "
+                        "Generate academic synonyms/related terms. "
+                        "Example: for query 'machine learning', expanded_terms might be "
+                        "'deep learning OR neural networks OR artificial intelligence'. "
+                        "Server will construct: (query) OR (expanded_terms)"
+                    )
                 }
             },
             "required": ["query"]
@@ -436,6 +446,13 @@ async def _handle_search_library(args: dict, client) -> list[TextContent]:
     field = args.get("field", "any")
     sort = args.get("sort", "rank")
     resource_type = args.get("resource_type", "all")
+    expanded_terms = args.get("expanded_terms", "")
+
+    # Construct combined boolean query if expanded_terms provided
+    if expanded_terms and expanded_terms.strip():
+        search_query = f"({query}) OR ({expanded_terms.strip()})"
+    else:
+        search_query = query
 
     tab = "default_tab"
     scope = "default_scope"
@@ -451,7 +468,7 @@ async def _handle_search_library(args: dict, client) -> list[TextContent]:
 
     async with _request_semaphore:
         results = client.search(
-            query=query, limit=limit, offset=offset,
+            query=search_query, limit=limit, offset=offset,
             field=field, sort=sort, tab=tab, scope=scope,
         )
 
@@ -459,7 +476,7 @@ async def _handle_search_library(args: dict, client) -> list[TextContent]:
         if client.ensure_authenticated(force=True):
             async with _request_semaphore:
                 results = client.search(
-                    query=query, limit=limit, offset=offset,
+                    query=search_query, limit=limit, offset=offset,
                     field=field, sort=sort, tab=tab, scope=scope,
                 )
 
