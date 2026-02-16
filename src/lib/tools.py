@@ -88,13 +88,28 @@ def _lookup_cached_record(record_id: str) -> dict | None:
 TOOL_DEFINITIONS: list[Tool] = [
     Tool(
         name="search_library",
-        description="Search the SFU Library database for books, articles, journals, and other academic resources. Returns detailed information including titles, authors, publication dates, and availability.",
+        description=(
+            "Search the SFU Library database for books, articles, journals, and other academic resources. "
+            "Returns titles, authors, dates, subjects, availability, and record IDs.\n\n"
+            "QUERY SYNTAX:\n"
+            "- Boolean operators: AND, OR, NOT (MUST be uppercase). Example: '\"CRISPR\" AND \"sickle cell\"'\n"
+            "- Phrase search: wrap exact phrases in double quotes. Example: '\"machine learning\"'\n"
+            "- Wildcards: ? (single char), * (multiple chars). Example: 'cultur*' matches culture, cultures, cultural\n\n"
+            "SEARCH STRATEGY:\n"
+            "- For comprehensive results on complex topics, make multiple calls with different field/scope combinations\n"
+            "- Use field='sub' for controlled subject vocabulary (most precise for topic searches)\n"
+            "- Use field='title' for known work titles\n"
+            "- Use field='any' for broad discovery when unsure\n"
+            "- Use resource_type='electronic' when user needs immediate online access\n"
+            "- Use sort='date' for recent publications, sort='rank' for best relevance\n"
+            "- Results include subject headings from the library's controlled vocabulary — use these for follow-up searches"
+        ),
         inputSchema={
             "type": "object",
             "properties": {
                 "query": {
                     "type": "string",
-                    "description": "The search query (e.g., 'machine learning', 'climate change')"
+                    "description": "The search query. Supports boolean operators (AND, OR, NOT uppercase), phrase search (\"quoted\"), and wildcards (?, *)"
                 },
                 "limit": {
                     "type": "integer",
@@ -108,7 +123,7 @@ TOOL_DEFINITIONS: list[Tool] = [
                 },
                 "field": {
                     "type": "string",
-                    "description": "Field to search in: 'any' (all fields), 'title', 'creator' (author), 'sub' (subject), 'isbn', 'issn'",
+                    "description": "Field to search in: 'any' (all fields, broad), 'title' (known works), 'creator' (author), 'sub' (subject headings, most precise), 'isbn', 'issn'",
                     "enum": ["any", "title", "creator", "sub", "isbn", "issn"],
                     "default": "any"
                 },
@@ -120,7 +135,7 @@ TOOL_DEFINITIONS: list[Tool] = [
                 },
                 "resource_type": {
                     "type": "string",
-                    "description": "Type of resources: 'all' (everything), 'electronic' (online only), 'courses' (course reserves)",
+                    "description": "Type of resources: 'all' (everything), 'electronic' (online only — use when user needs immediate access), 'courses' (course reserves)",
                     "enum": ["all", "electronic", "courses"],
                     "default": "all"
                 }
@@ -166,13 +181,17 @@ TOOL_DEFINITIONS: list[Tool] = [
     ),
     Tool(
         name="search_by_author",
-        description="Search for works by a specific author in the SFU Library.",
+        description=(
+            "Search for works by a specific author in the SFU Library. "
+            "For best results use 'LastName, FirstName' format. "
+            "Combine with search_library (field='sub') or search_by_subject to find an author's works on a specific topic."
+        ),
         inputSchema={
             "type": "object",
             "properties": {
                 "author": {
                     "type": "string",
-                    "description": "Author name to search for"
+                    "description": "Author name to search for (best: 'LastName, FirstName')"
                 },
                 "limit": {
                     "type": "integer",
@@ -185,13 +204,18 @@ TOOL_DEFINITIONS: list[Tool] = [
     ),
     Tool(
         name="search_by_subject",
-        description="Search for resources on a specific subject/topic in the SFU Library.",
+        description=(
+            "Search for resources by subject heading in the SFU Library. "
+            "Uses the library's controlled vocabulary (LCSH). "
+            "Check subject headings returned in search results for the exact vocabulary to use. "
+            "For broader discovery, combine with search_library (field='any') or search_electronic_resources."
+        ),
         inputSchema={
             "type": "object",
             "properties": {
                 "subject": {
                     "type": "string",
-                    "description": "Subject/topic to search for"
+                    "description": "Subject heading to search for (use exact terms from result subjects when possible)"
                 },
                 "limit": {
                     "type": "integer",
