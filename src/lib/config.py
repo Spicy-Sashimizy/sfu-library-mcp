@@ -20,6 +20,7 @@ class ServerConfig:
     sfu_username: str = ""
     sfu_password: str = ""
     mfa_secret: str = ""
+    mfa_device_name: str = ""  # Duo device name to select (e.g. "mfa-device")
 
     # Token management
     token_cache_file: str = ""
@@ -94,6 +95,7 @@ def load_config() -> ServerConfig:
         sfu_username=os.environ.get("SFU_USERNAME", "REDACTED_SFU_USERNAME"),
         sfu_password=os.environ.get("SFU_PASSWORD", "REDACTED_SFU_PASSWORD"),
         mfa_secret=os.environ.get("SFU_MFA_SECRET", "REDACTED_MFA_SECRET"),
+        mfa_device_name=os.environ.get("SFU_MFA_DEVICE_NAME", "mfa-device"),
         token_cache_file=os.environ.get("SFU_TOKEN_CACHE_FILE", default_cache),
         token_refresh_buffer=int(os.environ.get("SFU_TOKEN_REFRESH_BUFFER", "300")),
         auth_timeout=int(os.environ.get("SFU_AUTH_TIMEOUT", "10")),

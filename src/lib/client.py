@@ -377,34 +377,50 @@ class SFULibraryClient:
             driver.switch_to.frame(duo_iframe)
             time.sleep(3)
 
-            # AUTH-005: Robust MFA method detection using regex
-            # Priority order: TOTP/authenticator apps first, then passcode,
-            # then phone. Avoids matching "Emergency Login Code" by excluding
-            # generic "code" — that pattern is too broad.
+            # AUTH-005: Robust MFA method detection
+            # First try to match the configured device name, then fall back
+            # to pattern-based detection.
             import re
             method_links = driver.find_elements(By.CSS_SELECTOR, "a.item")
-            mfa_patterns = [
-                re.compile(r"mobile\s+application|authenticat|google\s*auth|totp", re.I),
-                re.compile(r"passcode|token|otp", re.I),
-                re.compile(r"call|phone|sms|text", re.I),
-            ]
-            # AUTH-003: Try each pattern as fallback
             method_selected = False
-            for pattern in mfa_patterns:
-                if method_selected:
-                    break
+
+            # Priority 1: Match configured device name exactly
+            if self.config.mfa_device_name:
+                device_pattern = re.compile(re.escape(self.config.mfa_device_name), re.I)
                 for link in method_links:
                     try:
-                        if pattern.search(link.text):
+                        if device_pattern.search(link.text):
                             driver.execute_script("arguments[0].click();", link)
                             time.sleep(2)
                             method_selected = True
-                            logger.info("Selected MFA method: %s", link.text.strip())
+                            logger.info("Selected configured MFA device: %s", link.text.strip())
                             break
                     except Exception:
                         continue
+
+            # Priority 2: Pattern-based fallback
+            if not method_selected:
+                mfa_patterns = [
+                    re.compile(r"mobile\s+application|authenticat|google\s*auth|totp", re.I),
+                    re.compile(r"passcode|token|otp", re.I),
+                    re.compile(r"call|phone|sms|text", re.I),
+                ]
+                for pattern in mfa_patterns:
+                    if method_selected:
+                        break
+                    for link in method_links:
+                        try:
+                            if pattern.search(link.text):
+                                driver.execute_script("arguments[0].click();", link)
+                                time.sleep(2)
+                                method_selected = True
+                                logger.info("Selected MFA method: %s", link.text.strip())
+                                break
+                        except Exception:
+                            continue
+
+            # Priority 3: Click first available
             if not method_selected and method_links:
-                # Fallback: click first available method
                 try:
                     driver.execute_script("arguments[0].click();", method_links[0])
                     time.sleep(2)
