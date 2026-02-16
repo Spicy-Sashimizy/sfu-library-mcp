@@ -1,4 +1,5 @@
-# SFU Library MCP Server
+# SFU Library MCP Server - outdated there where new stuff added check commits
+
 
 A Model Context Protocol (MCP) server that provides Claude Desktop access to the SFU Library database through the Primo API.
 
