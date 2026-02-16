@@ -12,8 +12,92 @@ from lib.validators import normalize_encoding
 logger = logging.getLogger("sfu_library_mcp")
 
 
+def _is_cdi_record(control: dict) -> bool:
+    """Check if a record is from CDI (external source) vs local ALMA."""
+    record_id = control.get("recordid", [""])[0] if control.get("recordid") else ""
+    return record_id.startswith("TN_cdi_")
+
+
+def _extract_authors(display: dict, addata: dict, search: dict) -> list[str]:
+    """Extract properly separated author list, handling CDI semicolon format.
+
+    CDI records jam all authors into a single semicolon-delimited string
+    in display.creator (e.g. "Smith, J ; Doe, A"). We detect this and
+    fall back to addata.au or search.creator which have proper lists.
+    """
+    creators = display.get("creator", [])
+
+    # Check for CDI semicolon-joined format: single entry containing " ; "
+    if len(creators) == 1 and " ; " in creators[0]:
+        # Prefer addata.au (properly separated individual authors)
+        addata_authors = addata.get("au", [])
+        if addata_authors:
+            return addata_authors
+        # Fall back to search.creator
+        search_authors = search.get("creator", [])
+        if search_authors and not (len(search_authors) == 1 and " ; " in search_authors[0]):
+            return search_authors
+        # Last resort: split the semicolon string ourselves
+        return [a.strip() for a in creators[0].split(" ; ") if a.strip()]
+
+    if creators:
+        return creators
+
+    # No display.creator at all — try addata.au, then search.creator, then contributors
+    addata_authors = addata.get("au", [])
+    if addata_authors:
+        return addata_authors
+    search_authors = search.get("creator", [])
+    if search_authors:
+        return search_authors
+    return display.get("contributor", [])
+
+
+def _extract_date(display: dict, addata: dict, search: dict) -> str:
+    """Extract publication date with CDI fallbacks.
+
+    CDI records often lack display.creationdate but have addata.date
+    (full date like "2020-07-01") or search.creationdate (year "2020").
+    """
+    date = display.get("creationdate", [""])[0]
+    if date:
+        return date
+    # addata.date has full ISO date — take just the year portion
+    ad_date = addata.get("date", [""])[0] if addata.get("date") else ""
+    if ad_date:
+        return ad_date[:4]
+    # search.creationdate has year
+    s_date = search.get("creationdate", [""])[0] if search.get("creationdate") else ""
+    return s_date
+
+
+def _extract_journal_name(display: dict, addata: dict, is_cdi: bool) -> str:
+    """Extract journal/source name, preferring addata.jtitle for CDI.
+
+    CDI records set display.source to the database name (e.g. "Scopus")
+    rather than the journal title. addata.jtitle has the actual journal.
+    """
+    # For CDI records, always prefer addata.jtitle
+    if is_cdi:
+        jtitle = addata.get("jtitle", [""])[0] if addata.get("jtitle") else ""
+        if jtitle:
+            return normalize_encoding(jtitle)
+    # For ALMA records or fallback
+    source = display.get("source", [""])[0]
+    if source:
+        return normalize_encoding(source)
+    # Final fallback to addata.jtitle
+    jtitle = addata.get("jtitle", [""])[0] if addata.get("jtitle") else ""
+    return normalize_encoding(jtitle) if jtitle else ""
+
+
 def extract_metadata(item: dict) -> dict | None:
-    """Extract metadata from a PNX record for citation generation."""
+    """Extract metadata from a PNX record for citation generation.
+
+    Handles both ALMA (local) and CDI (external) records by using
+    addata/search sections as fallbacks when display fields are missing
+    or malformed (Strategy A).
+    """
     if not item:
         return None
 
@@ -21,15 +105,21 @@ def extract_metadata(item: dict) -> dict | None:
     display = pnx.get("display", {})
     addata = pnx.get("addata", {})
     control = pnx.get("control", {})
+    search = pnx.get("search", {})
+
+    is_cdi = _is_cdi_record(control)
+    authors = _extract_authors(display, addata, search)
+    date = _extract_date(display, addata, search)
+    source = _extract_journal_name(display, addata, is_cdi)
 
     metadata = {
         "title": normalize_encoding(display.get("title", [""])[0]),
-        "creators": display.get("creator", []),
+        "creators": authors,
         "contributors": display.get("contributor", []),
-        "date": display.get("creationdate", [""])[0],
+        "date": date,
         "publisher": normalize_encoding(display.get("publisher", [""])[0]),
         "type": display.get("type", [""])[0].lower(),
-        "source": normalize_encoding(display.get("source", [""])[0]),
+        "source": source,
         "isbn": addata.get("isbn", [""])[0] if addata.get("isbn") else "",
         "issn": addata.get("issn", [""])[0] if addata.get("issn") else "",
         "doi": addata.get("doi", [""])[0] if addata.get("doi") else "",
@@ -39,9 +129,9 @@ def extract_metadata(item: dict) -> dict | None:
         "epage": addata.get("epage", [""])[0] if addata.get("epage") else "",
         "pages": addata.get("pages", [""])[0] if addata.get("pages") else "",
         "record_id": control.get("recordid", [""])[0] if control.get("recordid") else "",
+        "is_cdi": is_cdi,
     }
 
-    authors = metadata["creators"] if metadata["creators"] else metadata["contributors"]
     metadata["authors"] = authors
 
     doc_type = metadata["type"]
@@ -381,8 +471,30 @@ def format_ris_entry(metadata: dict | None) -> str:
     return "\n".join(lines)
 
 
+def _parse_exlibris_link(raw_link: str) -> str:
+    """Parse Ex Libris $$U delimited link format to extract clean URL.
+
+    CDI records embed URLs in a format like:
+      $$Uhttps://link.springer.com/content/pdf/...$$EPDF$$P50$$Gspringer$$H
+
+    Extract the URL between $$U and the next $$ delimiter.
+    If the link doesn't use this format, return it as-is.
+    """
+    if "$$U" in raw_link:
+        # Extract URL after $$U, up to next $$ or end of string
+        match = re.search(r'\$\$U(https?://[^\$]+)', raw_link)
+        if match:
+            return match.group(1)
+    # Not in Ex Libris format — return as-is
+    return raw_link
+
+
 def extract_full_text_links(item: dict) -> dict | None:
-    """Extract all full-text access links from a record."""
+    """Extract all full-text access links from a record.
+
+    Parses Ex Libris $$U delimited format (Strategy C) to extract
+    clean URLs from CDI record link fields.
+    """
     if not item:
         return None
 
@@ -400,15 +512,15 @@ def extract_full_text_links(item: dict) -> dict | None:
 
     for link in links.get("linktohtml", []):
         if isinstance(link, str):
-            result["html_links"].append(link)
+            result["html_links"].append(_parse_exlibris_link(link))
 
     for link in links.get("linktopdf", []):
         if isinstance(link, str):
-            result["pdf_links"].append(link)
+            result["pdf_links"].append(_parse_exlibris_link(link))
 
     for link in links.get("linktorsrc", []):
         if isinstance(link, str):
-            result["source_links"].append(link)
+            result["source_links"].append(_parse_exlibris_link(link))
 
     doi = addata.get("doi", [""])[0] if addata.get("doi") else ""
     if doi:
