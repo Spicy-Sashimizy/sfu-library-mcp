@@ -1,10 +1,11 @@
 """Unit tests for the tools module."""
 
 import asyncio
+from unittest.mock import patch
 
 import pytest
 
-from lib.tools import TOOL_DEFINITIONS, handle_tool_call, get_metrics
+from lib.tools import TOOL_DEFINITIONS, handle_tool_call, get_metrics, _reciprocal_rank_fusion
 
 
 class MockClient:
@@ -298,6 +299,65 @@ class TestToolDispatch:
         assert "Found" in result[0].text
         sent_query = mock_client_with_results.search_calls[0]["query"]
         assert sent_query == "machine learning"
+
+    @pytest.mark.asyncio
+    async def test_comprehensive_search(self, mock_client_with_results):
+        """Comprehensive search should make multiple parallel calls."""
+        features = {
+            "fusion_enabled": True,
+            "rerank_enabled": False,
+        }
+        with patch("lib.tools._get_features", return_value=features):
+            result = await handle_tool_call(
+                "search_library",
+                {"query": "climate change", "comprehensive": True},
+                mock_client_with_results,
+            )
+        assert "Found" in result[0].text
+        # Should have made 3 parallel searches (general, subject, electronic)
+        assert len(mock_client_with_results.search_calls) == 3
+
+    @pytest.mark.asyncio
+    async def test_comprehensive_disabled_by_feature_flag(self, mock_client_with_results):
+        """When fusion_enabled is False, comprehensive should fall back to single search."""
+        features = {
+            "fusion_enabled": False,
+            "rerank_enabled": False,
+        }
+        with patch("lib.tools._get_features", return_value=features):
+            result = await handle_tool_call(
+                "search_library",
+                {"query": "climate change", "comprehensive": True},
+                mock_client_with_results,
+            )
+        assert "Found" in result[0].text
+        # Only 1 search call when fusion is disabled
+        assert len(mock_client_with_results.search_calls) == 1
+
+
+class TestReciprocalRankFusion:
+    def test_deduplication(self, sample_pnx_record):
+        """Same record from different scopes should appear only once."""
+        result_set_1 = {"docs": [sample_pnx_record], "info": {"total": 1}}
+        result_set_2 = {"docs": [sample_pnx_record], "info": {"total": 1}}
+        merged = _reciprocal_rank_fusion([result_set_1, result_set_2], limit=10)
+        assert len(merged["docs"]) == 1
+
+    def test_merges_different_records(self, sample_pnx_record, sample_article_record):
+        result_set_1 = {"docs": [sample_pnx_record], "info": {"total": 1}}
+        result_set_2 = {"docs": [sample_article_record], "info": {"total": 1}}
+        merged = _reciprocal_rank_fusion([result_set_1, result_set_2], limit=10)
+        assert len(merged["docs"]) == 2
+
+    def test_handles_none_results(self, sample_pnx_record):
+        result_set = {"docs": [sample_pnx_record], "info": {"total": 1}}
+        merged = _reciprocal_rank_fusion([None, result_set, None], limit=10)
+        assert len(merged["docs"]) == 1
+
+    def test_limit_respected(self, sample_pnx_record, sample_article_record):
+        result_set = {"docs": [sample_pnx_record, sample_article_record], "info": {"total": 2}}
+        merged = _reciprocal_rank_fusion([result_set], limit=1)
+        assert len(merged["docs"]) == 1
 
 
 class TestMetrics:

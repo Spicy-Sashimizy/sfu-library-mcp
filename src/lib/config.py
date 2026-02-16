@@ -56,6 +56,8 @@ class ServerConfig:
         "token_encryption_enabled": False,
         "screenshot_on_failure": False,
         "metrics_enabled": True,
+        "fusion_enabled": True,
+        "rerank_enabled": True,
     })
 
     # Multi-profile support (CONFIG-004)
@@ -84,6 +86,8 @@ def load_config() -> ServerConfig:
         "token_encryption_enabled": False,
         "screenshot_on_failure": False,
         "metrics_enabled": True,
+        "fusion_enabled": True,
+        "rerank_enabled": True,
     }
     for key in default_features:
         env_key = f"SFU_FEATURE_{key.upper()}"

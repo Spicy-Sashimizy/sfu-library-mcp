@@ -25,13 +25,26 @@ from lib.citations import (
     format_bibtex_entry,
     format_ris_entry,
 )
+from lib.config import load_config
 from lib.formatters import format_search_results, format_item_details
+from lib.reranker import rerank_results
 from lib.validators import sanitize_search_query, validate_isbn
 
 logger = logging.getLogger("sfu_library_mcp")
 
-# PERF-003: Semaphore to limit concurrent API requests
-_request_semaphore = asyncio.Semaphore(5)
+# PERF-003: Semaphore to limit concurrent API requests (bumped from 5 for fusion)
+_request_semaphore = asyncio.Semaphore(8)
+
+# Lazy-loaded config for feature flags
+_config = None
+
+
+def _get_features() -> dict[str, bool]:
+    """Get feature flags from config (lazy-loaded)."""
+    global _config
+    if _config is None:
+        _config = load_config()
+    return _config.features
 
 # PERF-004: Simple metrics counters
 _metrics: dict[str, dict[str, Any]] = {}
@@ -148,6 +161,16 @@ TOOL_DEFINITIONS: list[Tool] = [
                         "'deep learning OR neural networks OR artificial intelligence'. "
                         "Server will construct: (query) OR (expanded_terms)"
                     )
+                },
+                "comprehensive": {
+                    "type": "boolean",
+                    "description": (
+                        "Enable comprehensive search: runs parallel searches across "
+                        "multiple scopes (general, electronic, subject-focused) and "
+                        "merges results using rank fusion. Use for broad research questions. "
+                        "Costs 3-4x API calls but provides much broader coverage."
+                    ),
+                    "default": False
                 }
             },
             "required": ["query"]
@@ -439,6 +462,58 @@ async def _dispatch_tool(
 
 # ─── Individual tool handlers ───────────────────────────────────
 
+async def _single_search(client, query: str, limit: int, offset: int,
+                         field: str, sort: str, tab: str, scope: str) -> dict | None:
+    """Execute a single search against the Primo API."""
+    async with _request_semaphore:
+        return client.search(
+            query=query, limit=limit, offset=offset,
+            field=field, sort=sort, tab=tab, scope=scope,
+        )
+
+
+def _reciprocal_rank_fusion(results_sets: list[dict | None], limit: int, k: int = 60) -> dict:
+    """Merge multiple result sets using Reciprocal Rank Fusion.
+
+    RRF formula: score(d) = sum(1 / (k + rank_i)) for each result set.
+    Deduplicates by record ID.
+
+    Args:
+        results_sets: List of Primo API response dicts (may contain None).
+        limit: Maximum number of merged results to return.
+        k: RRF constant (default 60, standard value).
+
+    Returns:
+        Merged results dict with docs and info.
+    """
+    scores: dict[str, float] = {}
+    doc_map: dict[str, dict] = {}
+    total_results = 0
+
+    for result_set in results_sets:
+        if not result_set or not result_set.get("docs"):
+            continue
+        total_results = max(total_results, result_set.get("info", {}).get("total", 0))
+        for rank, doc in enumerate(result_set["docs"]):
+            pnx = doc.get("pnx", {})
+            record_id = pnx.get("control", {}).get("recordid", [""])[0] if pnx.get("control", {}).get("recordid") else ""
+            if not record_id:
+                # Use a fallback key based on title
+                record_id = f"_fallback_{pnx.get('display', {}).get('title', [''])[0][:50]}"
+            scores[record_id] = scores.get(record_id, 0.0) + 1.0 / (k + rank)
+            if record_id not in doc_map:
+                doc_map[record_id] = doc
+
+    # Sort by RRF score descending
+    sorted_ids = sorted(scores.keys(), key=lambda rid: scores[rid], reverse=True)
+    merged_docs = [doc_map[rid] for rid in sorted_ids[:limit]]
+
+    return {
+        "docs": merged_docs,
+        "info": {"total": total_results, "first": 0, "last": len(merged_docs) - 1},
+    }
+
+
 async def _handle_search_library(args: dict, client) -> list[TextContent]:
     query = args.get("query", "")
     limit = min(args.get("limit", 10), 50)
@@ -447,6 +522,7 @@ async def _handle_search_library(args: dict, client) -> list[TextContent]:
     sort = args.get("sort", "rank")
     resource_type = args.get("resource_type", "all")
     expanded_terms = args.get("expanded_terms", "")
+    comprehensive = args.get("comprehensive", False)
 
     # Construct combined boolean query if expanded_terms provided
     if expanded_terms and expanded_terms.strip():
@@ -466,25 +542,45 @@ async def _handle_search_library(args: dict, client) -> list[TextContent]:
     if not client.ensure_authenticated():
         return [TextContent(type="text", text="Authentication failed. Please try again or check your credentials.")]
 
-    async with _request_semaphore:
-        results = client.search(
-            query=search_query, limit=limit, offset=offset,
-            field=field, sort=sort, tab=tab, scope=scope,
-        )
+    features = _get_features()
 
-    if results is None:
-        if client.ensure_authenticated(force=True):
-            async with _request_semaphore:
-                results = client.search(
-                    query=search_query, limit=limit, offset=offset,
-                    field=field, sort=sort, tab=tab, scope=scope,
-                )
+    # Determine how many results to fetch (over-fetch for re-ranking)
+    rerank_enabled = features.get("rerank_enabled", False)
+    fetch_limit = min(limit * 3, 50) if rerank_enabled else limit
+
+    # Fusion retrieval: parallel searches across multiple scopes
+    fusion_enabled = features.get("fusion_enabled", False)
+    if comprehensive and fusion_enabled:
+        search_tasks = [
+            _single_search(client, search_query, fetch_limit, offset, field, sort, tab, scope),
+            _single_search(client, search_query, fetch_limit, offset, "sub", sort, "default_tab", "default_scope"),
+            _single_search(client, search_query, fetch_limit, offset, field, sort, "online_only_tab", "ElectronicOnly_scope"),
+        ]
+        results_sets = await asyncio.gather(*search_tasks, return_exceptions=True)
+        # Filter out exceptions, treat them as None
+        valid_results = [r if not isinstance(r, Exception) else None for r in results_sets]
+        results = _reciprocal_rank_fusion(valid_results, fetch_limit)
+    else:
+        results = await _single_search(client, search_query, fetch_limit, offset, field, sort, tab, scope)
+
+        if results is None:
+            if client.ensure_authenticated(force=True):
+                results = await _single_search(client, search_query, fetch_limit, offset, field, sort, tab, scope)
 
     # Strategy B: Cache all returned docs by record ID
     if results and results.get("docs"):
         _cache_search_docs(results["docs"])
 
+    # Re-rank results if enabled
+    if rerank_enabled and results and results.get("docs"):
+        results["docs"] = rerank_results(results["docs"], query, limit)
+    elif results and results.get("docs") and len(results["docs"]) > limit:
+        # Trim to requested limit if we over-fetched but reranking is off
+        results["docs"] = results["docs"][:limit]
+
     search_metadata = {"query": query, "field": field, "sort": sort, "resource_type": resource_type}
+    if comprehensive and fusion_enabled:
+        search_metadata["comprehensive"] = True
     formatted = format_search_results(results, metadata=search_metadata)
     return [TextContent(type="text", text=formatted)]
 
