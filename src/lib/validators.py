@@ -4,7 +4,6 @@ Implements DATA-001 through DATA-005.
 """
 
 import re
-import html
 import logging
 
 logger = logging.getLogger("sfu_library_mcp")
@@ -93,11 +92,40 @@ def validate_issn(issn: str) -> tuple[bool, str]:
 def sanitize_search_query(query: str) -> str:
     """Sanitize a search query to prevent injection and XSS.
 
+    Backward-compatible wrapper around sanitize_search_query_advanced().
+
     Args:
         query: Raw user search query.
 
     Returns:
         Sanitized query string.
+    """
+    return sanitize_search_query_advanced(query)
+
+
+# Maximum number of boolean operators Primo supports in a single query
+_MAX_BOOLEAN_OPERATORS = 30
+
+
+def sanitize_search_query_advanced(query: str) -> str:
+    """Sanitize a search query while preserving Primo-valid syntax.
+
+    Preserves:
+    - Double quotes (phrase search)
+    - Boolean operators AND, OR, NOT (uppercase only)
+    - Wildcards ? and *
+
+    Still strips:
+    - HTML tags
+    - Null bytes
+    - Stray $$ sequences (Primo subfield delimiters)
+    - Collapses whitespace, enforces max length
+
+    Args:
+        query: Raw user search query.
+
+    Returns:
+        Sanitized query string safe for the Primo API.
     """
     if not query:
         return ""
@@ -108,8 +136,8 @@ def sanitize_search_query(query: str) -> str:
     # Strip HTML tags
     sanitized = re.sub(r"<[^>]*>", "", sanitized)
 
-    # HTML-escape special characters
-    sanitized = html.escape(sanitized, quote=True)
+    # Strip stray Primo subfield delimiters ($$X patterns)
+    sanitized = re.sub(r"\$\$[A-Za-z]", "", sanitized)
 
     # Truncate to max length
     if len(sanitized) > MAX_QUERY_LENGTH:
@@ -118,6 +146,22 @@ def sanitize_search_query(query: str) -> str:
 
     # Collapse multiple whitespace
     sanitized = re.sub(r"\s+", " ", sanitized).strip()
+
+    # Limit boolean operators to prevent Primo query overload
+    bool_count = len(re.findall(r'\b(?:AND|OR|NOT)\b', sanitized))
+    if bool_count > _MAX_BOOLEAN_OPERATORS:
+        # Truncate at the Nth boolean operator
+        parts = re.split(r'(\b(?:AND|OR|NOT)\b)', sanitized)
+        kept: list[str] = []
+        op_count = 0
+        for part in parts:
+            if re.fullmatch(r'AND|OR|NOT', part):
+                op_count += 1
+                if op_count > _MAX_BOOLEAN_OPERATORS:
+                    break
+            kept.append(part)
+        sanitized = "".join(kept).strip()
+        logger.warning("Query truncated to %d boolean operators", _MAX_BOOLEAN_OPERATORS)
 
     return sanitized
 

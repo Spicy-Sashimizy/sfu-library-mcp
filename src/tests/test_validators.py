@@ -6,6 +6,7 @@ from lib.validators import (
     validate_isbn,
     validate_issn,
     sanitize_search_query,
+    sanitize_search_query_advanced,
     validate_api_response,
     normalize_encoding,
 )
@@ -118,12 +119,44 @@ class TestSanitizeSearchQuery:
         result = sanitize_search_query("  machine   learning  ")
         assert result == "machine learning"
 
-    def test_escapes_html_entities(self):
-        # Note: < > together are stripped as an HTML tag by the tag-removal step.
-        # Test & and quotes which are escaped by html.escape.
+    def test_preserves_quotes_and_ampersands(self):
+        # Quotes and ampersands pass through for Primo API syntax
         result = sanitize_search_query('query & "test"')
-        assert "&amp;" in result
-        assert "&quot;" in result
+        assert '&' in result
+        assert '"test"' in result
+
+    def test_preserves_phrase_quotes(self):
+        result = sanitize_search_query('"machine learning"')
+        assert result == '"machine learning"'
+
+    def test_preserves_boolean_operators(self):
+        result = sanitize_search_query('"CRISPR" AND "sickle cell"')
+        assert result == '"CRISPR" AND "sickle cell"'
+
+    def test_preserves_wildcards(self):
+        result = sanitize_search_query("cultur*")
+        assert result == "cultur*"
+        result2 = sanitize_search_query("wom?n")
+        assert result2 == "wom?n"
+
+    def test_strips_dangerous_chars(self):
+        # HTML tags still stripped
+        result = sanitize_search_query("<script>alert('xss')</script>test")
+        assert "<script>" not in result
+        assert "test" in result
+        # Null bytes stripped
+        result2 = sanitize_search_query("test\x00query")
+        assert "\x00" not in result2
+        # Primo subfield delimiters stripped
+        result3 = sanitize_search_query("Murphy$$QMurphy")
+        assert "$$Q" not in result3
+
+    def test_max_boolean_operators(self):
+        # Build query with 35 boolean operators (exceeds 30 limit)
+        terms = " AND ".join([f"term{i}" for i in range(36)])
+        result = sanitize_search_query_advanced(terms)
+        # Should have at most 30 AND operators
+        assert result.count(" AND ") <= 30
 
     def test_non_ascii_preserved(self):
         result = sanitize_search_query("recherche en français")
