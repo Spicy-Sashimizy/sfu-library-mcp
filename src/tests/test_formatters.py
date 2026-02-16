@@ -28,6 +28,30 @@ class TestFormatSearchResults:
         assert "Found 1 total results" in result
         assert "Machine Learning" in result
 
+    def test_subject_headings_in_output(self, sample_pnx_record):
+        results = {
+            "docs": [sample_pnx_record],
+            "info": {"total": 1},
+        }
+        result = format_search_results(results)
+        assert "Subjects: Machine learning, Probabilities, Artificial intelligence" in result
+
+    def test_search_metadata_footer(self, mock_search_response):
+        metadata = {"query": "machine learning", "field": "any", "sort": "rank"}
+        result = format_search_results(mock_search_response, metadata=metadata)
+        assert "--- Search Metadata ---" in result
+        assert "Query: machine learning | Field: any | Sort: rank" in result
+        assert "Top subjects across results:" in result
+        assert "Electronic resources available:" in result
+
+    def test_backward_compatible_no_metadata(self, mock_search_response):
+        # Calling without metadata kwarg still works
+        result = format_search_results(mock_search_response)
+        assert "Found 2 total results" in result
+        # Metadata footer still appears but without query line
+        assert "--- Search Metadata ---" in result
+        assert "Top subjects across results:" in result
+
     def test_non_ascii_titles(self):
         doc = {
             "pnx": {

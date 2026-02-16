@@ -467,7 +467,8 @@ async def _handle_search_library(args: dict, client) -> list[TextContent]:
     if results and results.get("docs"):
         _cache_search_docs(results["docs"])
 
-    formatted = format_search_results(results)
+    search_metadata = {"query": query, "field": field, "sort": sort, "resource_type": resource_type}
+    formatted = format_search_results(results, metadata=search_metadata)
     return [TextContent(type="text", text=formatted)]
 
 
@@ -517,7 +518,8 @@ async def _handle_search_by_author(args: dict, client) -> list[TextContent]:
         results = client.search(query=author, limit=limit, field="creator")
     if results and results.get("docs"):
         _cache_search_docs(results["docs"])
-    formatted = format_search_results(results)
+    search_metadata = {"query": author, "field": "creator", "sort": "rank"}
+    formatted = format_search_results(results, metadata=search_metadata)
     return [TextContent(type="text", text=formatted)]
 
 
@@ -530,7 +532,8 @@ async def _handle_search_by_subject(args: dict, client) -> list[TextContent]:
         results = client.search(query=subject, limit=limit, field="sub")
     if results and results.get("docs"):
         _cache_search_docs(results["docs"])
-    formatted = format_search_results(results)
+    search_metadata = {"query": subject, "field": "sub", "sort": "rank"}
+    formatted = format_search_results(results, metadata=search_metadata)
     return [TextContent(type="text", text=formatted)]
 
 
@@ -542,7 +545,8 @@ async def _handle_search_by_isbn(args: dict, client) -> list[TextContent]:
         results = client.search(query=isbn, limit=5, field="isbn")
     if results and results.get("docs"):
         _cache_search_docs(results["docs"])
-    formatted = format_search_results(results)
+    search_metadata = {"query": isbn, "field": "isbn", "sort": "rank"}
+    formatted = format_search_results(results, metadata=search_metadata)
     return [TextContent(type="text", text=formatted)]
 
 
@@ -558,7 +562,8 @@ async def _handle_search_electronic(args: dict, client) -> list[TextContent]:
         )
     if results and results.get("docs"):
         _cache_search_docs(results["docs"])
-    formatted = format_search_results(results)
+    search_metadata = {"query": query, "field": "any", "sort": "rank", "resource_type": "electronic"}
+    formatted = format_search_results(results, metadata=search_metadata)
     return [TextContent(type="text", text=formatted)]
 
 

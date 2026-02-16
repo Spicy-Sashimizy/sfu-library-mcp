@@ -6,8 +6,14 @@ Extracted from the monolith. Implements DATA-004: character encoding handling.
 from lib.validators import normalize_encoding
 
 
-def format_search_results(results: dict | None) -> str:
-    """Format search results for display."""
+def format_search_results(results: dict | None, metadata: dict | None = None) -> str:
+    """Format search results for display.
+
+    Args:
+        results: Primo API response dict with docs and info.
+        metadata: Optional dict with query metadata for the search hints footer.
+            Keys: query, field, sort, resource_type.
+    """
     if not results:
         return "No results found or search failed."
 
@@ -17,6 +23,9 @@ def format_search_results(results: dict | None) -> str:
 
     output = [f"Found {total:,} total results\n"]
     output.append("=" * 60 + "\n")
+
+    all_subjects: list[str] = []
+    electronic_count = 0
 
     for i, doc in enumerate(docs, 1):
         pnx = doc.get("pnx", {})
@@ -43,10 +52,22 @@ def format_search_results(results: dict | None) -> str:
         fulltext_links = links.get("linktorsrc", []) or links.get("linktohtml", [])
         availability = delivery.get("availability", [""])[0] if delivery.get("availability") else ""
 
+        # Extract subject headings (top 3 per result)
+        subjects = display.get("subject", [])
+        top_subjects = [s.split("$$")[0] for s in subjects[:3]]
+        all_subjects.extend(top_subjects)
+
+        # Track electronic availability
+        if fulltext_links or "online" in availability.lower() or "available" in availability.lower():
+            electronic_count += 1
+
         output.append(f"{i}. {title}\n")
         output.append(f"   Author: {creator}\n")
         output.append(f"   Date: {pub_date}\n")
         output.append(f"   Type: {doc_type}\n")
+
+        if top_subjects:
+            output.append(f"   Subjects: {', '.join(top_subjects)}\n")
 
         if source:
             output.append(f"   Source: {source}\n")
@@ -68,6 +89,29 @@ def format_search_results(results: dict | None) -> str:
             output.append(f"   Full Text: Available\n")
 
         output.append("\n")
+
+    # Search metadata footer
+    if docs:
+        output.append("--- Search Metadata ---\n")
+        if metadata:
+            query_str = metadata.get("query", "")
+            field_str = metadata.get("field", "any")
+            sort_str = metadata.get("sort", "rank")
+            output.append(f"Query: {query_str} | Field: {field_str} | Sort: {sort_str}\n")
+
+        # Aggregate unique subjects (top 5)
+        seen: set[str] = set()
+        unique_subjects: list[str] = []
+        for s in all_subjects:
+            s_lower = s.lower()
+            if s_lower not in seen and s:
+                seen.add(s_lower)
+                unique_subjects.append(s)
+            if len(unique_subjects) >= 5:
+                break
+        if unique_subjects:
+            output.append(f"Top subjects across results: {', '.join(unique_subjects)}\n")
+        output.append(f"Electronic resources available: {electronic_count}\n")
 
     return "".join(output)
 
