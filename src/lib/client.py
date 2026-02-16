@@ -378,10 +378,14 @@ class SFULibraryClient:
             time.sleep(3)
 
             # AUTH-005: Robust MFA method detection using regex
+            # Priority order: TOTP/authenticator apps first, then passcode,
+            # then phone. Avoids matching "Emergency Login Code" by excluding
+            # generic "code" — that pattern is too broad.
             import re
             method_links = driver.find_elements(By.CSS_SELECTOR, "a.item")
             mfa_patterns = [
-                re.compile(r"passcode|token|code|otp|authenticator", re.I),
+                re.compile(r"mobile\s+application|authenticat|google\s*auth|totp", re.I),
+                re.compile(r"passcode|token|otp", re.I),
                 re.compile(r"call|phone|sms|text", re.I),
             ]
             # AUTH-003: Try each pattern as fallback
