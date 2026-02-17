@@ -16,6 +16,7 @@ RUN apt-get update && export DEBIAN_FRONTEND=noninteractive \
         gnupg \
         supervisor \
         socat \
+        poppler-utils \
     && apt-get clean -y \
     && rm -rf /var/lib/apt/lists/*
 

@@ -18,6 +18,7 @@ services:
       - C:/Users/gordo/.claudebox/git-credentials/.git-credentials:/mnt/claudebox-git-creds/.git-credentials:ro
       - claude-local:/home/vscode/.local:cached
       - C:/Users/gordo/.claudebox/credentials.json:/home/vscode/.claudebox-credentials/credentials.json:ro
+      - C:/Users/gordo/Downloads:/mnt/host-downloads
     entrypoint: ["/bin/bash", "/usr/local/bin/claudebox-entrypoint.sh"]
     command: sleep infinity
     env_file:
