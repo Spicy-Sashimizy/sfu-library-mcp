@@ -26,9 +26,11 @@ from lib.citations import (
     format_ris_entry,
 )
 from lib.config import load_config
+from lib.downloader import ArticleDownloader, DownloadError, PDFTextExtractionError
 from lib.formatters import format_search_results, format_item_details
 from lib.reranker import rerank_results
 from lib.validators import sanitize_search_query, validate_isbn
+from lib.zotero import ZoteroClient, ZoteroError
 
 logger = logging.getLogger("sfu_library_mcp")
 
@@ -39,12 +41,43 @@ _request_semaphore = asyncio.Semaphore(8)
 _config = None
 
 
-def _get_features() -> dict[str, bool]:
-    """Get feature flags from config (lazy-loaded)."""
+def _get_config() -> "ServerConfig":
+    """Get config (lazy-loaded)."""
     global _config
     if _config is None:
         _config = load_config()
-    return _config.features
+    return _config
+
+
+def _get_features() -> dict[str, bool]:
+    """Get feature flags from config (lazy-loaded)."""
+    return _get_config().features
+
+
+# Lazy-loaded downloader and zotero client
+_downloader: ArticleDownloader | None = None
+_downloader_cookie_id: int | None = None  # Track cookie changes
+_zotero_client: ZoteroClient | None = None
+
+
+def _get_downloader(lib_client) -> ArticleDownloader:
+    """Get or create ArticleDownloader, recreating if cookies changed."""
+    global _downloader, _downloader_cookie_id
+    cookies = getattr(lib_client, "cookies", {})
+    cookie_id = id(cookies) if cookies else 0
+
+    if _downloader is None or _downloader_cookie_id != cookie_id:
+        _downloader = ArticleDownloader(_get_config(), cookies)
+        _downloader_cookie_id = cookie_id
+    return _downloader
+
+
+def _get_zotero_client() -> ZoteroClient:
+    """Get or create ZoteroClient."""
+    global _zotero_client
+    if _zotero_client is None:
+        _zotero_client = ZoteroClient(_get_config())
+    return _zotero_client
 
 # PERF-004: Simple metrics counters
 _metrics: dict[str, dict[str, Any]] = {}
@@ -395,7 +428,175 @@ TOOL_DEFINITIONS: list[Tool] = [
             "required": ["isbn_list"]
         }
     ),
+    Tool(
+        name="download_article",
+        description=(
+            "Download the PDF of a library article to the container cache and optionally "
+            "to the host Downloads folder. Use after searching to save articles locally."
+        ),
+        inputSchema={
+            "type": "object",
+            "properties": {
+                "record_id": {
+                    "type": "string",
+                    "description": "The record ID of the item (obtained from search results)"
+                },
+                "save_to_host": {
+                    "type": "boolean",
+                    "description": "Also copy PDF to host Downloads folder (default: true)",
+                    "default": True
+                }
+            },
+            "required": ["record_id"]
+        }
+    ),
+    Tool(
+        name="read_article",
+        description=(
+            "Download a library article's PDF and extract its full text for analysis. "
+            "Returns the article text content directly so you can read, summarize, or answer questions about it."
+        ),
+        inputSchema={
+            "type": "object",
+            "properties": {
+                "record_id": {
+                    "type": "string",
+                    "description": "The record ID of the item (obtained from search results)"
+                }
+            },
+            "required": ["record_id"]
+        }
+    ),
+    Tool(
+        name="save_to_zotero",
+        description=(
+            "Save a library item's metadata and PDF to the user's Zotero library. "
+            "Automatically checks for duplicates before saving. "
+            "Optionally specify a collection name to organize the item."
+        ),
+        inputSchema={
+            "type": "object",
+            "properties": {
+                "record_id": {
+                    "type": "string",
+                    "description": "The record ID of the item (obtained from search results)"
+                },
+                "collection_name": {
+                    "type": "string",
+                    "description": "Optional: Zotero collection name to add the item to (created if it doesn't exist)"
+                },
+                "attach_pdf": {
+                    "type": "boolean",
+                    "description": "Download and attach the PDF to the Zotero item (default: true)",
+                    "default": True
+                }
+            },
+            "required": ["record_id"]
+        }
+    ),
+    Tool(
+        name="list_zotero_collections",
+        description="List all collections in the user's Zotero library with item counts.",
+        inputSchema={
+            "type": "object",
+            "properties": {}
+        }
+    ),
+    Tool(
+        name="batch_save_to_zotero",
+        description=(
+            "Save multiple library items to a Zotero collection at once. "
+            "Checks each item for duplicates and skips items already in the library. "
+            "Returns a summary showing how many were saved, skipped, or failed."
+        ),
+        inputSchema={
+            "type": "object",
+            "properties": {
+                "record_ids": {
+                    "type": "array",
+                    "items": {"type": "string"},
+                    "description": "List of record IDs to save (max 20)"
+                },
+                "collection_name": {
+                    "type": "string",
+                    "description": "Zotero collection name to add items to (created if it doesn't exist)"
+                },
+                "attach_pdfs": {
+                    "type": "boolean",
+                    "description": "Download and attach PDFs to each Zotero item (default: true)",
+                    "default": True
+                }
+            },
+            "required": ["record_ids", "collection_name"]
+        }
+    ),
+    Tool(
+        name="search_zotero",
+        description=(
+            "Search the user's existing Zotero library. Use this BEFORE saving to check for "
+            "duplicates, and to answer questions about what the user already has saved. "
+            "Returns titles, authors, dates, types, DOIs, collections, and tags."
+        ),
+        inputSchema={
+            "type": "object",
+            "properties": {
+                "query": {
+                    "type": "string",
+                    "description": "Search query to find items in the Zotero library"
+                },
+                "limit": {
+                    "type": "integer",
+                    "description": "Maximum number of results (default: 20, max: 100)",
+                    "default": 20
+                }
+            },
+            "required": ["query"]
+        }
+    ),
+    Tool(
+        name="get_zotero_collection_items",
+        description=(
+            "List all items in a specific Zotero collection. Use to browse what's already "
+            "saved in a collection or to help the user review their saved research."
+        ),
+        inputSchema={
+            "type": "object",
+            "properties": {
+                "collection_name": {
+                    "type": "string",
+                    "description": "Name of the Zotero collection to list items from"
+                },
+                "limit": {
+                    "type": "integer",
+                    "description": "Maximum number of items to return (default: 50)",
+                    "default": 50
+                }
+            },
+            "required": ["collection_name"]
+        }
+    ),
 ]
+
+
+# ─── Shared record resolution ─────────────────────────────────
+
+async def _resolve_record(record_id: str, client) -> dict | None:
+    """Resolve a record by ID using 3-tier fallback: API → cache → search."""
+    async with _request_semaphore:
+        item = client.get_item_details(record_id)
+    if item:
+        return item
+
+    item = _lookup_cached_record(record_id)
+    if item:
+        return item
+
+    async with _request_semaphore:
+        results = client.search(query=record_id, limit=1)
+    if results and results.get("docs"):
+        return results["docs"][0]
+
+    return None
 
 
 # ─── Tool handler dispatch ──────────────────────────────────────
@@ -456,6 +657,20 @@ async def _dispatch_tool(
         return await _handle_export_search(arguments, lib_client)
     elif name == "batch_isbn_lookup":
         return await _handle_batch_isbn(arguments, lib_client)
+    elif name == "download_article":
+        return await _handle_download_article(arguments, lib_client)
+    elif name == "read_article":
+        return await _handle_read_article(arguments, lib_client)
+    elif name == "save_to_zotero":
+        return await _handle_save_to_zotero(arguments, lib_client)
+    elif name == "list_zotero_collections":
+        return _handle_list_zotero_collections()
+    elif name == "batch_save_to_zotero":
+        return await _handle_batch_save_to_zotero(arguments, lib_client)
+    elif name == "search_zotero":
+        return _handle_search_zotero(arguments)
+    elif name == "get_zotero_collection_items":
+        return _handle_get_zotero_collection_items(arguments)
     else:
         return [TextContent(type="text", text=f"Unknown tool: {name}")]
 
@@ -980,5 +1195,379 @@ async def _handle_batch_isbn(args: dict, client) -> list[TextContent]:
 
     output.append("-" * 50)
     output.append(f"Summary: {found_count} found, {not_found_count} not found")
+
+    return [TextContent(type="text", text="\n".join(output))]
+
+
+# ─── PDF Download + Zotero handlers ───────────────────────────
+
+async def _handle_download_article(args: dict, client) -> list[TextContent]:
+    features = _get_features()
+    if not features.get("pdf_download_enabled", True):
+        return [TextContent(type="text", text="PDF download is disabled. Set SFU_FEATURE_PDF_DOWNLOAD_ENABLED=true to enable.")]
+
+    record_id = args.get("record_id", "")
+    save_to_host = args.get("save_to_host", True)
+
+    if not client.ensure_authenticated():
+        return [TextContent(type="text", text="Authentication failed.")]
+
+    item = await _resolve_record(record_id, client)
+    if not item:
+        return [TextContent(type="text", text=f"Could not find item with record ID: {record_id}")]
+
+    downloader = _get_downloader(client)
+    url = downloader.resolve_pdf_url(item)
+    if not url:
+        return [TextContent(type="text", text=f"No PDF URL found for record {record_id}. The item may not have an accessible PDF.")]
+
+    metadata = extract_metadata(item)
+    copy_to_host = save_to_host and features.get("host_download_enabled", True)
+    result = downloader.download_pdf(url, record_id, metadata, copy_to_host=copy_to_host)
+
+    if not result["success"]:
+        return [TextContent(type="text", text=f"Download failed: {result['error']}")]
+
+    output = ["=" * 50, "ARTICLE DOWNLOADED", "=" * 50]
+    if metadata:
+        output.append(f"\nTitle: {metadata.get('title', 'Unknown')}")
+    output.append(f"Size: {result['size_bytes']:,} bytes")
+    output.append(f"Container path: {result['container_path']}")
+    if result.get("host_path"):
+        output.append(f"Host Downloads: {result['host_path']}")
+    elif save_to_host:
+        output.append("Note: Could not copy to host Downloads folder.")
+
+    return [TextContent(type="text", text="\n".join(output))]
+
+
+async def _handle_read_article(args: dict, client) -> list[TextContent]:
+    features = _get_features()
+    if not features.get("pdf_download_enabled", True):
+        return [TextContent(type="text", text="PDF download is disabled. Set SFU_FEATURE_PDF_DOWNLOAD_ENABLED=true to enable.")]
+
+    record_id = args.get("record_id", "")
+
+    if not client.ensure_authenticated():
+        return [TextContent(type="text", text="Authentication failed.")]
+
+    item = await _resolve_record(record_id, client)
+    if not item:
+        return [TextContent(type="text", text=f"Could not find item with record ID: {record_id}")]
+
+    downloader = _get_downloader(client)
+    metadata = extract_metadata(item)
+
+    # Check cache or download
+    url = downloader.resolve_pdf_url(item)
+    if not url:
+        return [TextContent(type="text", text=f"No PDF URL found for record {record_id}. The item may not have an accessible PDF.")]
+
+    result = downloader.download_pdf(url, record_id, metadata, copy_to_host=False)
+    if not result["success"]:
+        return [TextContent(type="text", text=f"Download failed: {result['error']}")]
+
+    try:
+        text = downloader.extract_text(result["container_path"])
+    except PDFTextExtractionError as e:
+        return [TextContent(type="text", text=f"Text extraction failed: {e}")]
+
+    # Build header with metadata
+    header_parts = ["=" * 50, "ARTICLE TEXT", "=" * 50]
+    if metadata:
+        header_parts.append(f"Title: {metadata.get('title', 'Unknown')}")
+        authors = metadata.get("authors") or metadata.get("creators", [])
+        if authors:
+            author_strs = [a.split("$$")[0] for a in authors[:5]]
+            header_parts.append(f"Authors: {'; '.join(author_strs)}")
+        if metadata.get("date"):
+            header_parts.append(f"Date: {metadata['date']}")
+        if metadata.get("source"):
+            header_parts.append(f"Source: {metadata['source']}")
+        if metadata.get("doi"):
+            header_parts.append(f"DOI: {metadata['doi']}")
+    header_parts.append("=" * 50)
+    header_parts.append("")
+
+    return [TextContent(type="text", text="\n".join(header_parts) + text)]
+
+
+async def _handle_save_to_zotero(args: dict, client) -> list[TextContent]:
+    features = _get_features()
+    if not features.get("zotero_enabled", True):
+        return [TextContent(type="text", text="Zotero integration is disabled. Set SFU_FEATURE_ZOTERO_ENABLED=true to enable.")]
+
+    record_id = args.get("record_id", "")
+    collection_name = args.get("collection_name", "")
+    attach_pdf = args.get("attach_pdf", True)
+
+    if not client.ensure_authenticated():
+        return [TextContent(type="text", text="Authentication failed.")]
+
+    item = await _resolve_record(record_id, client)
+    if not item:
+        return [TextContent(type="text", text=f"Could not find item with record ID: {record_id}")]
+
+    metadata = extract_metadata(item)
+    if not metadata:
+        return [TextContent(type="text", text=f"Could not extract metadata for record {record_id}")]
+
+    metadata = enrich_metadata_from_crossref(metadata)
+
+    zot_client = _get_zotero_client()
+
+    # Duplicate check
+    try:
+        dup = zot_client.check_duplicate(metadata)
+    except ZoteroError as e:
+        return [TextContent(type="text", text=f"Zotero error during duplicate check: {e}")]
+
+    if dup["is_duplicate"]:
+        output = [
+            "=" * 50,
+            "ALREADY IN ZOTERO",
+            "=" * 50,
+            f"\nThis item is already in your Zotero library ({dup['match_type']} match).",
+            f"\nExisting item:",
+            dup["existing_item_summary"] or "N/A",
+        ]
+        return [TextContent(type="text", text="\n".join(output))]
+
+    # Map metadata → Zotero item
+    zotero_item = zot_client.metadata_to_zotero_item(metadata)
+
+    # Resolve collection
+    collection_key = None
+    if collection_name:
+        try:
+            collection_key = zot_client.find_or_create_collection(collection_name)
+        except ZoteroError as e:
+            return [TextContent(type="text", text=f"Zotero collection error: {e}")]
+
+    # Create item
+    try:
+        item_key = zot_client.create_item(zotero_item, collection_key)
+    except ZoteroError as e:
+        return [TextContent(type="text", text=f"Failed to create Zotero item: {e}")]
+
+    output = [
+        "=" * 50,
+        "SAVED TO ZOTERO",
+        "=" * 50,
+        f"\nTitle: {metadata.get('title', 'Unknown')}",
+        f"Zotero Key: {item_key}",
+    ]
+    if collection_name:
+        output.append(f"Collection: {collection_name}")
+
+    # Optionally attach PDF
+    if attach_pdf and features.get("pdf_download_enabled", True):
+        downloader = _get_downloader(client)
+        url = downloader.resolve_pdf_url(item)
+        if url:
+            dl_result = downloader.download_pdf(url, record_id, metadata, copy_to_host=False)
+            if dl_result["success"]:
+                try:
+                    zot_client.attach_pdf(item_key, dl_result["container_path"])
+                    output.append("PDF: Attached successfully")
+                except ZoteroError as e:
+                    output.append(f"PDF: Attachment failed ({e})")
+            else:
+                output.append(f"PDF: Download failed ({dl_result['error']})")
+        else:
+            output.append("PDF: No accessible PDF URL found")
+
+    return [TextContent(type="text", text="\n".join(output))]
+
+
+def _handle_list_zotero_collections() -> list[TextContent]:
+    features = _get_features()
+    if not features.get("zotero_enabled", True):
+        return [TextContent(type="text", text="Zotero integration is disabled. Set SFU_FEATURE_ZOTERO_ENABLED=true to enable.")]
+
+    zot_client = _get_zotero_client()
+
+    try:
+        collections = zot_client.list_collections()
+    except ZoteroError as e:
+        return [TextContent(type="text", text=f"Zotero error: {e}")]
+
+    if not collections:
+        return [TextContent(type="text", text="No collections found in your Zotero library.")]
+
+    output = ["=" * 50, f"ZOTERO COLLECTIONS ({len(collections)})", "=" * 50, ""]
+    for c in collections:
+        parent = f" (in: {c['parent_key']})" if c.get("parent_key") else ""
+        output.append(f"  {c['name']} — {c['num_items']} items{parent}")
+        output.append(f"    Key: {c['key']}")
+
+    return [TextContent(type="text", text="\n".join(output))]
+
+
+async def _handle_batch_save_to_zotero(args: dict, client) -> list[TextContent]:
+    features = _get_features()
+    if not features.get("zotero_enabled", True):
+        return [TextContent(type="text", text="Zotero integration is disabled. Set SFU_FEATURE_ZOTERO_ENABLED=true to enable.")]
+
+    record_ids = args.get("record_ids", [])[:20]
+    collection_name = args.get("collection_name", "")
+    attach_pdfs = args.get("attach_pdfs", True)
+
+    if not record_ids:
+        return [TextContent(type="text", text="No record IDs provided.")]
+    if not client.ensure_authenticated():
+        return [TextContent(type="text", text="Authentication failed.")]
+
+    zot_client = _get_zotero_client()
+    downloader = _get_downloader(client) if attach_pdfs and features.get("pdf_download_enabled", True) else None
+
+    # Resolve collection
+    collection_key = None
+    if collection_name:
+        try:
+            collection_key = zot_client.find_or_create_collection(collection_name)
+        except ZoteroError as e:
+            return [TextContent(type="text", text=f"Zotero collection error: {e}")]
+
+    saved = 0
+    skipped = 0
+    failed = 0
+    details = []
+
+    for rid in record_ids:
+        item = await _resolve_record(rid, client)
+        if not item:
+            details.append(f"  {rid}: FAILED — record not found")
+            failed += 1
+            continue
+
+        metadata = extract_metadata(item)
+        if not metadata:
+            details.append(f"  {rid}: FAILED — no metadata")
+            failed += 1
+            continue
+
+        metadata = enrich_metadata_from_crossref(metadata)
+        title_short = metadata.get("title", "Unknown")[:60]
+
+        # Duplicate check
+        try:
+            dup = zot_client.check_duplicate(metadata)
+        except ZoteroError:
+            dup = {"is_duplicate": False}
+
+        if dup["is_duplicate"]:
+            details.append(f"  {title_short}: SKIPPED — already in Zotero ({dup['match_type']} match)")
+            skipped += 1
+            continue
+
+        # Create item
+        zotero_item = zot_client.metadata_to_zotero_item(metadata)
+        try:
+            item_key = zot_client.create_item(zotero_item, collection_key)
+        except ZoteroError as e:
+            details.append(f"  {title_short}: FAILED — {e}")
+            failed += 1
+            continue
+
+        # Attach PDF
+        pdf_status = ""
+        if downloader:
+            url = downloader.resolve_pdf_url(item)
+            if url:
+                dl_result = downloader.download_pdf(url, rid, metadata, copy_to_host=False)
+                if dl_result["success"]:
+                    try:
+                        zot_client.attach_pdf(item_key, dl_result["container_path"])
+                        pdf_status = " + PDF"
+                    except ZoteroError:
+                        pdf_status = " (PDF attach failed)"
+                else:
+                    pdf_status = " (PDF download failed)"
+
+        details.append(f"  {title_short}: SAVED{pdf_status}")
+        saved += 1
+
+    output = [
+        "=" * 50,
+        "BATCH SAVE TO ZOTERO",
+        "=" * 50,
+        f"\nCollection: {collection_name or '(none)'}",
+        f"Results: {saved} saved, {skipped} skipped (already in library), {failed} failed",
+        "",
+    ] + details
+
+    return [TextContent(type="text", text="\n".join(output))]
+
+
+def _handle_search_zotero(args: dict) -> list[TextContent]:
+    features = _get_features()
+    if not features.get("zotero_enabled", True):
+        return [TextContent(type="text", text="Zotero integration is disabled. Set SFU_FEATURE_ZOTERO_ENABLED=true to enable.")]
+
+    query = args.get("query", "")
+    limit = min(args.get("limit", 20), 100)
+
+    if not query:
+        return [TextContent(type="text", text="No search query provided.")]
+
+    zot_client = _get_zotero_client()
+
+    try:
+        items = zot_client.search_items(query, limit)
+    except ZoteroError as e:
+        return [TextContent(type="text", text=f"Zotero search error: {e}")]
+
+    if not items:
+        return [TextContent(type="text", text=f"No items found in Zotero for '{query}'.")]
+
+    output = ["=" * 50, f"ZOTERO SEARCH: '{query}' ({len(items)} results)", "=" * 50, ""]
+    for i, item in enumerate(items, 1):
+        output.append(f"--- Item {i} ---")
+        output.append(zot_client.format_item_summary(item))
+        output.append("")
+
+    return [TextContent(type="text", text="\n".join(output))]
+
+
+def _handle_get_zotero_collection_items(args: dict) -> list[TextContent]:
+    features = _get_features()
+    if not features.get("zotero_enabled", True):
+        return [TextContent(type="text", text="Zotero integration is disabled. Set SFU_FEATURE_ZOTERO_ENABLED=true to enable.")]
+
+    collection_name = args.get("collection_name", "")
+    limit = min(args.get("limit", 50), 100)
+
+    if not collection_name:
+        return [TextContent(type="text", text="No collection name provided.")]
+
+    zot_client = _get_zotero_client()
+
+    try:
+        collection_key = zot_client.find_collection_by_name(collection_name)
+    except ZoteroError as e:
+        return [TextContent(type="text", text=f"Zotero error: {e}")]
+
+    if not collection_key:
+        return [TextContent(type="text", text=f"Collection '{collection_name}' not found in Zotero.")]
+
+    try:
+        items = zot_client.get_collection_items(collection_key, limit)
+    except ZoteroError as e:
+        return [TextContent(type="text", text=f"Zotero error: {e}")]
+
+    if not items:
+        return [TextContent(type="text", text=f"No items in collection '{collection_name}'.")]
+
+    output = [
+        "=" * 50,
+        f"ZOTERO COLLECTION: '{collection_name}' ({len(items)} items)",
+        "=" * 50,
+        "",
+    ]
+    for i, item in enumerate(items, 1):
+        output.append(f"--- Item {i} ---")
+        output.append(zot_client.format_item_summary(item))
+        output.append("")
 
     return [TextContent(type="text", text="\n".join(output))]
