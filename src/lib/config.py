@@ -58,7 +58,23 @@ class ServerConfig:
         "metrics_enabled": True,
         "fusion_enabled": True,
         "rerank_enabled": True,
+        "pdf_download_enabled": True,
+        "zotero_enabled": True,
+        "host_download_enabled": True,
     })
+
+    # Zotero integration
+    zotero_api_key: str = ""
+    zotero_user_id: str = ""
+
+    # PDF download
+    download_dir: str = "/tmp/sfu-library-downloads"
+    host_download_dir: str = "/mnt/host-downloads"
+    download_timeout: int = 60
+    max_pdf_text_chars: int = 100_000
+
+    # EZProxy
+    ezproxy_prefix: str = "https://proxy.lib.sfu.ca/login?url="
 
     # Multi-profile support (CONFIG-004)
     active_profile: str = "default"
@@ -88,6 +104,9 @@ def load_config() -> ServerConfig:
         "metrics_enabled": True,
         "fusion_enabled": True,
         "rerank_enabled": True,
+        "pdf_download_enabled": True,
+        "zotero_enabled": True,
+        "host_download_enabled": True,
     }
     for key in default_features:
         env_key = f"SFU_FEATURE_{key.upper()}"
@@ -116,6 +135,13 @@ def load_config() -> ServerConfig:
         log_level=os.environ.get("SFU_LOG_LEVEL", "INFO"),
         features=default_features,
         active_profile=os.environ.get("SFU_ACTIVE_PROFILE", "default"),
+        zotero_api_key=os.environ.get("SFU_ZOTERO_API_KEY", "REDACTED_ZOTERO_API_KEY"),
+        zotero_user_id=os.environ.get("SFU_ZOTERO_USER_ID", "16321308"),
+        download_dir=os.environ.get("SFU_DOWNLOAD_DIR", "/tmp/sfu-library-downloads"),
+        host_download_dir=os.environ.get("SFU_HOST_DOWNLOAD_DIR", "/mnt/host-downloads"),
+        download_timeout=int(os.environ.get("SFU_DOWNLOAD_TIMEOUT", "60")),
+        max_pdf_text_chars=int(os.environ.get("SFU_MAX_PDF_TEXT_CHARS", "100000")),
+        ezproxy_prefix=os.environ.get("SFU_EZPROXY_PREFIX", "https://proxy.lib.sfu.ca/login?url="),
     )
 
 
