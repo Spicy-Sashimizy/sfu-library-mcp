@@ -294,6 +294,37 @@ VEOF
 }
 
 # ========================================
+# Python Venv Dependency Sync
+# ========================================
+# Ensure .venv has all deps from requirements.txt on every start
+# This prevents missing modules (e.g. pyzotero) after container rebuild
+sync_venv_deps() {
+    local WORKSPACE="/workspaces/${PROJECT_NAME:-project}"
+    local VENV_DIR="$WORKSPACE/.venv"
+
+    if [ -d "$VENV_DIR" ] && [ -f "$WORKSPACE/requirements.txt" ]; then
+        echo "[entrypoint] Syncing .venv dependencies..."
+        "$VENV_DIR/bin/pip" install -q -r "$WORKSPACE/requirements.txt" 2>/dev/null || \
+            sudo "$VENV_DIR/bin/pip" install -q -r "$WORKSPACE/requirements.txt" 2>/dev/null || true
+        if [ -f "$WORKSPACE/src/requirements.txt" ]; then
+            "$VENV_DIR/bin/pip" install -q -r "$WORKSPACE/src/requirements.txt" 2>/dev/null || \
+                sudo "$VENV_DIR/bin/pip" install -q -r "$WORKSPACE/src/requirements.txt" 2>/dev/null || true
+        fi
+        echo "[entrypoint] .venv dependencies synced"
+    elif [ ! -d "$VENV_DIR" ] && [ -f "$WORKSPACE/requirements.txt" ]; then
+        echo "[entrypoint] Creating .venv..."
+        python3 -m venv "$VENV_DIR"
+        "$VENV_DIR/bin/pip" install -q -r "$WORKSPACE/requirements.txt" 2>/dev/null || \
+            sudo "$VENV_DIR/bin/pip" install -q -r "$WORKSPACE/requirements.txt" 2>/dev/null || true
+        if [ -f "$WORKSPACE/src/requirements.txt" ]; then
+            "$VENV_DIR/bin/pip" install -q -r "$WORKSPACE/src/requirements.txt" 2>/dev/null || \
+                sudo "$VENV_DIR/bin/pip" install -q -r "$WORKSPACE/src/requirements.txt" 2>/dev/null || true
+        fi
+        echo "[entrypoint] .venv created and dependencies installed"
+    fi
+}
+
+# ========================================
 # Socat Ollama Proxy (for Pommel)
 # ========================================
 start_ollama_proxy() {
@@ -321,6 +352,7 @@ main() {
     configure_git_credentials
     configure_gh_cli
     install_or_update_claude_code
+    sync_venv_deps
     start_ollama_proxy
 
     # Test connection (non-blocking)

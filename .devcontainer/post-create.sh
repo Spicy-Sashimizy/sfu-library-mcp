@@ -309,6 +309,29 @@ if [ -f "requirements.txt" ]; then
     echo ""
     echo "Installing Python dependencies..."
     pip install -r requirements.txt
+
+    # Also install into .venv if it exists (MCP server uses the venv)
+    VENV_DIR="/workspaces/${PROJECT_NAME:-project}/.venv"
+    if [ -d "$VENV_DIR" ]; then
+        echo "Installing Python dependencies into .venv..."
+        sudo "$VENV_DIR/bin/pip" install -r requirements.txt 2>/dev/null || \
+            "$VENV_DIR/bin/pip" install -r requirements.txt 2>/dev/null || true
+    else
+        echo "Creating .venv and installing dependencies..."
+        python3 -m venv "$VENV_DIR"
+        sudo "$VENV_DIR/bin/pip" install -r requirements.txt 2>/dev/null || \
+            "$VENV_DIR/bin/pip" install -r requirements.txt 2>/dev/null || true
+    fi
+
+    # Install src/requirements.txt if it exists (may have additional deps like pyzotero)
+    if [ -f "src/requirements.txt" ]; then
+        echo "Installing src/requirements.txt..."
+        pip install -r src/requirements.txt 2>/dev/null || true
+        if [ -d "$VENV_DIR" ]; then
+            sudo "$VENV_DIR/bin/pip" install -r src/requirements.txt 2>/dev/null || \
+                "$VENV_DIR/bin/pip" install -r src/requirements.txt 2>/dev/null || true
+        fi
+    fi
 fi
 
 if [ -f "pyproject.toml" ]; then
