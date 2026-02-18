@@ -480,8 +480,19 @@ class SFULibraryClient:
                     self.token_expiry = payload.get("exp")
                     logger.info("Authenticated as %s", self.user_info.get("userName"))
 
+            # Establish EZProxy session using the active CAS session
+            EZPROXY_LOGIN = "https://proxy.lib.sfu.ca/login"
+            try:
+                logger.info("Establishing EZProxy session...")
+                driver.get(EZPROXY_LOGIN)
+                time.sleep(3)  # Allow CAS redirect to complete
+                logger.info("EZProxy session URL: %s", driver.current_url)
+            except Exception as e:
+                logger.warning("EZProxy session setup failed (downloads may not work): %s", e)
+
             for cookie in driver.get_cookies():
                 self.cookies[cookie["name"]] = cookie["value"]
+                logger.debug("Captured cookie: %s (domain: %s)", cookie["name"], cookie.get("domain", "unknown"))
 
             self.save_token_cache()
             return True
