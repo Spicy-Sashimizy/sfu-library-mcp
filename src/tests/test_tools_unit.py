@@ -5,7 +5,7 @@ from unittest.mock import patch
 
 import pytest
 
-from lib.tools import TOOL_DEFINITIONS, handle_tool_call, get_metrics, _reciprocal_rank_fusion
+from lib.tools import TOOL_DEFINITIONS, handle_tool_call, get_metrics, _reciprocal_rank_fusion, _get_downloader
 
 
 class MockClient:
@@ -363,6 +363,44 @@ class TestReciprocalRankFusion:
         result_set = {"docs": [sample_pnx_record, sample_article_record], "info": {"total": 2}}
         merged = _reciprocal_rank_fusion([result_set], limit=1)
         assert len(merged["docs"]) == 1
+
+
+class TestGetDownloaderCookieStaleness:
+    """Verify _get_downloader detects cookie changes via content hash."""
+
+    def test_recreates_downloader_when_cookies_mutated(self):
+        """Mutating the same dict object should trigger recreation."""
+        import lib.tools as tools_module
+        # Reset global state
+        tools_module._downloader = None
+        tools_module._downloader_cookie_id = None
+
+        client = MockClient()
+        client.cookies = {"session": "old_value"}
+
+        dl1 = _get_downloader(client)
+        assert dl1 is not None
+
+        # Mutate the SAME dict (this is what re-auth does)
+        client.cookies["ezproxy"] = "new_cookie"
+        client.cookies["session"] = "new_value"
+
+        dl2 = _get_downloader(client)
+        # Should be a NEW downloader since cookies changed
+        assert dl2 is not dl1
+
+    def test_reuses_downloader_when_cookies_unchanged(self):
+        """Same cookies should return the same downloader instance."""
+        import lib.tools as tools_module
+        tools_module._downloader = None
+        tools_module._downloader_cookie_id = None
+
+        client = MockClient()
+        client.cookies = {"session": "abc"}
+
+        dl1 = _get_downloader(client)
+        dl2 = _get_downloader(client)
+        assert dl2 is dl1
 
 
 class TestMetrics:

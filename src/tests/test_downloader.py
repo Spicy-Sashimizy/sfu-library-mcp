@@ -217,6 +217,104 @@ class TestDownloadPdf:
         mock_session.get.assert_not_called()
 
 
+class TestEZProxy403Fallback:
+    """Verify 403 triggers EZProxy retry for non-proxied URLs."""
+
+    def test_403_retries_via_ezproxy(self, downloader, tmp_path):
+        """403 on a non-proxied URL should retry with EZProxy prefix."""
+        downloader.config.download_dir = str(tmp_path)
+
+        # First call: 403 error
+        mock_403_resp = MagicMock()
+        mock_403_resp.status_code = 403
+        mock_403_resp.headers = {"Content-Type": "text/html"}
+        mock_403_resp.url = "https://example.com/article.pdf"
+        mock_403_resp.history = []
+        mock_403_resp.raise_for_status.side_effect = requests.exceptions.HTTPError(
+            response=mock_403_resp
+        )
+
+        # Second call (EZProxy retry): success
+        mock_ok_resp = MagicMock()
+        mock_ok_resp.status_code = 200
+        mock_ok_resp.iter_content.return_value = [b"%PDF-1.4 retried content"]
+        mock_ok_resp.raise_for_status.return_value = None
+        mock_ok_resp.headers = {"Content-Type": "application/pdf"}
+        mock_ok_resp.history = []
+        mock_ok_resp.url = "https://proxy.lib.sfu.ca/login?url=https://example.com/article.pdf"
+
+        mock_session = MagicMock()
+        mock_session.get.side_effect = [mock_403_resp, mock_ok_resp]
+        mock_session.cookies = MagicMock()
+        mock_session.cookies.keys.return_value = ["ezproxy"]
+        downloader._session = mock_session
+
+        result = downloader.download_pdf(
+            "https://example.com/article.pdf", "rec_403_retry", copy_to_host=False
+        )
+        assert result["success"] is True
+        assert result["size_bytes"] > 0
+        # Should have made 2 calls: original + EZProxy retry
+        assert mock_session.get.call_count == 2
+        retry_url = mock_session.get.call_args_list[1][0][0]
+        assert retry_url.startswith("https://proxy.lib.sfu.ca/login?url=")
+
+    def test_403_no_retry_when_already_proxied(self, downloader):
+        """403 on an already-proxied URL should NOT retry."""
+        mock_resp = MagicMock()
+        mock_resp.status_code = 403
+        mock_resp.headers = {"Content-Type": "text/html"}
+        mock_resp.url = "https://proxy.lib.sfu.ca/login?url=https://example.com/article.pdf"
+        mock_resp.history = []
+        mock_resp.raise_for_status.side_effect = requests.exceptions.HTTPError(
+            response=mock_resp
+        )
+
+        mock_session = MagicMock()
+        mock_session.get.return_value = mock_resp
+        mock_session.cookies = MagicMock()
+        mock_session.cookies.keys.return_value = ["ezproxy"]
+        downloader._session = mock_session
+
+        result = downloader.download_pdf(
+            "https://proxy.lib.sfu.ca/login?url=https://example.com/article.pdf",
+            "rec_403_no_retry",
+            copy_to_host=False,
+        )
+        assert result["success"] is False
+        assert "403" in result["error"]
+        # Should have made only 1 call (no retry)
+        assert mock_session.get.call_count == 1
+
+    def test_403_retry_also_fails(self, downloader):
+        """403 retry via EZProxy that also fails should report both."""
+        mock_403_resp = MagicMock()
+        mock_403_resp.status_code = 403
+        mock_403_resp.headers = {"Content-Type": "text/html"}
+        mock_403_resp.url = "https://example.com/article.pdf"
+        mock_403_resp.history = []
+        mock_403_resp.raise_for_status.side_effect = requests.exceptions.HTTPError(
+            response=mock_403_resp
+        )
+
+        mock_session = MagicMock()
+        # Both calls fail
+        mock_session.get.side_effect = [
+            mock_403_resp,
+            requests.exceptions.ConnectionError("EZProxy unreachable"),
+        ]
+        mock_session.cookies = MagicMock()
+        mock_session.cookies.keys.return_value = []
+        downloader._session = mock_session
+
+        result = downloader.download_pdf(
+            "https://example.com/article.pdf", "rec_403_both_fail", copy_to_host=False
+        )
+        assert result["success"] is False
+        assert "retried via EZProxy" in result["error"]
+        assert "also failed" in result["error"]
+
+
 class TestExtractText:
     @patch("lib.downloader.subprocess.run")
     def test_extract_text_success(self, mock_run, downloader, tmp_path):

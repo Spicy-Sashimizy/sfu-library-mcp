@@ -1,5 +1,7 @@
 """Integration tests for the download auth chain and backfill tool."""
 
+import os
+import tempfile
 from unittest.mock import MagicMock, patch, AsyncMock
 
 import pytest
@@ -24,13 +26,18 @@ class TestDownloadAuthFlow:
     """Verify the full auth -> cookie -> EZProxy -> download chain."""
 
     def test_ezproxy_cookies_included_in_session(self, dl_config):
-        """Cookies from EZProxy auth should be present in downloader session."""
-        cookies = {"PrimoSession": "abc", "ezproxy": "xyz123"}
+        """Both Primo and EZProxy cookies should be present in downloader session."""
+        cookies = {
+            "PrimoSession": "abc",
+            "JSESSIONID": "primo_session_id",
+            "ezproxy": "xyz123",
+        }
         downloader = ArticleDownloader(dl_config, cookies=cookies)
         session = downloader.session
         cookie_names = list(session.cookies.keys())
         assert "ezproxy" in cookie_names
         assert "PrimoSession" in cookie_names
+        assert "JSESSIONID" in cookie_names
 
     def test_download_with_ezproxy_cookie_succeeds(self, dl_config, tmp_path):
         """Mock a successful download when EZProxy cookie is present."""
@@ -229,3 +236,64 @@ class TestBackfillCollectionPdfs:
         assert "FAILED" in output
         assert "PDFs attached: 2" in output
         assert "Failed: 1" in output
+
+
+class TestClearTokenCacheInMemory:
+    """Verify clear_token_cache resets in-memory auth state."""
+
+    def test_clear_token_cache_resets_all_state(self):
+        """clear_token_cache should clear file, jwt_token, cookies, user_info, and token_expiry."""
+        from lib.client import SFULibraryClient
+
+        fd, cache_path = tempfile.mkstemp(suffix=".json")
+        os.close(fd)
+
+        try:
+            config = ServerConfig(
+                token_cache_file=cache_path,
+                sfu_username="test",
+                sfu_password="test",
+                mfa_secret="TESTSECRETBASE32A",
+            )
+            client = SFULibraryClient(config=config)
+            # Simulate authenticated state
+            client.jwt_token = "fake.jwt.token"
+            client.cookies = {"session": "abc", "ezproxy": "xyz"}
+            client.user_info = {"user": "testuser", "userName": "Test"}
+            client.token_expiry = 9999999999
+
+            # Write something to cache file
+            with open(cache_path, "w") as f:
+                f.write('{"jwt_token": "old"}')
+
+            client.clear_token_cache()
+
+            # File should be deleted
+            assert not os.path.exists(cache_path)
+            # In-memory state should be cleared
+            assert client.jwt_token is None
+            assert client.cookies == {}
+            assert client.user_info == {}
+            assert client.token_expiry is None
+        finally:
+            if os.path.exists(cache_path):
+                os.remove(cache_path)
+
+    def test_clear_token_cache_works_without_file(self):
+        """clear_token_cache should work even if no cache file exists."""
+        from lib.client import SFULibraryClient
+
+        config = ServerConfig(
+            token_cache_file="/tmp/nonexistent_cache_12345.json",
+            sfu_username="test",
+            sfu_password="test",
+            mfa_secret="TESTSECRETBASE32A",
+        )
+        client = SFULibraryClient(config=config)
+        client.jwt_token = "stale_token"
+        client.cookies = {"old": "cookie"}
+
+        client.clear_token_cache()
+
+        assert client.jwt_token is None
+        assert client.cookies == {}
