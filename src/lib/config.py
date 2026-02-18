@@ -85,6 +85,14 @@ class ServerConfig:
     capture_server_port: int = 8787
     capture_server_enabled: bool = False
 
+    # Anti-detection rate limiting
+    download_session_budget: int = 15
+    download_hourly_limit: int = 20
+    download_per_domain_hourly_limit: int = 5
+    download_min_delay: float = 3.0   # seconds, minimum inter-download delay
+    download_max_delay: float = 8.0   # seconds, maximum inter-download delay
+    download_backfill_cap: int = 10   # max items per backfill run
+
     # Multi-profile support (CONFIG-004)
     active_profile: str = "default"
 
@@ -156,6 +164,12 @@ def load_config() -> ServerConfig:
         playwright_timeout=int(os.environ.get("SFU_PLAYWRIGHT_TIMEOUT", "30")),
         capture_server_port=int(os.environ.get("SFU_CAPTURE_SERVER_PORT", "8787")),
         capture_server_enabled=_bool(os.environ.get("SFU_CAPTURE_SERVER_ENABLED", "false")),
+        download_session_budget=int(os.environ.get("SFU_DOWNLOAD_SESSION_BUDGET", "15")),
+        download_hourly_limit=int(os.environ.get("SFU_DOWNLOAD_HOURLY_LIMIT", "20")),
+        download_per_domain_hourly_limit=int(os.environ.get("SFU_DOWNLOAD_PER_DOMAIN_HOURLY_LIMIT", "5")),
+        download_min_delay=float(os.environ.get("SFU_DOWNLOAD_MIN_DELAY", "3.0")),
+        download_max_delay=float(os.environ.get("SFU_DOWNLOAD_MAX_DELAY", "8.0")),
+        download_backfill_cap=int(os.environ.get("SFU_DOWNLOAD_BACKFILL_CAP", "10")),
     )
 
 
