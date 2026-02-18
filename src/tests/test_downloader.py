@@ -16,6 +16,7 @@ from lib.downloader import (
     FetchResult,
     PDFTextExtractionError,
 )
+from lib.publisher_router import PublisherRouter, DomainClass
 from lib.rate_limiter import DownloadRateLimiter, RateLimitExceeded
 
 
@@ -904,3 +905,149 @@ class TestRateLimiterIntegration:
                 "https://example.com/test.pdf", "rec_norl", copy_to_host=False
             )
         assert result["success"] is True
+
+
+class TestPublisherRouterIntegration:
+    """Test publisher router integration with ArticleDownloader."""
+
+    @pytest.fixture
+    def router(self):
+        return PublisherRouter()
+
+    @pytest.fixture
+    def dl_with_router(self, dl_config, router):
+        return ArticleDownloader(dl_config, cookies={"session": "abc123"}, publisher_router=router)
+
+    def test_router_accepted(self, dl_config, router):
+        """ArticleDownloader should accept a publisher_router parameter."""
+        dl = ArticleDownloader(dl_config, publisher_router=router)
+        assert dl._publisher_router is router
+
+    def test_no_router_backwards_compatible(self, dl_config, tmp_path):
+        """Without router, downloads should work normally (default order)."""
+        dl_config.download_dir = str(tmp_path)
+        dl = ArticleDownloader(dl_config)
+        assert dl._publisher_router is None
+
+        fetch_result = FetchResult(
+            content=b"%PDF-1.4 data", status_code=200,
+            content_type="application/pdf", tier_used="curl_cffi",
+            url="https://example.com/test.pdf",
+        )
+        with patch.object(dl, "_tiered_fetch", return_value=fetch_result):
+            result = dl.download_pdf(
+                "https://example.com/test.pdf", "rec_compat", copy_to_host=False
+            )
+        assert result["success"] is True
+
+    def test_router_reorders_tiers_browser_only(self, dl_with_router, router):
+        """After curl_cffi failure, router should put playwright first."""
+        # Simulate prior failure
+        router.record_failure("https://onlinelibrary.wiley.com/doi/123", "curl_cffi")
+
+        expected = FetchResult(
+            content=b"%PDF-1.4 data", status_code=200,
+            content_type="application/pdf", tier_used="playwright",
+            url="https://onlinelibrary.wiley.com/doi/456",
+        )
+        call_order = []
+
+        def mock_cffi(url, cookies=None):
+            call_order.append("curl_cffi")
+            return expected
+
+        def mock_pw(url, cookies=None):
+            call_order.append("playwright")
+            return expected
+
+        def mock_req(url, cookies=None):
+            call_order.append("requests")
+            return expected
+
+        with patch.object(dl_with_router, "_fetch_curl_cffi", side_effect=mock_cffi), \
+             patch.object(dl_with_router, "_fetch_playwright", side_effect=mock_pw), \
+             patch.object(dl_with_router, "_fetch_requests", side_effect=mock_req):
+            result = dl_with_router._tiered_fetch("https://onlinelibrary.wiley.com/doi/456")
+
+        # Playwright should be tried first due to BROWSER_ONLY classification
+        assert call_order[0] == "playwright"
+        assert result.tier_used == "playwright"
+
+    def test_router_records_failure_on_tier_exception(self, dl_with_router, router, tmp_path):
+        """Tier exceptions should be recorded as failures in the router."""
+        dl_with_router.config.download_dir = str(tmp_path)
+
+        with patch.object(dl_with_router, "_fetch_curl_cffi", side_effect=Exception("403 Forbidden")), \
+             patch.object(dl_with_router, "_fetch_playwright", side_effect=Exception("timeout")), \
+             patch.object(dl_with_router, "_fetch_requests", side_effect=Exception("refused")):
+            with pytest.raises(DownloadError):
+                dl_with_router._tiered_fetch("https://example.com/test.pdf")
+
+        # Router should have recorded the failures
+        assert router.get_domain_class("https://example.com/test.pdf") == DomainClass.BROWSER_ONLY
+
+    def test_router_records_success_on_validated_pdf(self, dl_with_router, router, tmp_path):
+        """Validated PDF download via direct tier should record success in router."""
+        dl_with_router.config.download_dir = str(tmp_path)
+
+        fetch_result = FetchResult(
+            content=b"%PDF-1.4 valid pdf content",
+            status_code=200,
+            content_type="application/pdf",
+            tier_used="curl_cffi",
+            url="https://journals.sagepub.com/doi/pdf/10.1177/123",
+        )
+        with patch.object(dl_with_router, "_tiered_fetch", return_value=fetch_result):
+            result = dl_with_router.download_pdf(
+                "https://journals.sagepub.com/doi/pdf/10.1177/123",
+                "rec_sage",
+                copy_to_host=False,
+            )
+
+        assert result["success"] is True
+        assert router.get_domain_class("https://journals.sagepub.com/other") == DomainClass.DIRECT_OK
+
+    def test_router_does_not_record_success_for_playwright(self, dl_with_router, router, tmp_path):
+        """Playwright success should NOT whitelist domain as DIRECT_OK."""
+        dl_with_router.config.download_dir = str(tmp_path)
+
+        fetch_result = FetchResult(
+            content=b"%PDF-1.4 valid pdf content",
+            status_code=200,
+            content_type="application/pdf",
+            tier_used="playwright",
+            url="https://wiley.com/doi/pdf/10.1002/123",
+        )
+        with patch.object(dl_with_router, "_tiered_fetch", return_value=fetch_result):
+            result = dl_with_router.download_pdf(
+                "https://wiley.com/doi/pdf/10.1002/123",
+                "rec_wiley",
+                copy_to_host=False,
+            )
+
+        assert result["success"] is True
+        # Playwright success should NOT set DIRECT_OK
+        assert router.get_domain_class("https://wiley.com/other") == DomainClass.UNKNOWN
+
+    def test_router_does_not_record_success_for_non_pdf(self, dl_with_router, router, tmp_path):
+        """HTML response (non-PDF) should NOT record success even via direct tier."""
+        dl_with_router.config.download_dir = str(tmp_path)
+
+        # Direct fetch returns HTML (not a PDF)
+        fetch_result = FetchResult(
+            content=b"<html>Login page</html>",
+            status_code=200,
+            content_type="text/html",
+            tier_used="curl_cffi",
+            url="https://proxy.lib.sfu.ca/login",
+        )
+        with patch.object(dl_with_router, "_tiered_fetch", return_value=fetch_result):
+            result = dl_with_router.download_pdf(
+                "https://proxy.lib.sfu.ca/login?url=https://example.com/test.pdf",
+                "rec_html",
+                copy_to_host=False,
+            )
+
+        assert result["success"] is False
+        # Should NOT be DIRECT_OK since the PDF validation failed
+        assert router.get_domain_class("https://proxy.lib.sfu.ca/anything") != DomainClass.DIRECT_OK
