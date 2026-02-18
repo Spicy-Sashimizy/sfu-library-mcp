@@ -1,8 +1,9 @@
 """PDF download, caching, and text extraction for library articles.
 
 Provides ArticleDownloader that resolves full-text URLs from PNX records,
-downloads PDFs through EZProxy, caches them locally, optionally copies
-to the host Downloads folder, and extracts text via pdftotext.
+downloads PDFs through EZProxy using a tiered strategy (curl_cffi → Playwright
+→ requests), caches them locally, optionally copies to the host Downloads
+folder, and extracts text via pdftotext.
 """
 
 import hashlib
@@ -11,6 +12,7 @@ import os
 import re
 import shutil
 import subprocess
+from dataclasses import dataclass
 from pathlib import Path
 
 import requests
@@ -29,6 +31,16 @@ class DownloadError(Exception):
 class PDFTextExtractionError(Exception):
     """Raised when text extraction from a PDF fails."""
     pass
+
+
+@dataclass
+class FetchResult:
+    """Result from a single tier fetch attempt."""
+    content: bytes
+    status_code: int
+    content_type: str
+    tier_used: str
+    url: str
 
 
 class ArticleDownloader:
@@ -103,10 +115,172 @@ class ArticleDownloader:
 
         return url
 
+    # ─── Tiered fetch methods ──────────────────────────────────
+
+    def _fetch_curl_cffi(self, url: str, cookies: dict | None = None) -> FetchResult:
+        """Tier 1: Fetch using curl_cffi with Chrome TLS impersonation."""
+        from curl_cffi import requests as cffi_requests
+
+        merged_cookies = {**self.cookies, **(cookies or {})}
+        logger.info("_fetch_curl_cffi: fetching %s", url)
+        resp = cffi_requests.get(
+            url,
+            cookies=merged_cookies,
+            impersonate="chrome",
+            timeout=self.config.download_timeout,
+            allow_redirects=True,
+        )
+        resp.raise_for_status()
+        return FetchResult(
+            content=resp.content,
+            status_code=resp.status_code,
+            content_type=resp.headers.get("Content-Type", "unknown"),
+            tier_used="curl_cffi",
+            url=str(resp.url),
+        )
+
+    def _fetch_playwright(self, url: str, cookies: dict | None = None) -> FetchResult:
+        """Tier 2: Fetch using Playwright headless Chromium."""
+        from playwright.sync_api import sync_playwright
+
+        merged_cookies = {**self.cookies, **(cookies or {})}
+        logger.info("_fetch_playwright: fetching %s", url)
+
+        with sync_playwright() as p:
+            browser = p.chromium.launch(headless=True)
+            context = browser.new_context()
+
+            # Inject cookies — Playwright requires domain/path
+            if merged_cookies:
+                from urllib.parse import urlparse
+                parsed = urlparse(url)
+                pw_cookies = []
+                for name, value in merged_cookies.items():
+                    pw_cookies.append({
+                        "name": name,
+                        "value": value,
+                        "domain": parsed.hostname,
+                        "path": "/",
+                    })
+                context.add_cookies(pw_cookies)
+
+            page = context.new_page()
+            pdf_content = None
+            pdf_content_type = "unknown"
+
+            def handle_response(response):
+                nonlocal pdf_content, pdf_content_type
+                ct = response.headers.get("content-type", "")
+                if "application/pdf" in ct or response.url.endswith(".pdf"):
+                    try:
+                        pdf_content = response.body()
+                        pdf_content_type = ct
+                    except Exception:
+                        pass
+
+            page.on("response", handle_response)
+
+            try:
+                resp = page.goto(url, timeout=self.config.playwright_timeout * 1000, wait_until="networkidle")
+            except Exception as e:
+                browser.close()
+                raise DownloadError(f"Playwright navigation failed: {e}")
+
+            # If we caught a PDF via response interception, use that
+            if pdf_content and pdf_content[:5] == b"%PDF-":
+                result = FetchResult(
+                    content=pdf_content,
+                    status_code=200,
+                    content_type=pdf_content_type,
+                    tier_used="playwright",
+                    url=page.url,
+                )
+                browser.close()
+                return result
+
+            # Otherwise, get the page body (may be a PDF loaded directly)
+            if resp:
+                body = resp.body()
+                ct = resp.headers.get("content-type", "unknown")
+                status = resp.status
+            else:
+                body = b""
+                ct = "unknown"
+                status = 0
+
+            browser.close()
+
+            if status >= 400:
+                raise DownloadError(f"Playwright HTTP {status} for {url}")
+
+            return FetchResult(
+                content=body,
+                status_code=status,
+                content_type=ct,
+                tier_used="playwright",
+                url=url,
+            )
+
+    def _fetch_requests(self, url: str, cookies: dict | None = None) -> FetchResult:
+        """Tier 3: Fetch using requests (legacy fallback)."""
+        merged_cookies = {**self.cookies, **(cookies or {})}
+        logger.info("_fetch_requests: fetching %s", url)
+
+        session = requests.Session()
+        for name, value in merged_cookies.items():
+            session.cookies.set(name, value)
+
+        resp = session.get(url, timeout=self.config.download_timeout, stream=True)
+        resp.raise_for_status()
+
+        content = b""
+        for chunk in resp.iter_content(chunk_size=8192):
+            content += chunk
+
+        return FetchResult(
+            content=content,
+            status_code=resp.status_code,
+            content_type=resp.headers.get("Content-Type", "unknown"),
+            tier_used="requests",
+            url=resp.url,
+        )
+
+    def _tiered_fetch(self, url: str, cookies: dict | None = None) -> FetchResult:
+        """Iterate through configured tiers in order, returning first success."""
+        tier_methods = {
+            "curl_cffi": self._fetch_curl_cffi,
+            "playwright": self._fetch_playwright,
+            "requests": self._fetch_requests,
+        }
+
+        tiers = self.config.download_tiers
+        last_error = None
+
+        for tier_name in tiers:
+            method = tier_methods.get(tier_name)
+            if method is None:
+                logger.warning("_tiered_fetch: unknown tier '%s', skipping", tier_name)
+                continue
+
+            try:
+                result = method(url, cookies)
+                logger.info("_tiered_fetch: tier '%s' succeeded for %s", tier_name, url)
+                return result
+            except Exception as e:
+                logger.warning("_tiered_fetch: tier '%s' failed for %s: %s", tier_name, url, e)
+                last_error = e
+
+        raise DownloadError(
+            f"All download tiers failed for {url}. Last error: {last_error}"
+        )
+
+    # ─── PDF validation ────────────────────────────────────────
+
     def _write_and_validate_pdf(self, resp, cache_path: Path, record_id: str) -> str | None:
         """Write response content to cache and validate PDF magic bytes.
 
         Returns None on success, or an error string on failure.
+        Works with requests.Response objects (legacy path).
         """
         redirect_count = len(resp.history)
         content_type = resp.headers.get("Content-Type", "unknown")
@@ -134,6 +308,37 @@ class ArticleDownloader:
             )
         return None
 
+    def _write_and_validate_fetch_result(self, fetch_result: FetchResult, cache_path: Path, record_id: str) -> str | None:
+        """Write FetchResult content to cache and validate PDF magic bytes.
+
+        Returns None on success, or an error string on failure.
+        """
+        logger.info(
+            "download_pdf: tier=%s, status=%d, content_type=%s, url=%s",
+            fetch_result.tier_used, fetch_result.status_code,
+            fetch_result.content_type, fetch_result.url,
+        )
+
+        cache_path.parent.mkdir(parents=True, exist_ok=True)
+        with open(cache_path, "wb") as f:
+            f.write(fetch_result.content)
+
+        if not fetch_result.content[:5] == b"%PDF-":
+            logger.warning(
+                "Downloaded content is not a PDF for %s: content_type=%s tier=%s url=%s body_preview=%r",
+                record_id, fetch_result.content_type, fetch_result.tier_used,
+                fetch_result.url, fetch_result.content[:200],
+            )
+            cache_path.unlink(missing_ok=True)
+            return (
+                f"Downloaded content is not a PDF (Content-Type: {fetch_result.content_type}, "
+                f"tier: {fetch_result.tier_used}, URL: {fetch_result.url}). "
+                f"May be a login page or HTML redirect."
+            )
+        return None
+
+    # ─── Main download methods ─────────────────────────────────
+
     def download_pdf(
         self,
         url: str,
@@ -141,10 +346,10 @@ class ArticleDownloader:
         metadata: dict | None = None,
         copy_to_host: bool = True,
     ) -> dict:
-        """Download a PDF from the given URL.
+        """Download a PDF from the given URL using tiered strategy.
 
         Returns dict with keys: success, container_path, host_path,
-        size_bytes, error.
+        size_bytes, tier_used, error.
         """
         cache_path = self._cache_path(record_id)
         result = {
@@ -152,6 +357,7 @@ class ArticleDownloader:
             "container_path": None,
             "host_path": None,
             "size_bytes": 0,
+            "tier_used": None,
             "error": None,
         }
 
@@ -161,12 +367,13 @@ class ArticleDownloader:
             result["success"] = True
             result["container_path"] = str(cache_path)
             result["size_bytes"] = cache_path.stat().st_size
+            result["tier_used"] = "cache"
             if copy_to_host:
                 result["host_path"] = self._copy_to_host(cache_path, record_id, metadata)
             return result
 
         # Log cookie state for diagnostics
-        cookie_names = list(self.session.cookies.keys())
+        cookie_names = list(self.cookies.keys())
         ezproxy_cookies = [n for n in cookie_names if "ezproxy" in n.lower()]
         logger.info(
             "download_pdf: cookies=%s, ezproxy_cookies=%s",
@@ -176,64 +383,116 @@ class ArticleDownloader:
             logger.warning("download_pdf: no EZProxy cookies found — auth may fail for proxied URLs")
 
         logger.info("Downloading PDF from %s for record %s", url, record_id)
+
+        # Try tiered fetch
         try:
-            resp = self.session.get(url, timeout=self.config.download_timeout, stream=True)
-            resp.raise_for_status()
-        except requests.exceptions.Timeout:
-            result["error"] = f"Download timed out after {self.config.download_timeout}s"
-            logger.error("Download timeout for %s: %s", record_id, url)
-            return result
-        except requests.exceptions.HTTPError as e:
-            status = e.response.status_code if e.response is not None else "unknown"
-            content_type = (e.response.headers.get("Content-Type", "unknown")
-                           if e.response is not None else "unknown")
-            final_url = e.response.url if e.response is not None else url
-            redirect_count = len(e.response.history) if e.response is not None else 0
-            logger.error(
-                "Download HTTP error for %s: status=%s content_type=%s final_url=%s redirects=%d",
-                record_id, status, content_type, final_url, redirect_count,
-            )
-            # On 403, retry through EZProxy if not already proxied
-            if status == 403 and self.config.ezproxy_prefix not in url:
+            fetch_result = self._tiered_fetch(url)
+        except DownloadError as e:
+            # On failure, retry through EZProxy if not already proxied
+            if self.config.ezproxy_prefix not in url:
                 proxied_url = self.config.ezproxy_prefix + url
-                logger.info("download_pdf: 403 on OA URL, retrying through EZProxy: %s", proxied_url)
+                logger.info("download_pdf: tiered fetch failed, retrying through EZProxy: %s", proxied_url)
                 try:
-                    resp = self.session.get(proxied_url, timeout=self.config.download_timeout, stream=True)
-                    resp.raise_for_status()
-                except Exception as retry_err:
+                    fetch_result = self._tiered_fetch(proxied_url)
+                except DownloadError as retry_err:
                     logger.error("download_pdf: EZProxy retry also failed: %s", retry_err)
                     result["error"] = (
-                        f"HTTP error {status} (retried via EZProxy, also failed). "
-                        f"Original URL: {url}"
+                        f"All tiers failed (retried via EZProxy, also failed). "
+                        f"Original URL: {url}. Last error: {retry_err}"
                     )
                     return result
             else:
-                result["error"] = (
-                    f"HTTP error {status} (Content-Type: {content_type}, "
-                    f"final URL: {final_url})"
-                )
+                result["error"] = str(e)
                 return result
-        except requests.exceptions.RequestException as e:
-            result["error"] = f"Download failed: {e}"
-            logger.error("Download failed for %s: %s", record_id, e)
-            return result
 
-        # Write response to cache and validate PDF
-        validation_error = self._write_and_validate_pdf(resp, cache_path, record_id)
+        # Write and validate
+        validation_error = self._write_and_validate_fetch_result(fetch_result, cache_path, record_id)
         if validation_error:
-            result["error"] = validation_error
-            return result
+            # If not already proxied, retry with EZProxy
+            if self.config.ezproxy_prefix not in url:
+                proxied_url = self.config.ezproxy_prefix + url
+                logger.info("download_pdf: not a PDF, retrying through EZProxy: %s", proxied_url)
+                try:
+                    fetch_result = self._tiered_fetch(proxied_url)
+                    validation_error = self._write_and_validate_fetch_result(fetch_result, cache_path, record_id)
+                    if validation_error:
+                        result["error"] = validation_error
+                        return result
+                except DownloadError as e:
+                    result["error"] = validation_error
+                    return result
+            else:
+                result["error"] = validation_error
+                return result
 
         size = cache_path.stat().st_size
-        logger.info("Download success for %s: %d bytes at %s", record_id, size, cache_path)
+        logger.info("Download success for %s: %d bytes at %s (tier: %s)", record_id, size, cache_path, fetch_result.tier_used)
         result["success"] = True
         result["container_path"] = str(cache_path)
         result["size_bytes"] = size
+        result["tier_used"] = fetch_result.tier_used
 
         if copy_to_host:
             result["host_path"] = self._copy_to_host(cache_path, record_id, metadata)
 
         return result
+
+    def download_from_direct_url(
+        self,
+        url: str,
+        cookies: dict | None = None,
+        filename: str | None = None,
+    ) -> dict:
+        """Download a PDF from a direct URL (e.g. from capture server or MCP tool).
+
+        Uses tiered fetch with optional extra cookies (e.g. from Chrome extension).
+
+        Returns dict with keys: success, container_path, size_bytes, tier_used, error.
+        """
+        # Use URL hash as record ID for caching
+        url_hash = hashlib.sha256(url.encode()).hexdigest()[:16]
+        cache_path = self._cache_path(url_hash)
+
+        result = {
+            "success": False,
+            "container_path": None,
+            "size_bytes": 0,
+            "tier_used": None,
+            "error": None,
+            "filename": filename,
+        }
+
+        # Check cache first
+        if cache_path.exists() and cache_path.stat().st_size > 0:
+            logger.info("Cache hit for direct URL %s: %s", url[:80], cache_path)
+            result["success"] = True
+            result["container_path"] = str(cache_path)
+            result["size_bytes"] = cache_path.stat().st_size
+            result["tier_used"] = "cache"
+            return result
+
+        logger.info("download_from_direct_url: %s", url)
+        try:
+            fetch_result = self._tiered_fetch(url, cookies)
+        except DownloadError as e:
+            result["error"] = str(e)
+            return result
+
+        validation_error = self._write_and_validate_fetch_result(fetch_result, cache_path, url_hash)
+        if validation_error:
+            result["error"] = validation_error
+            return result
+
+        size = cache_path.stat().st_size
+        logger.info("Direct URL download success: %d bytes at %s (tier: %s)", size, cache_path, fetch_result.tier_used)
+        result["success"] = True
+        result["container_path"] = str(cache_path)
+        result["size_bytes"] = size
+        result["tier_used"] = fetch_result.tier_used
+
+        return result
+
+    # ─── Text extraction ───────────────────────────────────────
 
     def extract_text(self, pdf_path: str, max_chars: int | None = None) -> str:
         """Extract text from a PDF using pdftotext.
@@ -280,6 +539,8 @@ class ArticleDownloader:
             text = text[:max_chars] + f"\n\n[... Text truncated at {max_chars:,} characters. Full PDF available at {pdf_path}]"
 
         return text
+
+    # ─── Host copy ─────────────────────────────────────────────
 
     def _copy_to_host(self, pdf_path: Path, record_id: str, metadata: dict | None) -> str | None:
         """Copy PDF to host Downloads folder with a readable filename.
