@@ -5,8 +5,6 @@ and anti-detection hardening for both headless Chromium (Playwright)
 and curl_cffi HTTP clients.
 """
 
-from curl_cffi import requests as _cffi_requests
-
 # ─── Playwright Stealth ──────────────────────────────────────────
 
 STEALTH_SCRIPTS = """
@@ -180,7 +178,9 @@ CURL_IMPERSONATE_VERSION = "chrome131"
 
 def get_curl_extra_fingerprints():
     """Return ExtraFingerprints for curl_cffi TLS/HTTP2 hardening."""
-    return _cffi_requests.ExtraFingerprints(
+    from curl_cffi.requests import ExtraFingerprints
+
+    return ExtraFingerprints(
         tls_grease=True,
         tls_permute_extensions=True,
         http2_stream_weight=256,
