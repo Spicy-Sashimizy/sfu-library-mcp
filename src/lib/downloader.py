@@ -9,18 +9,36 @@ folder, and extracts text via pdftotext.
 import hashlib
 import logging
 import os
+import random
 import re
 import shutil
 import subprocess
+import time
 from dataclasses import dataclass
 from pathlib import Path
+from urllib.parse import urlparse
 
 import requests
 
 from lib.citations import extract_full_text_links, extract_metadata
 from lib.config import ServerConfig
+from lib.rate_limiter import DownloadRateLimiter, RateLimitExceeded
+from lib.retry import CircuitBreaker
 
 logger = logging.getLogger("sfu_library_mcp")
+
+BROWSER_HEADERS = {
+    "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36",
+    "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8",
+    "Accept-Language": "en-US,en;q=0.9",
+    "Accept-Encoding": "gzip, deflate, br",
+    "Sec-Fetch-Dest": "document",
+    "Sec-Fetch-Mode": "navigate",
+    "Sec-Fetch-Site": "none",
+    "Sec-Fetch-User": "?1",
+    "Upgrade-Insecure-Requests": "1",
+    "DNT": "1",
+}
 
 
 class DownloadError(Exception):
@@ -46,10 +64,13 @@ class FetchResult:
 class ArticleDownloader:
     """Downloads and caches PDFs, extracts text for LLM consumption."""
 
-    def __init__(self, config: ServerConfig, cookies: dict | None = None):
+    def __init__(self, config: ServerConfig, cookies: dict | None = None,
+                 rate_limiter: DownloadRateLimiter | None = None):
         self.config = config
         self.cookies = cookies or {}
         self._session: requests.Session | None = None
+        self.rate_limiter = rate_limiter
+        self._circuit_breaker = CircuitBreaker(threshold=3, timeout=120.0)
 
     @property
     def session(self) -> requests.Session:
@@ -123,8 +144,11 @@ class ArticleDownloader:
 
         merged_cookies = {**self.cookies, **(cookies or {})}
         logger.info("_fetch_curl_cffi: fetching %s", url)
+        parsed = urlparse(url)
+        headers = {**BROWSER_HEADERS, "Referer": f"{parsed.scheme}://{parsed.hostname}/"}
         resp = cffi_requests.get(
             url,
+            headers=headers,
             cookies=merged_cookies,
             impersonate="chrome",
             timeout=self.config.download_timeout,
@@ -140,15 +164,28 @@ class ArticleDownloader:
         )
 
     def _fetch_playwright(self, url: str, cookies: dict | None = None) -> FetchResult:
-        """Tier 2: Fetch using Playwright headless Chromium."""
+        """Tier 2: Fetch using Playwright headless Chromium with stealth."""
         from playwright.sync_api import sync_playwright
 
         merged_cookies = {**self.cookies, **(cookies or {})}
         logger.info("_fetch_playwright: fetching %s", url)
 
+        # Playwright-specific headers (no Sec-Fetch — Chromium sends natively)
+        pw_headers = {
+            "User-Agent": BROWSER_HEADERS["User-Agent"],
+            "Accept-Language": BROWSER_HEADERS["Accept-Language"],
+            "DNT": "1",
+        }
+
         with sync_playwright() as p:
-            browser = p.chromium.launch(headless=True)
-            context = browser.new_context()
+            browser = p.chromium.launch(
+                headless=True,
+                args=["--disable-blink-features=AutomationControlled"],
+            )
+            context = browser.new_context(
+                viewport={"width": 1920, "height": 1080},
+                extra_http_headers=pw_headers,
+            )
 
             # Inject cookies — Playwright requires domain/path
             if merged_cookies:
@@ -165,6 +202,11 @@ class ArticleDownloader:
                 context.add_cookies(pw_cookies)
 
             page = context.new_page()
+            # Stealth: hide webdriver detection signals
+            page.add_init_script("""
+                Object.defineProperty(navigator, 'webdriver', {get: () => undefined});
+                delete navigator.__proto__.webdriver;
+            """)
             pdf_content = None
             pdf_content_type = "unknown"
 
@@ -226,7 +268,10 @@ class ArticleDownloader:
         merged_cookies = {**self.cookies, **(cookies or {})}
         logger.info("_fetch_requests: fetching %s", url)
 
+        parsed = urlparse(url)
         session = requests.Session()
+        session.headers.update(BROWSER_HEADERS)
+        session.headers["Referer"] = f"{parsed.scheme}://{parsed.hostname}/"
         for name, value in merged_cookies.items():
             session.cookies.set(name, value)
 
@@ -247,6 +292,12 @@ class ArticleDownloader:
 
     def _tiered_fetch(self, url: str, cookies: dict | None = None) -> FetchResult:
         """Iterate through configured tiers in order, returning first success."""
+        # Circuit breaker check
+        if not self._circuit_breaker.can_proceed():
+            raise DownloadError(
+                "Downloads paused — too many recent failures (circuit breaker open)"
+            )
+
         tier_methods = {
             "curl_cffi": self._fetch_curl_cffi,
             "playwright": self._fetch_playwright,
@@ -256,20 +307,28 @@ class ArticleDownloader:
         tiers = self.config.download_tiers
         last_error = None
 
-        for tier_name in tiers:
+        for i, tier_name in enumerate(tiers):
             method = tier_methods.get(tier_name)
             if method is None:
                 logger.warning("_tiered_fetch: unknown tier '%s', skipping", tier_name)
                 continue
 
+            # Inter-tier delay to prevent rapid-fire cascade
+            if i > 0:
+                delay = random.uniform(1.5, 3.0)
+                logger.info("_tiered_fetch: waiting %.1fs before trying tier '%s'", delay, tier_name)
+                time.sleep(delay)
+
             try:
                 result = method(url, cookies)
                 logger.info("_tiered_fetch: tier '%s' succeeded for %s", tier_name, url)
+                self._circuit_breaker.record_success()
                 return result
             except Exception as e:
                 logger.warning("_tiered_fetch: tier '%s' failed for %s: %s", tier_name, url, e)
                 last_error = e
 
+        self._circuit_breaker.record_failure()
         raise DownloadError(
             f"All download tiers failed for {url}. Last error: {last_error}"
         )
@@ -384,6 +443,14 @@ class ArticleDownloader:
 
         logger.info("Downloading PDF from %s for record %s", url, record_id)
 
+        # Rate limiter check
+        if self.rate_limiter:
+            try:
+                self.rate_limiter.acquire(url)
+            except RateLimitExceeded as e:
+                result["error"] = str(e)
+                return result
+
         # Try tiered fetch
         try:
             fetch_result = self._tiered_fetch(url)
@@ -432,6 +499,10 @@ class ArticleDownloader:
         result["size_bytes"] = size
         result["tier_used"] = fetch_result.tier_used
 
+        # Record successful download for rate limiting
+        if self.rate_limiter:
+            self.rate_limiter.record_download(url)
+
         if copy_to_host:
             result["host_path"] = self._copy_to_host(cache_path, record_id, metadata)
 
@@ -472,6 +543,15 @@ class ArticleDownloader:
             return result
 
         logger.info("download_from_direct_url: %s", url)
+
+        # Rate limiter check
+        if self.rate_limiter:
+            try:
+                self.rate_limiter.acquire(url)
+            except RateLimitExceeded as e:
+                result["error"] = str(e)
+                return result
+
         try:
             fetch_result = self._tiered_fetch(url, cookies)
         except DownloadError as e:
@@ -489,6 +569,10 @@ class ArticleDownloader:
         result["container_path"] = str(cache_path)
         result["size_bytes"] = size
         result["tier_used"] = fetch_result.tier_used
+
+        # Record successful download for rate limiting
+        if self.rate_limiter:
+            self.rate_limiter.record_download(url)
 
         return result
 
