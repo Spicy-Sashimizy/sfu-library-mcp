@@ -8,7 +8,7 @@ import pytest
 import requests
 
 from lib.config import ServerConfig
-from lib.downloader import ArticleDownloader
+from lib.downloader import ArticleDownloader, DownloadError, FetchResult
 
 
 @pytest.fixture
@@ -19,6 +19,7 @@ def dl_config():
         download_timeout=30,
         max_pdf_text_chars=1000,
         ezproxy_prefix="https://proxy.lib.sfu.ca/login?url=",
+        download_tiers=["curl_cffi", "playwright", "requests"],
     )
 
 
@@ -45,25 +46,19 @@ class TestDownloadAuthFlow:
         cookies = {"ezproxy": "xyz123", "PrimoSession": "abc"}
         downloader = ArticleDownloader(dl_config, cookies=cookies)
 
-        mock_resp = MagicMock()
-        mock_resp.status_code = 200
-        mock_resp.iter_content.return_value = [b"%PDF-1.4 test content"]
-        mock_resp.raise_for_status.return_value = None
-        mock_resp.headers = {"Content-Type": "application/pdf"}
-        mock_resp.history = []
-        mock_resp.url = "https://example.com/final.pdf"
-
-        mock_session = MagicMock()
-        mock_session.get.return_value = mock_resp
-        mock_session.cookies = MagicMock()
-        mock_session.cookies.keys.return_value = ["ezproxy", "PrimoSession"]
-        downloader._session = mock_session
-
-        result = downloader.download_pdf(
-            "https://proxy.lib.sfu.ca/login?url=https://example.com/article.pdf",
-            "rec_auth_test",
-            copy_to_host=False,
+        fetch_result = FetchResult(
+            content=b"%PDF-1.4 test content",
+            status_code=200,
+            content_type="application/pdf",
+            tier_used="curl_cffi",
+            url="https://example.com/final.pdf",
         )
+        with patch.object(downloader, "_tiered_fetch", return_value=fetch_result):
+            result = downloader.download_pdf(
+                "https://proxy.lib.sfu.ca/login?url=https://example.com/article.pdf",
+                "rec_auth_test",
+                copy_to_host=False,
+            )
         assert result["success"] is True
         assert result["size_bytes"] > 0
 
@@ -74,89 +69,63 @@ class TestDownloadAuthFlow:
         cookies = {"PrimoSession": "abc"}
         downloader = ArticleDownloader(dl_config, cookies=cookies)
 
-        mock_resp = MagicMock()
-        mock_resp.status_code = 200
-        mock_resp.iter_content.return_value = [b"<html>Login</html>"]
-        mock_resp.raise_for_status.return_value = None
-        mock_resp.headers = {"Content-Type": "text/html"}
-        mock_resp.history = []
-        mock_resp.url = "https://proxy.lib.sfu.ca/login"
-
-        mock_session = MagicMock()
-        mock_session.get.return_value = mock_resp
-        mock_session.cookies = MagicMock()
-        mock_session.cookies.keys.return_value = ["PrimoSession"]
-        downloader._session = mock_session
-
-        with caplog.at_level(logging.WARNING, logger="sfu_library_mcp"):
-            downloader.download_pdf(
-                "https://proxy.lib.sfu.ca/login?url=https://example.com/article.pdf",
-                "rec_no_ezproxy",
-                copy_to_host=False,
-            )
+        fetch_result = FetchResult(
+            content=b"<html>Login</html>",
+            status_code=200,
+            content_type="text/html",
+            tier_used="curl_cffi",
+            url="https://proxy.lib.sfu.ca/login",
+        )
+        with patch.object(downloader, "_tiered_fetch", return_value=fetch_result):
+            with caplog.at_level(logging.WARNING, logger="sfu_library_mcp"):
+                downloader.download_pdf(
+                    "https://proxy.lib.sfu.ca/login?url=https://example.com/article.pdf",
+                    "rec_no_ezproxy",
+                    copy_to_host=False,
+                )
 
         assert any("no EZProxy cookies" in r.message for r in caplog.records)
 
     def test_download_403_captures_diagnostics(self, dl_config):
-        """403 should include status, headers, final URL in error message."""
+        """403 should include status info in error message."""
         cookies = {"ezproxy": "expired_cookie"}
         downloader = ArticleDownloader(dl_config, cookies=cookies)
 
-        mock_resp = MagicMock()
-        mock_resp.status_code = 403
-        mock_resp.headers = {"Content-Type": "text/html"}
-        mock_resp.url = "https://proxy.lib.sfu.ca/denied"
-        mock_resp.history = []
-        mock_resp.raise_for_status.side_effect = requests.exceptions.HTTPError(
-            response=mock_resp
-        )
-
-        mock_session = MagicMock()
-        mock_session.get.return_value = mock_resp
-        mock_session.cookies = MagicMock()
-        mock_session.cookies.keys.return_value = ["ezproxy"]
-        downloader._session = mock_session
-
-        result = downloader.download_pdf(
-            "https://proxy.lib.sfu.ca/login?url=https://example.com/article.pdf",
-            "rec_403",
-            copy_to_host=False,
-        )
+        with patch.object(
+            downloader, "_tiered_fetch",
+            side_effect=DownloadError("All download tiers failed for url. Last error: HTTP 403"),
+        ):
+            result = downloader.download_pdf(
+                "https://proxy.lib.sfu.ca/login?url=https://example.com/article.pdf",
+                "rec_403",
+                copy_to_host=False,
+            )
         assert result["success"] is False
         assert "403" in result["error"]
-        assert "Content-Type" in result["error"]
-        assert "final URL" in result["error"]
 
     def test_download_html_redirect_captures_body_preview(self, dl_config, tmp_path):
-        """Login page response should include Content-Type and body preview in error."""
+        """Login page response should include Content-Type in error."""
         dl_config.download_dir = str(tmp_path)
         cookies = {"ezproxy": "bad"}
         downloader = ArticleDownloader(dl_config, cookies=cookies)
 
-        html_body = b"<html><head><title>Login Required</title></head><body>Please log in</body></html>"
-        mock_resp = MagicMock()
-        mock_resp.status_code = 200
-        mock_resp.iter_content.return_value = [html_body]
-        mock_resp.raise_for_status.return_value = None
-        mock_resp.headers = {"Content-Type": "text/html; charset=utf-8"}
-        mock_resp.history = [MagicMock()]  # 1 redirect
-        mock_resp.url = "https://proxy.lib.sfu.ca/login"
-
-        mock_session = MagicMock()
-        mock_session.get.return_value = mock_resp
-        mock_session.cookies = MagicMock()
-        mock_session.cookies.keys.return_value = ["ezproxy"]
-        downloader._session = mock_session
-
-        result = downloader.download_pdf(
-            "https://proxy.lib.sfu.ca/login?url=https://example.com/article.pdf",
-            "rec_html_redirect",
-            copy_to_host=False,
+        fetch_result = FetchResult(
+            content=b"<html><head><title>Login Required</title></head><body>Please log in</body></html>",
+            status_code=200,
+            content_type="text/html; charset=utf-8",
+            tier_used="curl_cffi",
+            url="https://proxy.lib.sfu.ca/login",
         )
+        with patch.object(downloader, "_tiered_fetch", return_value=fetch_result):
+            result = downloader.download_pdf(
+                "https://proxy.lib.sfu.ca/login?url=https://example.com/article.pdf",
+                "rec_html_redirect",
+                copy_to_host=False,
+            )
         assert result["success"] is False
         assert "Content-Type" in result["error"]
         assert "text/html" in result["error"]
-        assert "final URL" in result["error"]
+        assert "URL" in result["error"]
 
 
 class TestBackfillCollectionPdfs:
@@ -190,24 +159,17 @@ class TestBackfillCollectionPdfs:
 
         item = {"key": "ITEM1", "title": "Test Article", "DOI": "10.1000/test", "authors": []}
 
-        # Mock a successful PDF download
-        mock_resp = MagicMock()
-        mock_resp.status_code = 200
-        mock_resp.iter_content.return_value = [b"%PDF-1.4 backfill content"]
-        mock_resp.raise_for_status.return_value = None
-        mock_resp.headers = {"Content-Type": "application/pdf"}
-        mock_resp.history = []
-        mock_resp.url = "https://example.com/article.pdf"
-
-        mock_session = MagicMock()
-        mock_session.get.return_value = mock_resp
-        mock_session.cookies = MagicMock()
-        mock_session.cookies.keys.return_value = ["ezproxy"]
-        downloader._session = mock_session
-
-        result = downloader.download_pdf(
-            "https://example.com/article.pdf", item["key"], copy_to_host=False
+        fetch_result = FetchResult(
+            content=b"%PDF-1.4 backfill content",
+            status_code=200,
+            content_type="application/pdf",
+            tier_used="curl_cffi",
+            url="https://example.com/article.pdf",
         )
+        with patch.object(downloader, "_tiered_fetch", return_value=fetch_result):
+            result = downloader.download_pdf(
+                "https://example.com/article.pdf", item["key"], copy_to_host=False
+            )
         assert result["success"] is True
 
         # Attach should succeed

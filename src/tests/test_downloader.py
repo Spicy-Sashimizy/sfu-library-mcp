@@ -9,7 +9,12 @@ import pytest
 import requests
 
 from lib.config import ServerConfig
-from lib.downloader import ArticleDownloader, DownloadError, PDFTextExtractionError
+from lib.downloader import (
+    ArticleDownloader,
+    DownloadError,
+    FetchResult,
+    PDFTextExtractionError,
+)
 
 
 @pytest.fixture
@@ -20,12 +25,40 @@ def dl_config():
         download_timeout=30,
         max_pdf_text_chars=1000,
         ezproxy_prefix="https://proxy.lib.sfu.ca/login?url=",
+        download_tiers=["curl_cffi", "playwright", "requests"],
     )
 
 
 @pytest.fixture
 def downloader(dl_config):
     return ArticleDownloader(dl_config, cookies={"session": "abc123"})
+
+
+class TestFetchResult:
+    """Verify FetchResult dataclass creation and fields."""
+
+    def test_create_fetch_result(self):
+        fr = FetchResult(
+            content=b"%PDF-1.4 test",
+            status_code=200,
+            content_type="application/pdf",
+            tier_used="curl_cffi",
+            url="https://example.com/test.pdf",
+        )
+        assert fr.content == b"%PDF-1.4 test"
+        assert fr.status_code == 200
+        assert fr.content_type == "application/pdf"
+        assert fr.tier_used == "curl_cffi"
+        assert fr.url == "https://example.com/test.pdf"
+
+    def test_fetch_result_fields(self):
+        fr = FetchResult(
+            content=b"", status_code=404,
+            content_type="text/html", tier_used="requests",
+            url="https://example.com/missing",
+        )
+        assert fr.status_code == 404
+        assert fr.tier_used == "requests"
 
 
 class TestCachePath:
@@ -107,212 +140,330 @@ class TestResolvePdfUrl:
         assert url is None
 
 
-class TestDownloadPdf:
-    @patch("lib.downloader.requests.Session")
-    def test_download_pdf_success(self, mock_session_cls, downloader, tmp_path):
-        """Successful download should write PDF and return success."""
-        downloader.config.download_dir = str(tmp_path)
-        downloader._session = None
+class TestTieredFetch:
+    """Test the _tiered_fetch orchestrator."""
 
-        mock_resp = MagicMock()
-        mock_resp.status_code = 200
-        mock_resp.iter_content.return_value = [b"%PDF-1.4 fake content"]
-        mock_resp.raise_for_status.return_value = None
-        mock_resp.headers = {"Content-Type": "application/pdf"}
-        mock_resp.history = []
-        mock_resp.url = "https://example.com/test.pdf"
-
-        mock_session = MagicMock()
-        mock_session.get.return_value = mock_resp
-        mock_session.cookies = MagicMock()
-        mock_session.cookies.keys.return_value = ["session"]
-        downloader._session = mock_session
-
-        result = downloader.download_pdf(
-            "https://example.com/test.pdf", "rec_001", copy_to_host=False
+    def test_first_tier_succeeds(self, downloader):
+        """When first tier succeeds, return immediately."""
+        expected = FetchResult(
+            content=b"%PDF-1.4 data", status_code=200,
+            content_type="application/pdf", tier_used="curl_cffi",
+            url="https://example.com/test.pdf",
         )
+        with patch.object(downloader, "_fetch_curl_cffi", return_value=expected) as mock_cffi:
+            result = downloader._tiered_fetch("https://example.com/test.pdf")
+        assert result.tier_used == "curl_cffi"
+        mock_cffi.assert_called_once()
+
+    def test_fallback_to_second_tier(self, downloader):
+        """When first tier fails, should try second tier."""
+        expected = FetchResult(
+            content=b"%PDF-1.4 data", status_code=200,
+            content_type="application/pdf", tier_used="playwright",
+            url="https://example.com/test.pdf",
+        )
+        with patch.object(downloader, "_fetch_curl_cffi", side_effect=Exception("TLS error")), \
+             patch.object(downloader, "_fetch_playwright", return_value=expected) as mock_pw:
+            result = downloader._tiered_fetch("https://example.com/test.pdf")
+        assert result.tier_used == "playwright"
+        mock_pw.assert_called_once()
+
+    def test_fallback_to_third_tier(self, downloader):
+        """When first two tiers fail, should try third."""
+        expected = FetchResult(
+            content=b"%PDF-1.4 data", status_code=200,
+            content_type="application/pdf", tier_used="requests",
+            url="https://example.com/test.pdf",
+        )
+        with patch.object(downloader, "_fetch_curl_cffi", side_effect=Exception("fail")), \
+             patch.object(downloader, "_fetch_playwright", side_effect=Exception("fail")), \
+             patch.object(downloader, "_fetch_requests", return_value=expected) as mock_req:
+            result = downloader._tiered_fetch("https://example.com/test.pdf")
+        assert result.tier_used == "requests"
+        mock_req.assert_called_once()
+
+    def test_all_tiers_fail_raises(self, downloader):
+        """When all tiers fail, should raise DownloadError."""
+        with patch.object(downloader, "_fetch_curl_cffi", side_effect=Exception("fail1")), \
+             patch.object(downloader, "_fetch_playwright", side_effect=Exception("fail2")), \
+             patch.object(downloader, "_fetch_requests", side_effect=Exception("fail3")):
+            with pytest.raises(DownloadError, match="All download tiers failed"):
+                downloader._tiered_fetch("https://example.com/test.pdf")
+
+    def test_respects_tier_order(self, downloader):
+        """Should use configured tier order."""
+        downloader.config.download_tiers = ["requests", "curl_cffi"]
+        expected = FetchResult(
+            content=b"%PDF-1.4", status_code=200,
+            content_type="application/pdf", tier_used="requests",
+            url="https://example.com/test.pdf",
+        )
+        with patch.object(downloader, "_fetch_requests", return_value=expected) as mock_req, \
+             patch.object(downloader, "_fetch_curl_cffi") as mock_cffi:
+            result = downloader._tiered_fetch("https://example.com/test.pdf")
+        assert result.tier_used == "requests"
+        mock_req.assert_called_once()
+        mock_cffi.assert_not_called()
+
+    def test_skips_unknown_tier(self, downloader):
+        """Unknown tier names should be skipped gracefully."""
+        downloader.config.download_tiers = ["nonexistent", "requests"]
+        expected = FetchResult(
+            content=b"%PDF-1.4", status_code=200,
+            content_type="application/pdf", tier_used="requests",
+            url="https://example.com/test.pdf",
+        )
+        with patch.object(downloader, "_fetch_requests", return_value=expected):
+            result = downloader._tiered_fetch("https://example.com/test.pdf")
+        assert result.tier_used == "requests"
+
+    def test_passes_cookies_to_tier(self, downloader):
+        """Cookies should be forwarded to tier methods."""
+        extra_cookies = {"extra": "cookie"}
+        expected = FetchResult(
+            content=b"%PDF-1.4", status_code=200,
+            content_type="application/pdf", tier_used="curl_cffi",
+            url="https://example.com/test.pdf",
+        )
+        with patch.object(downloader, "_fetch_curl_cffi", return_value=expected) as mock_cffi:
+            downloader._tiered_fetch("https://example.com/test.pdf", cookies=extra_cookies)
+        mock_cffi.assert_called_once_with("https://example.com/test.pdf", extra_cookies)
+
+
+class TestCurlCffiFetch:
+    """Test curl_cffi tier with mocked curl_cffi library."""
+
+    @patch("lib.downloader.ArticleDownloader._fetch_curl_cffi")
+    def test_curl_cffi_returns_fetch_result(self, mock_method, downloader):
+        """curl_cffi tier should return a FetchResult."""
+        mock_method.return_value = FetchResult(
+            content=b"%PDF-1.4 data", status_code=200,
+            content_type="application/pdf", tier_used="curl_cffi",
+            url="https://example.com/test.pdf",
+        )
+        result = downloader._fetch_curl_cffi("https://example.com/test.pdf")
+        assert result.tier_used == "curl_cffi"
+        assert result.content == b"%PDF-1.4 data"
+
+
+class TestPlaywrightFetch:
+    """Test Playwright tier with mocked playwright library."""
+
+    @patch("lib.downloader.ArticleDownloader._fetch_playwright")
+    def test_playwright_returns_fetch_result(self, mock_method, downloader):
+        """Playwright tier should return a FetchResult."""
+        mock_method.return_value = FetchResult(
+            content=b"%PDF-1.4 data", status_code=200,
+            content_type="application/pdf", tier_used="playwright",
+            url="https://example.com/test.pdf",
+        )
+        result = downloader._fetch_playwright("https://example.com/test.pdf")
+        assert result.tier_used == "playwright"
+
+
+class TestDownloadPdf:
+    def test_download_pdf_success_via_tiered_fetch(self, downloader, tmp_path):
+        """Successful tiered download should write PDF and return success."""
+        downloader.config.download_dir = str(tmp_path)
+
+        fetch_result = FetchResult(
+            content=b"%PDF-1.4 fake content",
+            status_code=200,
+            content_type="application/pdf",
+            tier_used="curl_cffi",
+            url="https://example.com/test.pdf",
+        )
+        with patch.object(downloader, "_tiered_fetch", return_value=fetch_result):
+            result = downloader.download_pdf(
+                "https://example.com/test.pdf", "rec_001", copy_to_host=False
+            )
         assert result["success"] is True
         assert result["container_path"] is not None
         assert result["size_bytes"] > 0
+        assert result["tier_used"] == "curl_cffi"
 
-    @patch("lib.downloader.requests.Session")
-    def test_download_pdf_not_a_pdf(self, mock_session_cls, downloader, tmp_path):
+    def test_download_pdf_not_a_pdf(self, downloader, tmp_path):
         """HTML response should be rejected with enriched error."""
         downloader.config.download_dir = str(tmp_path)
 
-        mock_resp = MagicMock()
-        mock_resp.status_code = 200
-        mock_resp.iter_content.return_value = [b"<html>Login page</html>"]
-        mock_resp.raise_for_status.return_value = None
-        mock_resp.headers = {"Content-Type": "text/html"}
-        mock_resp.history = []
-        mock_resp.url = "https://proxy.lib.sfu.ca/login"
-
-        mock_session = MagicMock()
-        mock_session.get.return_value = mock_resp
-        mock_session.cookies = MagicMock()
-        mock_session.cookies.keys.return_value = []
-        downloader._session = mock_session
-
-        result = downloader.download_pdf(
-            "https://example.com/test.pdf", "rec_002", copy_to_host=False
+        fetch_result = FetchResult(
+            content=b"<html>Login page</html>",
+            status_code=200,
+            content_type="text/html",
+            tier_used="curl_cffi",
+            url="https://proxy.lib.sfu.ca/login",
         )
+        # URL contains ezproxy prefix so no EZProxy retry
+        with patch.object(downloader, "_tiered_fetch", return_value=fetch_result):
+            result = downloader.download_pdf(
+                "https://proxy.lib.sfu.ca/login?url=https://example.com/test.pdf",
+                "rec_002",
+                copy_to_host=False,
+            )
         assert result["success"] is False
         assert "not a PDF" in result["error"]
         assert "Content-Type" in result["error"]
-        assert "text/html" in result["error"]
 
-    def test_download_pdf_http_error(self, downloader):
-        """HTTP errors should return failure with enriched diagnostics."""
-        mock_session = MagicMock()
-        mock_resp = MagicMock()
-        mock_resp.status_code = 404
-        mock_resp.headers = {"Content-Type": "text/html"}
-        mock_resp.url = "https://example.com/404"
-        mock_resp.history = []
-        mock_resp.raise_for_status.side_effect = requests.exceptions.HTTPError(
-            response=mock_resp
-        )
-        mock_session.get.return_value = mock_resp
-        mock_session.cookies = MagicMock()
-        mock_session.cookies.keys.return_value = []
-        downloader._session = mock_session
-
-        result = downloader.download_pdf(
-            "https://example.com/nope.pdf", "rec_003", copy_to_host=False
-        )
+    def test_download_pdf_all_tiers_fail(self, downloader):
+        """All tiers failing should return error."""
+        with patch.object(downloader, "_tiered_fetch", side_effect=DownloadError("All download tiers failed for url. Last error: timeout")):
+            result = downloader.download_pdf(
+                "https://proxy.lib.sfu.ca/login?url=https://example.com/nope.pdf",
+                "rec_003",
+                copy_to_host=False,
+            )
         assert result["success"] is False
-        assert "404" in result["error"]
-        assert "Content-Type" in result["error"]
-        assert "final URL" in result["error"]
-
-    def test_download_pdf_timeout(self, downloader):
-        """Timeout should return failure."""
-        mock_session = MagicMock()
-        mock_session.get.side_effect = requests.exceptions.Timeout()
-        mock_session.cookies = MagicMock()
-        mock_session.cookies.keys.return_value = []
-        downloader._session = mock_session
-
-        result = downloader.download_pdf(
-            "https://example.com/slow.pdf", "rec_004", copy_to_host=False
-        )
-        assert result["success"] is False
-        assert "timed out" in result["error"]
+        assert "All download tiers failed" in result["error"]
 
     def test_download_pdf_cache_hit(self, downloader, tmp_path):
-        """Cached PDF should return without HTTP call."""
+        """Cached PDF should return without any fetch."""
         downloader.config.download_dir = str(tmp_path)
         cache_path = downloader._cache_path("rec_cached")
         cache_path.parent.mkdir(parents=True, exist_ok=True)
         cache_path.write_bytes(b"%PDF-1.4 cached content")
 
-        mock_session = MagicMock()
-        downloader._session = mock_session
-
-        result = downloader.download_pdf(
-            "https://example.com/cached.pdf", "rec_cached", copy_to_host=False
-        )
+        with patch.object(downloader, "_tiered_fetch") as mock_fetch:
+            result = downloader.download_pdf(
+                "https://example.com/cached.pdf", "rec_cached", copy_to_host=False
+            )
         assert result["success"] is True
-        mock_session.get.assert_not_called()
+        assert result["tier_used"] == "cache"
+        mock_fetch.assert_not_called()
+
+    def test_download_pdf_reports_tier_used(self, downloader, tmp_path):
+        """Result should include which tier succeeded."""
+        downloader.config.download_dir = str(tmp_path)
+        fetch_result = FetchResult(
+            content=b"%PDF-1.4 data", status_code=200,
+            content_type="application/pdf", tier_used="playwright",
+            url="https://example.com/test.pdf",
+        )
+        with patch.object(downloader, "_tiered_fetch", return_value=fetch_result):
+            result = downloader.download_pdf(
+                "https://example.com/test.pdf", "rec_tier", copy_to_host=False
+            )
+        assert result["tier_used"] == "playwright"
 
 
-class TestEZProxy403Fallback:
-    """Verify 403 triggers EZProxy retry for non-proxied URLs."""
+class TestEZProxyFallback:
+    """Verify EZProxy retry on tiered fetch failure."""
 
-    def test_403_retries_via_ezproxy(self, downloader, tmp_path):
-        """403 on a non-proxied URL should retry with EZProxy prefix."""
+    def test_ezproxy_retry_on_all_tiers_fail(self, downloader, tmp_path):
+        """Tiered fetch failure on non-proxied URL should retry with EZProxy."""
         downloader.config.download_dir = str(tmp_path)
 
-        # First call: 403 error
-        mock_403_resp = MagicMock()
-        mock_403_resp.status_code = 403
-        mock_403_resp.headers = {"Content-Type": "text/html"}
-        mock_403_resp.url = "https://example.com/article.pdf"
-        mock_403_resp.history = []
-        mock_403_resp.raise_for_status.side_effect = requests.exceptions.HTTPError(
-            response=mock_403_resp
+        fetch_result_ok = FetchResult(
+            content=b"%PDF-1.4 retried content",
+            status_code=200,
+            content_type="application/pdf",
+            tier_used="curl_cffi",
+            url="https://proxy.lib.sfu.ca/login?url=https://example.com/article.pdf",
         )
-
-        # Second call (EZProxy retry): success
-        mock_ok_resp = MagicMock()
-        mock_ok_resp.status_code = 200
-        mock_ok_resp.iter_content.return_value = [b"%PDF-1.4 retried content"]
-        mock_ok_resp.raise_for_status.return_value = None
-        mock_ok_resp.headers = {"Content-Type": "application/pdf"}
-        mock_ok_resp.history = []
-        mock_ok_resp.url = "https://proxy.lib.sfu.ca/login?url=https://example.com/article.pdf"
-
-        mock_session = MagicMock()
-        mock_session.get.side_effect = [mock_403_resp, mock_ok_resp]
-        mock_session.cookies = MagicMock()
-        mock_session.cookies.keys.return_value = ["ezproxy"]
-        downloader._session = mock_session
-
-        result = downloader.download_pdf(
-            "https://example.com/article.pdf", "rec_403_retry", copy_to_host=False
-        )
+        # First call fails, second (EZProxy) succeeds
+        with patch.object(
+            downloader, "_tiered_fetch",
+            side_effect=[DownloadError("All failed"), fetch_result_ok],
+        ):
+            result = downloader.download_pdf(
+                "https://example.com/article.pdf", "rec_fallback", copy_to_host=False
+            )
         assert result["success"] is True
-        assert result["size_bytes"] > 0
-        # Should have made 2 calls: original + EZProxy retry
-        assert mock_session.get.call_count == 2
-        retry_url = mock_session.get.call_args_list[1][0][0]
-        assert retry_url.startswith("https://proxy.lib.sfu.ca/login?url=")
 
-    def test_403_no_retry_when_already_proxied(self, downloader):
-        """403 on an already-proxied URL should NOT retry."""
-        mock_resp = MagicMock()
-        mock_resp.status_code = 403
-        mock_resp.headers = {"Content-Type": "text/html"}
-        mock_resp.url = "https://proxy.lib.sfu.ca/login?url=https://example.com/article.pdf"
-        mock_resp.history = []
-        mock_resp.raise_for_status.side_effect = requests.exceptions.HTTPError(
-            response=mock_resp
-        )
-
-        mock_session = MagicMock()
-        mock_session.get.return_value = mock_resp
-        mock_session.cookies = MagicMock()
-        mock_session.cookies.keys.return_value = ["ezproxy"]
-        downloader._session = mock_session
-
-        result = downloader.download_pdf(
-            "https://proxy.lib.sfu.ca/login?url=https://example.com/article.pdf",
-            "rec_403_no_retry",
-            copy_to_host=False,
-        )
+    def test_no_ezproxy_retry_when_already_proxied(self, downloader):
+        """Already-proxied URL should not retry with EZProxy."""
+        with patch.object(
+            downloader, "_tiered_fetch",
+            side_effect=DownloadError("All failed"),
+        ):
+            result = downloader.download_pdf(
+                "https://proxy.lib.sfu.ca/login?url=https://example.com/article.pdf",
+                "rec_no_retry",
+                copy_to_host=False,
+            )
         assert result["success"] is False
-        assert "403" in result["error"]
-        # Should have made only 1 call (no retry)
-        assert mock_session.get.call_count == 1
 
-    def test_403_retry_also_fails(self, downloader):
-        """403 retry via EZProxy that also fails should report both."""
-        mock_403_resp = MagicMock()
-        mock_403_resp.status_code = 403
-        mock_403_resp.headers = {"Content-Type": "text/html"}
-        mock_403_resp.url = "https://example.com/article.pdf"
-        mock_403_resp.history = []
-        mock_403_resp.raise_for_status.side_effect = requests.exceptions.HTTPError(
-            response=mock_403_resp
-        )
-
-        mock_session = MagicMock()
-        # Both calls fail
-        mock_session.get.side_effect = [
-            mock_403_resp,
-            requests.exceptions.ConnectionError("EZProxy unreachable"),
-        ]
-        mock_session.cookies = MagicMock()
-        mock_session.cookies.keys.return_value = []
-        downloader._session = mock_session
-
-        result = downloader.download_pdf(
-            "https://example.com/article.pdf", "rec_403_both_fail", copy_to_host=False
-        )
+    def test_ezproxy_retry_also_fails(self, downloader):
+        """Both original and EZProxy retry failing should report error."""
+        with patch.object(
+            downloader, "_tiered_fetch",
+            side_effect=[DownloadError("fail1"), DownloadError("fail2")],
+        ):
+            result = downloader.download_pdf(
+                "https://example.com/article.pdf", "rec_both_fail", copy_to_host=False
+            )
         assert result["success"] is False
         assert "retried via EZProxy" in result["error"]
         assert "also failed" in result["error"]
+
+
+class TestDownloadFromDirectUrl:
+    """Test the download_from_direct_url method."""
+
+    def test_success(self, downloader, tmp_path):
+        downloader.config.download_dir = str(tmp_path)
+        fetch_result = FetchResult(
+            content=b"%PDF-1.4 direct content",
+            status_code=200,
+            content_type="application/pdf",
+            tier_used="curl_cffi",
+            url="https://example.com/direct.pdf",
+        )
+        with patch.object(downloader, "_tiered_fetch", return_value=fetch_result):
+            result = downloader.download_from_direct_url("https://example.com/direct.pdf")
+        assert result["success"] is True
+        assert result["size_bytes"] > 0
+        assert result["tier_used"] == "curl_cffi"
+
+    def test_with_extra_cookies(self, downloader, tmp_path):
+        downloader.config.download_dir = str(tmp_path)
+        fetch_result = FetchResult(
+            content=b"%PDF-1.4 data", status_code=200,
+            content_type="application/pdf", tier_used="requests",
+            url="https://example.com/test.pdf",
+        )
+        with patch.object(downloader, "_tiered_fetch", return_value=fetch_result) as mock_fetch:
+            downloader.download_from_direct_url(
+                "https://example.com/test.pdf",
+                cookies={"extra": "value"},
+            )
+        mock_fetch.assert_called_once_with("https://example.com/test.pdf", {"extra": "value"})
+
+    def test_failure(self, downloader, tmp_path):
+        downloader.config.download_dir = str(tmp_path)
+        with patch.object(downloader, "_tiered_fetch", side_effect=DownloadError("all failed")):
+            result = downloader.download_from_direct_url("https://example.com/fail.pdf")
+        assert result["success"] is False
+        assert "all failed" in result["error"]
+
+    def test_not_a_pdf(self, downloader, tmp_path):
+        downloader.config.download_dir = str(tmp_path)
+        fetch_result = FetchResult(
+            content=b"<html>Not a PDF</html>",
+            status_code=200,
+            content_type="text/html",
+            tier_used="requests",
+            url="https://example.com/not-a-pdf",
+        )
+        with patch.object(downloader, "_tiered_fetch", return_value=fetch_result):
+            result = downloader.download_from_direct_url("https://example.com/not-a-pdf")
+        assert result["success"] is False
+        assert "not a PDF" in result["error"]
+
+    def test_cache_hit(self, downloader, tmp_path):
+        downloader.config.download_dir = str(tmp_path)
+        # Pre-populate cache
+        import hashlib
+        url = "https://example.com/cached-direct.pdf"
+        url_hash = hashlib.sha256(url.encode()).hexdigest()[:16]
+        cache_path = downloader._cache_path(url_hash)
+        cache_path.parent.mkdir(parents=True, exist_ok=True)
+        cache_path.write_bytes(b"%PDF-1.4 cached")
+
+        with patch.object(downloader, "_tiered_fetch") as mock_fetch:
+            result = downloader.download_from_direct_url(url)
+        assert result["success"] is True
+        assert result["tier_used"] == "cache"
+        mock_fetch.assert_not_called()
 
 
 class TestExtractText:

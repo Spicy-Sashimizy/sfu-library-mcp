@@ -1,7 +1,7 @@
 """Unit tests for the tools module."""
 
 import asyncio
-from unittest.mock import patch
+from unittest.mock import MagicMock, patch
 
 import pytest
 
@@ -64,8 +64,8 @@ def mock_client_with_results(sample_pnx_record, mock_search_response):
 
 
 class TestToolDefinitions:
-    def test_exactly_22_tools(self):
-        assert len(TOOL_DEFINITIONS) == 22
+    def test_exactly_23_tools(self):
+        assert len(TOOL_DEFINITIONS) == 23
 
     def test_tool_names(self):
         names = [t.name for t in TOOL_DEFINITIONS]
@@ -79,9 +79,15 @@ class TestToolDefinitions:
             "download_article", "read_article", "save_to_zotero",
             "list_zotero_collections", "batch_save_to_zotero",
             "search_zotero", "get_zotero_collection_items",
-            "backfill_collection_pdfs",
+            "backfill_collection_pdfs", "download_from_url",
         ]
         assert names == expected
+
+    def test_download_from_url_tool_exists(self):
+        names = [t.name for t in TOOL_DEFINITIONS]
+        assert "download_from_url" in names
+        tool = next(t for t in TOOL_DEFINITIONS if t.name == "download_from_url")
+        assert "url" in tool.inputSchema["required"]
 
     def test_all_tools_have_schemas(self):
         for tool in TOOL_DEFINITIONS:
@@ -401,6 +407,87 @@ class TestGetDownloaderCookieStaleness:
         dl1 = _get_downloader(client)
         dl2 = _get_downloader(client)
         assert dl2 is dl1
+
+
+class TestDownloadFromUrlTool:
+    """Tests for the download_from_url MCP tool."""
+
+    @pytest.mark.asyncio
+    async def test_download_from_url_success(self, mock_client):
+        """Successful URL download should report tier and size."""
+        mock_result = {
+            "success": True,
+            "container_path": "/tmp/test.pdf",
+            "size_bytes": 12345,
+            "tier_used": "curl_cffi",
+            "error": None,
+        }
+        with patch("lib.tools._get_downloader") as mock_get_dl:
+            mock_dl = MagicMock()
+            mock_dl.download_from_direct_url.return_value = mock_result
+            mock_get_dl.return_value = mock_dl
+            result = await handle_tool_call(
+                "download_from_url",
+                {"url": "https://example.com/paper.pdf"},
+                mock_client,
+            )
+        assert "PDF DOWNLOADED FROM URL" in result[0].text
+        assert "12,345 bytes" in result[0].text
+        assert "curl_cffi" in result[0].text
+
+    @pytest.mark.asyncio
+    async def test_download_from_url_failure(self, mock_client):
+        """Failed download should return error message."""
+        mock_result = {
+            "success": False,
+            "container_path": None,
+            "size_bytes": 0,
+            "tier_used": None,
+            "error": "All tiers failed",
+        }
+        with patch("lib.tools._get_downloader") as mock_get_dl:
+            mock_dl = MagicMock()
+            mock_dl.download_from_direct_url.return_value = mock_result
+            mock_get_dl.return_value = mock_dl
+            result = await handle_tool_call(
+                "download_from_url",
+                {"url": "https://example.com/fail.pdf"},
+                mock_client,
+            )
+        assert "Download failed" in result[0].text
+
+    @pytest.mark.asyncio
+    async def test_download_from_url_with_ezproxy(self, mock_client):
+        """use_ezproxy=True should wrap the URL."""
+        mock_result = {
+            "success": True,
+            "container_path": "/tmp/test.pdf",
+            "size_bytes": 100,
+            "tier_used": "requests",
+            "error": None,
+        }
+        with patch("lib.tools._get_downloader") as mock_get_dl:
+            mock_dl = MagicMock()
+            mock_dl.download_from_direct_url.return_value = mock_result
+            mock_get_dl.return_value = mock_dl
+            result = await handle_tool_call(
+                "download_from_url",
+                {"url": "https://example.com/paper.pdf", "use_ezproxy": True},
+                mock_client,
+            )
+        # Check that the URL was wrapped
+        call_args = mock_dl.download_from_direct_url.call_args
+        assert "proxy.lib.sfu.ca" in call_args[1].get("url", call_args[0][0] if call_args[0] else "")
+
+    @pytest.mark.asyncio
+    async def test_download_from_url_empty_url(self, mock_client):
+        """Empty URL should return error."""
+        result = await handle_tool_call(
+            "download_from_url",
+            {"url": ""},
+            mock_client,
+        )
+        assert "No URL provided" in result[0].text
 
 
 class TestMetrics:

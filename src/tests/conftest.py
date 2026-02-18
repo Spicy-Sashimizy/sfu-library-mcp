@@ -184,3 +184,19 @@ def make_jwt_token():
         return f"{header}.{body}.{sig}"
 
     return _make
+
+
+@pytest.fixture
+def dl_config_tiered():
+    """ServerConfig with all download tiers enabled."""
+    from lib.config import ServerConfig
+
+    return ServerConfig(
+        download_dir="/tmp/test-dl-cache-tiered",
+        host_download_dir="/tmp/test-host-downloads",
+        download_timeout=30,
+        max_pdf_text_chars=1000,
+        ezproxy_prefix="https://proxy.lib.sfu.ca/login?url=",
+        download_tiers=["curl_cffi", "playwright", "requests"],
+        playwright_timeout=10,
+    )
