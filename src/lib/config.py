@@ -75,7 +75,9 @@ class ServerConfig:
     max_pdf_text_chars: int = 100_000
 
     # EZProxy
-    ezproxy_prefix: str = "https://proxy.lib.sfu.ca/login?url="
+    ezproxy_prefix: str = "https://proxy.lib.sfu.ca/login?url="  # deprecated, kept for backwards compat
+    ezproxy_login_url: str = "https://login.proxy.lib.sfu.ca/login?qurl="
+    ezproxy_proxy_base: str = "proxy.lib.sfu.ca"
 
     # Tiered download strategy
     download_tiers: list[str] = field(default_factory=lambda: ["curl_cffi", "playwright", "requests"])
@@ -161,6 +163,8 @@ def load_config() -> ServerConfig:
         download_timeout=int(os.environ.get("SFU_DOWNLOAD_TIMEOUT", "60")),
         max_pdf_text_chars=int(os.environ.get("SFU_MAX_PDF_TEXT_CHARS", "100000")),
         ezproxy_prefix=os.environ.get("SFU_EZPROXY_PREFIX", "https://proxy.lib.sfu.ca/login?url="),
+        ezproxy_login_url=os.environ.get("SFU_EZPROXY_LOGIN_URL", "https://login.proxy.lib.sfu.ca/login?qurl="),
+        ezproxy_proxy_base=os.environ.get("SFU_EZPROXY_PROXY_BASE", "proxy.lib.sfu.ca"),
         download_tiers=[t.strip() for t in os.environ.get("SFU_DOWNLOAD_TIERS", "curl_cffi,playwright,requests").split(",")],
         playwright_timeout=int(os.environ.get("SFU_PLAYWRIGHT_TIMEOUT", "30")),
         capture_server_port=int(os.environ.get("SFU_CAPTURE_SERVER_PORT", "8787")),
