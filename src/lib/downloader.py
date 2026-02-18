@@ -359,6 +359,25 @@ class ArticleDownloader:
             f"All download tiers failed for {url}. Last error: {last_error}"
         )
 
+    # ─── Login page detection ─────────────────────────────────
+
+    @staticmethod
+    def _is_login_page(content: bytes) -> bool:
+        """Detect if response body is an authentication/login page.
+
+        Checks the first 2 KB for known login page signatures from
+        EZProxy, CAS, and common publisher paywalls.
+        """
+        head = content[:2048].lower()
+        signatures = [
+            b"<title>authentication required</title>",
+            b"<title>login</title>",
+            b"cas – central authentication service",
+            b"proxy.lib.sfu.ca/login",
+            b"id=\"username\"",
+        ]
+        return any(sig in head for sig in signatures)
+
     # ─── PDF validation ────────────────────────────────────────
 
     def _write_and_validate_pdf(self, resp, cache_path: Path, record_id: str) -> str | None:
@@ -459,13 +478,16 @@ class ArticleDownloader:
 
         # Log cookie state for diagnostics
         cookie_names = list(self.cookies.keys())
-        ezproxy_cookies = [n for n in cookie_names if "ezproxy" in n.lower()]
-        logger.info(
-            "download_pdf: cookies=%s, ezproxy_cookies=%s",
-            cookie_names, ezproxy_cookies or "NONE",
+        has_proxy_cookies = any(
+            "ezproxy" in n.lower() or "proxy" in n.lower()
+            for n in cookie_names
         )
-        if not ezproxy_cookies:
-            logger.warning("download_pdf: no EZProxy cookies found — auth may fail for proxied URLs")
+        logger.info(
+            "download_pdf: cookies=%s, has_proxy_cookies=%s",
+            cookie_names, has_proxy_cookies,
+        )
+        if not has_proxy_cookies:
+            logger.warning("download_pdf: no proxy cookies found — auth may fail for proxied URLs")
 
         logger.info("Downloading PDF from %s for record %s", url, record_id)
 
@@ -477,12 +499,25 @@ class ArticleDownloader:
                 result["error"] = str(e)
                 return result
 
+        # Helper: check if an EZProxy retry would be useful
+        def _should_retry_via_ezproxy() -> bool:
+            """Don't retry through EZProxy if URL is already proxied or we have no proxy cookies."""
+            if self.config.ezproxy_prefix in url:
+                return False
+            if not has_proxy_cookies:
+                logger.warning(
+                    "download_pdf: skipping EZProxy retry — no proxy cookies available. "
+                    "Re-authenticate to establish EZProxy session."
+                )
+                return False
+            return True
+
         # Try tiered fetch
         try:
             fetch_result = self._tiered_fetch(url)
         except DownloadError as e:
-            # On failure, retry through EZProxy if not already proxied
-            if self.config.ezproxy_prefix not in url:
+            # On failure, retry through EZProxy if worthwhile
+            if _should_retry_via_ezproxy():
                 proxied_url = self.config.ezproxy_prefix + url
                 logger.info("download_pdf: tiered fetch failed, retrying through EZProxy: %s", proxied_url)
                 try:
@@ -498,15 +533,34 @@ class ArticleDownloader:
                 result["error"] = str(e)
                 return result
 
+        # Detect login page before writing to cache (avoids caching HTML)
+        if self._is_login_page(fetch_result.content):
+            logger.warning(
+                "download_pdf: response is a login/auth page for %s (tier=%s, url=%s)",
+                record_id, fetch_result.tier_used, fetch_result.url,
+            )
+            result["error"] = (
+                "Download returned a login page instead of a PDF. "
+                "EZProxy session may have expired — try re-authenticating."
+            )
+            return result
+
         # Write and validate
         validation_error = self._write_and_validate_fetch_result(fetch_result, cache_path, record_id)
         if validation_error:
-            # If not already proxied, retry with EZProxy
-            if self.config.ezproxy_prefix not in url:
+            # If not already proxied and we have cookies, retry with EZProxy
+            if _should_retry_via_ezproxy():
                 proxied_url = self.config.ezproxy_prefix + url
                 logger.info("download_pdf: not a PDF, retrying through EZProxy: %s", proxied_url)
                 try:
                     fetch_result = self._tiered_fetch(proxied_url)
+                    # Check for login page before validating
+                    if self._is_login_page(fetch_result.content):
+                        result["error"] = (
+                            "EZProxy retry returned a login page. "
+                            "Session expired — re-authenticate to download."
+                        )
+                        return result
                     validation_error = self._write_and_validate_fetch_result(fetch_result, cache_path, record_id)
                     if validation_error:
                         result["error"] = validation_error
@@ -582,6 +636,18 @@ class ArticleDownloader:
             fetch_result = self._tiered_fetch(url, cookies)
         except DownloadError as e:
             result["error"] = str(e)
+            return result
+
+        # Detect login page before writing to cache
+        if self._is_login_page(fetch_result.content):
+            logger.warning(
+                "download_from_direct_url: response is a login/auth page (tier=%s, url=%s)",
+                fetch_result.tier_used, fetch_result.url,
+            )
+            result["error"] = (
+                "Download returned a login page instead of a PDF. "
+                "EZProxy session may have expired — try re-authenticating."
+            )
             return result
 
         validation_error = self._write_and_validate_fetch_result(fetch_result, cache_path, url_hash)
