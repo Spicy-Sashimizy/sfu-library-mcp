@@ -637,7 +637,9 @@ class TestInterTierDelay:
 class TestPlaywrightStealth:
     @patch("playwright.sync_api.sync_playwright")
     def test_playwright_launch_args(self, mock_pw_ctx, downloader):
-        """Playwright should launch with automation detection disabled."""
+        """Playwright should launch with full STEALTH_LAUNCH_ARGS."""
+        from lib.stealth import STEALTH_LAUNCH_ARGS
+
         mock_pw = MagicMock()
         mock_pw_ctx.return_value.__enter__ = MagicMock(return_value=mock_pw)
         mock_pw_ctx.return_value.__exit__ = MagicMock(return_value=False)
@@ -659,18 +661,81 @@ class TestPlaywrightStealth:
 
         result = downloader._fetch_playwright("https://example.com/test.pdf")
 
-        # Check launch args
+        # Check launch args match STEALTH_LAUNCH_ARGS
         launch_call = mock_pw.chromium.launch.call_args
-        assert "--disable-blink-features=AutomationControlled" in launch_call[1].get("args", [])
+        assert launch_call[1].get("args") == STEALTH_LAUNCH_ARGS
 
         # Check viewport
         context_call = mock_browser.new_context.call_args
         assert context_call[1].get("viewport") == {"width": 1920, "height": 1080}
 
-        # Check stealth script injection
+        # Check stealth script injection via apply_stealth
         mock_page.add_init_script.assert_called_once()
         script = mock_page.add_init_script.call_args[0][0]
         assert "webdriver" in script
+        assert "window.chrome" in script
+
+    @patch("playwright.sync_api.sync_playwright")
+    def test_playwright_apply_stealth_called(self, mock_pw_ctx, downloader):
+        """apply_stealth should inject the full STEALTH_SCRIPTS into the page."""
+        from lib.stealth import STEALTH_SCRIPTS
+
+        mock_pw = MagicMock()
+        mock_pw_ctx.return_value.__enter__ = MagicMock(return_value=mock_pw)
+        mock_pw_ctx.return_value.__exit__ = MagicMock(return_value=False)
+
+        mock_browser = MagicMock()
+        mock_pw.chromium.launch.return_value = mock_browser
+        mock_context = MagicMock()
+        mock_browser.new_context.return_value = mock_context
+        mock_page = MagicMock()
+        mock_context.new_page.return_value = mock_page
+
+        mock_resp = MagicMock()
+        mock_resp.status = 200
+        mock_resp.headers = {"content-type": "application/pdf"}
+        mock_resp.body.return_value = b"%PDF-1.4 data"
+        mock_page.goto.return_value = mock_resp
+        mock_page.url = "https://example.com/test.pdf"
+
+        downloader._fetch_playwright("https://example.com/test.pdf")
+
+        mock_page.add_init_script.assert_called_once_with(STEALTH_SCRIPTS)
+
+
+class TestCurlCffiStealth:
+    @patch("curl_cffi.requests.get")
+    def test_curl_cffi_uses_correct_impersonate_version(self, mock_get, downloader):
+        """curl_cffi should use chrome131 impersonate version."""
+        from lib.stealth import CURL_IMPERSONATE_VERSION
+
+        mock_resp = MagicMock()
+        mock_resp.content = b"%PDF-1.4 data"
+        mock_resp.status_code = 200
+        mock_resp.headers = {"Content-Type": "application/pdf"}
+        mock_resp.url = "https://example.com/test.pdf"
+        mock_get.return_value = mock_resp
+
+        downloader._fetch_curl_cffi("https://example.com/test.pdf")
+
+        call_kwargs = mock_get.call_args[1]
+        assert call_kwargs["impersonate"] == CURL_IMPERSONATE_VERSION
+
+    @patch("curl_cffi.requests.get")
+    def test_curl_cffi_uses_extra_fingerprints(self, mock_get, downloader):
+        """curl_cffi should pass extra_fp kwarg for TLS hardening."""
+        mock_resp = MagicMock()
+        mock_resp.content = b"%PDF-1.4 data"
+        mock_resp.status_code = 200
+        mock_resp.headers = {"Content-Type": "application/pdf"}
+        mock_resp.url = "https://example.com/test.pdf"
+        mock_get.return_value = mock_resp
+
+        downloader._fetch_curl_cffi("https://example.com/test.pdf")
+
+        call_kwargs = mock_get.call_args[1]
+        assert "extra_fp" in call_kwargs
+        assert call_kwargs["extra_fp"].tls_grease is True
 
 
 class TestRateLimiterIntegration:
