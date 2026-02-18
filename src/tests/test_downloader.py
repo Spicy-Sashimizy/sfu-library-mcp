@@ -635,7 +635,7 @@ class TestInterTierDelay:
 
 
 class TestPlaywrightStealth:
-    @patch("lib.downloader.sync_playwright")
+    @patch("playwright.sync_api.sync_playwright")
     def test_playwright_launch_args(self, mock_pw_ctx, downloader):
         """Playwright should launch with automation detection disabled."""
         mock_pw = MagicMock()

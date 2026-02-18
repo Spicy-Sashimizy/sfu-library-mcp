@@ -43,6 +43,8 @@ class DownloadRateLimiter:
             hostname = urlparse(url).hostname or ""
         except Exception:
             return "unknown"
+        if not hostname:
+            return "unknown"
         # Strip common prefixes like www.
         parts = hostname.lower().split(".")
         if len(parts) >= 2:
