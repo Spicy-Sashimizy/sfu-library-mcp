@@ -155,12 +155,8 @@ class ArticleDownloader:
 
         logger.info("resolve_pdf_url: selected %s -> %s (open_access=%s)", link_type, url, is_oa)
 
-        # Wrap with EZProxy if not open access and not already wrapped
-        if not is_oa and self.config.ezproxy_prefix not in url:
-            original_url = url
-            url = self.config.ezproxy_prefix + url
-            logger.info("resolve_pdf_url: EZProxy wrapped %s -> %s", original_url, url)
-
+        # Return the raw URL — download_pdf() handles EZProxy wrapping
+        # as a fallback strategy when direct access fails.
         return url
 
     # ─── Tiered fetch methods ──────────────────────────────────
@@ -499,77 +495,85 @@ class ArticleDownloader:
                 result["error"] = str(e)
                 return result
 
-        # Helper: check if an EZProxy retry would be useful
-        def _should_retry_via_ezproxy() -> bool:
-            """Don't retry through EZProxy if URL is already proxied or we have no proxy cookies."""
-            if self.config.ezproxy_prefix in url:
+        # Helper: check if an EZProxy fallback would be useful
+        url_already_proxied = self.config.ezproxy_prefix in url
+        def _should_try_ezproxy() -> bool:
+            """Don't try EZProxy if URL is already proxied or we have no proxy cookies."""
+            if url_already_proxied:
                 return False
             if not has_proxy_cookies:
                 logger.warning(
-                    "download_pdf: skipping EZProxy retry — no proxy cookies available. "
+                    "download_pdf: skipping EZProxy fallback — no proxy cookies available. "
                     "Re-authenticate to establish EZProxy session."
                 )
                 return False
             return True
 
-        # Try tiered fetch
+        # Helper: attempt EZProxy fetch with full validation
+        def _try_ezproxy(direct_error: str) -> FetchResult | None:
+            """Try downloading through EZProxy. Returns FetchResult on success, None on failure."""
+            if not _should_try_ezproxy():
+                return None
+            proxied_url = self.config.ezproxy_prefix + url
+            logger.info("download_pdf: direct failed (%s), retrying via EZProxy: %s", direct_error, proxied_url)
+            try:
+                proxy_result = self._tiered_fetch(proxied_url)
+            except DownloadError as retry_err:
+                logger.error("download_pdf: EZProxy fallback also failed: %s", retry_err)
+                result["error"] = (
+                    f"Both direct and EZProxy downloads failed. "
+                    f"Direct: {direct_error}. EZProxy: {retry_err}"
+                )
+                return None
+            if self._is_login_page(proxy_result.content):
+                logger.warning("download_pdf: EZProxy returned login page for %s", record_id)
+                result["error"] = (
+                    f"Both direct and EZProxy downloads failed. "
+                    f"Direct: {direct_error}. "
+                    f"EZProxy: returned a login page (session may be expired)."
+                )
+                return None
+            proxy_validation = self._write_and_validate_fetch_result(proxy_result, cache_path, record_id)
+            if proxy_validation:
+                result["error"] = (
+                    f"Both direct and EZProxy downloads failed. "
+                    f"Direct: {direct_error}. EZProxy: {proxy_validation}"
+                )
+                return None
+            return proxy_result
+
+        # ── Phase 1: Try direct URL ──────────────────────────────
+        fetch_result = None
+        direct_error = None
         try:
             fetch_result = self._tiered_fetch(url)
         except DownloadError as e:
-            # On failure, retry through EZProxy if worthwhile
-            if _should_retry_via_ezproxy():
-                proxied_url = self.config.ezproxy_prefix + url
-                logger.info("download_pdf: tiered fetch failed, retrying through EZProxy: %s", proxied_url)
-                try:
-                    fetch_result = self._tiered_fetch(proxied_url)
-                except DownloadError as retry_err:
-                    logger.error("download_pdf: EZProxy retry also failed: %s", retry_err)
-                    result["error"] = (
-                        f"All tiers failed (retried via EZProxy, also failed). "
-                        f"Original URL: {url}. Last error: {retry_err}"
-                    )
-                    return result
-            else:
-                result["error"] = str(e)
-                return result
+            direct_error = str(e)
 
-        # Detect login page before writing to cache (avoids caching HTML)
-        if self._is_login_page(fetch_result.content):
+        # Detect login page on direct fetch
+        if fetch_result and self._is_login_page(fetch_result.content):
             logger.warning(
-                "download_pdf: response is a login/auth page for %s (tier=%s, url=%s)",
+                "download_pdf: direct fetch returned login/auth page for %s (tier=%s, url=%s)",
                 record_id, fetch_result.tier_used, fetch_result.url,
             )
-            result["error"] = (
-                "Download returned a login page instead of a PDF. "
-                "EZProxy session may have expired — try re-authenticating."
-            )
-            return result
+            direct_error = "Direct URL returned a login/auth page"
+            fetch_result = None
 
-        # Write and validate
-        validation_error = self._write_and_validate_fetch_result(fetch_result, cache_path, record_id)
-        if validation_error:
-            # If not already proxied and we have cookies, retry with EZProxy
-            if _should_retry_via_ezproxy():
-                proxied_url = self.config.ezproxy_prefix + url
-                logger.info("download_pdf: not a PDF, retrying through EZProxy: %s", proxied_url)
-                try:
-                    fetch_result = self._tiered_fetch(proxied_url)
-                    # Check for login page before validating
-                    if self._is_login_page(fetch_result.content):
-                        result["error"] = (
-                            "EZProxy retry returned a login page. "
-                            "Session expired — re-authenticate to download."
-                        )
-                        return result
-                    validation_error = self._write_and_validate_fetch_result(fetch_result, cache_path, record_id)
-                    if validation_error:
-                        result["error"] = validation_error
-                        return result
-                except DownloadError as e:
-                    result["error"] = validation_error
-                    return result
-            else:
-                result["error"] = validation_error
+        # Validate PDF on direct fetch
+        if fetch_result:
+            validation_error = self._write_and_validate_fetch_result(fetch_result, cache_path, record_id)
+            if validation_error:
+                direct_error = validation_error
+                fetch_result = None
+
+        # ── Phase 2: If direct failed, try EZProxy fallback ──────
+        if not fetch_result and direct_error:
+            fetch_result = _try_ezproxy(direct_error)
+            if not fetch_result:
+                # _try_ezproxy already set result["error"] if it ran,
+                # otherwise set the direct error
+                if not result["error"]:
+                    result["error"] = direct_error
                 return result
 
         size = cache_path.stat().st_size
