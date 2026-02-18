@@ -28,6 +28,7 @@ from lib.citations import (
 )
 from lib.config import load_config
 from lib.downloader import ArticleDownloader, DownloadError, PDFTextExtractionError
+from lib.publisher_router import PublisherRouter
 from lib.rate_limiter import DownloadRateLimiter, RateLimitExceeded
 from lib.formatters import format_search_results, format_item_details
 from lib.reranker import rerank_results
@@ -56,10 +57,11 @@ def _get_features() -> dict[str, bool]:
     return _get_config().features
 
 
-# Lazy-loaded downloader, rate limiter, and zotero client
+# Lazy-loaded downloader, rate limiter, publisher router, and zotero client
 _downloader: ArticleDownloader | None = None
 _downloader_cookie_id: int | None = None  # Track cookie changes
 _rate_limiter: DownloadRateLimiter | None = None
+_publisher_router: PublisherRouter | None = None
 _zotero_client: ZoteroClient | None = None
 
 
@@ -71,6 +73,18 @@ def _get_rate_limiter() -> DownloadRateLimiter:
     return _rate_limiter
 
 
+def _get_publisher_router() -> PublisherRouter:
+    """Get or create the singleton PublisherRouter.
+
+    Persists across downloader recreations (cookie changes) so learned
+    domain preferences survive re-authentication.
+    """
+    global _publisher_router
+    if _publisher_router is None:
+        _publisher_router = PublisherRouter()
+    return _publisher_router
+
+
 def _get_downloader(lib_client) -> ArticleDownloader:
     """Get or create ArticleDownloader, recreating if cookies changed."""
     global _downloader, _downloader_cookie_id
@@ -80,7 +94,9 @@ def _get_downloader(lib_client) -> ArticleDownloader:
 
     if _downloader is None or _downloader_cookie_id != cookie_id:
         _downloader = ArticleDownloader(
-            _get_config(), cookies, rate_limiter=_get_rate_limiter()
+            _get_config(), cookies,
+            rate_limiter=_get_rate_limiter(),
+            publisher_router=_get_publisher_router(),
         )
         _downloader_cookie_id = cookie_id
     return _downloader
