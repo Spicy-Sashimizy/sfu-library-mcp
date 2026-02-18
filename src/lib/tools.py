@@ -1294,16 +1294,27 @@ async def _handle_download_article(args: dict, client) -> list[TextContent]:
         return [TextContent(type="text", text=f"Could not find item with record ID: {record_id}")]
 
     downloader = _get_downloader(client)
-    url = downloader.resolve_pdf_url(item)
-    if not url:
+    urls = downloader.resolve_all_pdf_urls(item)
+    if not urls:
         return [TextContent(type="text", text=f"No PDF URL found for record {record_id}. The item may not have an accessible PDF.")]
 
     metadata = extract_metadata(item)
     copy_to_host = save_to_host and features.get("host_download_enabled", True)
-    result = downloader.download_pdf(url, record_id, metadata, copy_to_host=copy_to_host)
 
-    if not result["success"]:
-        return [TextContent(type="text", text=f"Download failed: {result['error']}")]
+    # Try each available URL (direct + EZProxy fallback per URL) until one succeeds
+    errors = []
+    result = None
+    for url in urls:
+        result = downloader.download_pdf(url, record_id, metadata, copy_to_host=copy_to_host)
+        if result["success"]:
+            break
+        errors.append(f"  {url}: {result['error']}")
+
+    if not result or not result["success"]:
+        error_detail = "\n".join(errors)
+        return [TextContent(type="text", text=(
+            f"Download failed — tried {len(urls)} URL(s) with direct + EZProxy strategies:\n{error_detail}"
+        ))]
 
     output = ["=" * 50, "ARTICLE DOWNLOADED", "=" * 50]
     if metadata:
@@ -1335,14 +1346,24 @@ async def _handle_read_article(args: dict, client) -> list[TextContent]:
     downloader = _get_downloader(client)
     metadata = extract_metadata(item)
 
-    # Check cache or download
-    url = downloader.resolve_pdf_url(item)
-    if not url:
+    # Check cache or download — try all available URLs
+    urls = downloader.resolve_all_pdf_urls(item)
+    if not urls:
         return [TextContent(type="text", text=f"No PDF URL found for record {record_id}. The item may not have an accessible PDF.")]
 
-    result = downloader.download_pdf(url, record_id, metadata, copy_to_host=False)
-    if not result["success"]:
-        return [TextContent(type="text", text=f"Download failed: {result['error']}")]
+    errors = []
+    result = None
+    for url in urls:
+        result = downloader.download_pdf(url, record_id, metadata, copy_to_host=False)
+        if result["success"]:
+            break
+        errors.append(f"  {url}: {result['error']}")
+
+    if not result or not result["success"]:
+        error_detail = "\n".join(errors)
+        return [TextContent(type="text", text=(
+            f"Download failed — tried {len(urls)} URL(s) with direct + EZProxy strategies:\n{error_detail}"
+        ))]
 
     try:
         text = downloader.extract_text(result["container_path"])
@@ -1444,17 +1465,21 @@ async def _handle_save_to_zotero(args: dict, client) -> list[TextContent]:
     # Optionally attach PDF
     if attach_pdf and features.get("pdf_download_enabled", True):
         downloader = _get_downloader(client)
-        url = downloader.resolve_pdf_url(item)
-        if url:
-            dl_result = downloader.download_pdf(url, record_id, metadata, copy_to_host=False)
-            if dl_result["success"]:
+        urls = downloader.resolve_all_pdf_urls(item)
+        if urls:
+            dl_result = None
+            for url in urls:
+                dl_result = downloader.download_pdf(url, record_id, metadata, copy_to_host=False)
+                if dl_result["success"]:
+                    break
+            if dl_result and dl_result["success"]:
                 try:
                     zot_client.attach_pdf(item_key, dl_result["container_path"])
                     output.append("PDF: Attached successfully")
                 except ZoteroError as e:
                     output.append(f"PDF: Attachment failed ({e})")
             else:
-                output.append(f"PDF: Download failed ({dl_result['error']})")
+                output.append(f"PDF: Download failed ({dl_result['error'] if dl_result else 'no result'})")
         else:
             output.append("PDF: No accessible PDF URL found")
 
@@ -1558,19 +1583,22 @@ async def _handle_batch_save_to_zotero(args: dict, client) -> list[TextContent]:
         # Attach PDF
         pdf_status = ""
         if downloader:
-            url = downloader.resolve_pdf_url(item)
-            if url:
+            urls = downloader.resolve_all_pdf_urls(item)
+            dl_result = None
+            for url in urls:
                 dl_result = downloader.download_pdf(url, rid, metadata, copy_to_host=False)
                 if dl_result["success"]:
-                    try:
-                        zot_client.attach_pdf(item_key, dl_result["container_path"])
-                        pdf_status = " + PDF"
-                    except ZoteroError:
-                        pdf_status = " (PDF attach failed)"
-                else:
-                    pdf_status = " (PDF download failed)"
-                # Humanized delay between batch PDF downloads
-                await asyncio.sleep(random.uniform(2.0, 5.0))
+                    break
+            if dl_result and dl_result["success"]:
+                try:
+                    zot_client.attach_pdf(item_key, dl_result["container_path"])
+                    pdf_status = " + PDF"
+                except ZoteroError:
+                    pdf_status = " (PDF attach failed)"
+            else:
+                pdf_status = " (PDF download failed)"
+            # Humanized delay between batch PDF downloads
+            await asyncio.sleep(random.uniform(2.0, 5.0))
 
         details.append(f"  {title_short}: SAVED{pdf_status}")
         saved += 1
@@ -1781,18 +1809,22 @@ async def _handle_backfill_collection_pdfs(args: dict, client) -> list[TextConte
             failed += 1
             continue
 
-        # Resolve PDF URL
-        url = downloader.resolve_pdf_url(record)
-        if not url:
+        # Resolve PDF URLs and try each one
+        urls = downloader.resolve_all_pdf_urls(record)
+        if not urls:
             details.append(f"  {title_short}: FAILED - no PDF URL found")
             failed += 1
             continue
 
-        # Download PDF
+        # Download PDF — try all available URLs
         metadata = extract_metadata(record)
-        dl_result = downloader.download_pdf(url, item_key, metadata, copy_to_host=copy_to_host)
-        if not dl_result["success"]:
-            details.append(f"  {title_short}: FAILED - {dl_result['error']}")
+        dl_result = None
+        for url in urls:
+            dl_result = downloader.download_pdf(url, item_key, metadata, copy_to_host=copy_to_host)
+            if dl_result["success"]:
+                break
+        if not dl_result or not dl_result["success"]:
+            details.append(f"  {title_short}: FAILED - {dl_result['error'] if dl_result else 'no URLs'}")
             failed += 1
             continue
 

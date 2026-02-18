@@ -159,6 +159,39 @@ class ArticleDownloader:
         # as a fallback strategy when direct access fails.
         return url
 
+    def resolve_all_pdf_urls(self, item: dict) -> list[str]:
+        """Resolve ALL available PDF URLs from a PNX record, in priority order.
+
+        Returns a deduplicated list of URLs: pdf_links, doi_url, source_links,
+        html_links. Each URL is raw (no EZProxy wrapping) — download_pdf()
+        handles proxy fallback per-URL.
+        """
+        links = extract_full_text_links(item)
+        if not links:
+            logger.info("resolve_all_pdf_urls: no links extracted from record")
+            return []
+
+        urls: list[str] = []
+        seen: set[str] = set()
+
+        def _add(url_or_list, label: str):
+            items = url_or_list if isinstance(url_or_list, list) else [url_or_list]
+            for u in items:
+                if u and u not in seen:
+                    seen.add(u)
+                    urls.append(u)
+                    logger.debug("resolve_all_pdf_urls: added %s -> %s", label, u)
+
+        # Priority order: pdf_links first, then DOI, source, html
+        _add(links.get("pdf_links", []), "pdf_links")
+        if links.get("doi_url"):
+            _add(links["doi_url"], "doi_url")
+        _add(links.get("source_links", []), "source_links")
+        _add(links.get("html_links", []), "html_links")
+
+        logger.info("resolve_all_pdf_urls: found %d URLs", len(urls))
+        return urls
+
     # ─── Tiered fetch methods ──────────────────────────────────
 
     def _fetch_curl_cffi(self, url: str, cookies: dict | None = None) -> FetchResult:
