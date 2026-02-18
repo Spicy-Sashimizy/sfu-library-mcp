@@ -10,6 +10,7 @@ Extracted from the monolith with:
 import asyncio
 import json
 import logging
+import random
 import time
 from typing import Any
 
@@ -27,6 +28,7 @@ from lib.citations import (
 )
 from lib.config import load_config
 from lib.downloader import ArticleDownloader, DownloadError, PDFTextExtractionError
+from lib.rate_limiter import DownloadRateLimiter, RateLimitExceeded
 from lib.formatters import format_search_results, format_item_details
 from lib.reranker import rerank_results
 from lib.validators import sanitize_search_query, validate_isbn
@@ -54,10 +56,19 @@ def _get_features() -> dict[str, bool]:
     return _get_config().features
 
 
-# Lazy-loaded downloader and zotero client
+# Lazy-loaded downloader, rate limiter, and zotero client
 _downloader: ArticleDownloader | None = None
 _downloader_cookie_id: int | None = None  # Track cookie changes
+_rate_limiter: DownloadRateLimiter | None = None
 _zotero_client: ZoteroClient | None = None
+
+
+def _get_rate_limiter() -> DownloadRateLimiter:
+    """Get or create the singleton DownloadRateLimiter."""
+    global _rate_limiter
+    if _rate_limiter is None:
+        _rate_limiter = DownloadRateLimiter(_get_config())
+    return _rate_limiter
 
 
 def _get_downloader(lib_client) -> ArticleDownloader:
@@ -68,7 +79,9 @@ def _get_downloader(lib_client) -> ArticleDownloader:
     cookie_id = hash(frozenset(cookies.items())) if cookies else 0
 
     if _downloader is None or _downloader_cookie_id != cookie_id:
-        _downloader = ArticleDownloader(_get_config(), cookies)
+        _downloader = ArticleDownloader(
+            _get_config(), cookies, rate_limiter=_get_rate_limiter()
+        )
         _downloader_cookie_id = cookie_id
     return _downloader
 
@@ -1556,6 +1569,8 @@ async def _handle_batch_save_to_zotero(args: dict, client) -> list[TextContent]:
                         pdf_status = " (PDF attach failed)"
                 else:
                     pdf_status = " (PDF download failed)"
+                # Humanized delay between batch PDF downloads
+                await asyncio.sleep(random.uniform(2.0, 5.0))
 
         details.append(f"  {title_short}: SAVED{pdf_status}")
         saved += 1
@@ -1718,6 +1733,22 @@ async def _handle_backfill_collection_pdfs(args: dict, client) -> list[TextConte
     if not items_without_pdfs:
         return [TextContent(type="text", text=f"All items in '{collection_name}' already have PDFs attached.")]
 
+    # Cap backfill to configured limit
+    config = _get_config()
+    backfill_cap = config.download_backfill_cap
+    if len(items_without_pdfs) > backfill_cap:
+        logger.info(
+            "Backfill capped: %d items without PDFs, limiting to %d",
+            len(items_without_pdfs), backfill_cap,
+        )
+        items_without_pdfs = items_without_pdfs[:backfill_cap]
+
+    # Check budget before starting
+    rate_limiter = _get_rate_limiter()
+    budget = rate_limiter.get_budget_status()
+    if budget["session_remaining"] == 0:
+        return [TextContent(type="text", text="Session download budget exhausted. Restart server to reset.")]
+
     attached = 0
     failed = 0
     details = []
@@ -1775,6 +1806,11 @@ async def _handle_backfill_collection_pdfs(args: dict, client) -> list[TextConte
             details.append(f"  {title_short}: FAILED - attach error: {e}")
             failed += 1
 
+        # Humanized delay between backfill downloads
+        await asyncio.sleep(random.uniform(3.0, 6.0))
+
+    # Include budget status in output
+    budget = rate_limiter.get_budget_status()
     output = [
         "=" * 50,
         "BACKFILL COLLECTION PDFs",
@@ -1783,6 +1819,7 @@ async def _handle_backfill_collection_pdfs(args: dict, client) -> list[TextConte
         f"Items checked: {len(items_without_pdfs)}",
         f"PDFs attached: {attached}",
         f"Failed: {failed}",
+        f"Downloads remaining: {budget['session_remaining']}/{budget['session_budget']}",
         "",
     ] + details
 
