@@ -18,24 +18,29 @@ from fastapi import BackgroundTasks, FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 
+from fastapi.responses import JSONResponse
+
 from lib.config import load_config
 from lib.downloader import ArticleDownloader
+from lib.rate_limiter import DownloadRateLimiter, RateLimitExceeded
 
 logger = logging.getLogger("sfu_library_mcp.capture_server")
 
 # ─── State ─────────────────────────────────────────────────────
 
 _downloader: ArticleDownloader | None = None
+_rate_limiter: DownloadRateLimiter | None = None
 _captures: list[dict] = []
 MAX_CAPTURE_HISTORY = 100
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    """Initialize downloader on startup."""
-    global _downloader
+    """Initialize downloader and rate limiter on startup."""
+    global _downloader, _rate_limiter
     config = load_config()
-    _downloader = ArticleDownloader(config)
+    _rate_limiter = DownloadRateLimiter(config)
+    _downloader = ArticleDownloader(config, rate_limiter=_rate_limiter)
     logger.info("Capture server started on port %d", config.capture_server_port)
     yield
     logger.info("Capture server shutting down")
@@ -117,6 +122,15 @@ async def capture(req: CaptureRequest):
 
     result = _do_capture(req.url, req.cookies, req.filename)
 
+    # Check for rate limit exceeded (returned as error from downloader)
+    if not result.get("success") and result.get("error", ""):
+        error_msg = result["error"]
+        if "budget exceeded" in error_msg.lower() or "limit exceeded" in error_msg.lower():
+            return JSONResponse(
+                status_code=429,
+                content={"detail": error_msg},
+            )
+
     # Record in history
     entry = {
         "url": req.url[:200],
@@ -153,6 +167,14 @@ async def health():
 async def captures():
     """List recent captures with status."""
     return [CaptureHistoryItem(**entry) for entry in _captures[:50]]
+
+
+@app.get("/budget")
+async def budget():
+    """Return current rate limiter budget status."""
+    if _rate_limiter is None:
+        return {"error": "Rate limiter not initialized"}
+    return _rate_limiter.get_budget_status()
 
 
 # ─── CLI entrypoint ────────────────────────────────────────────
