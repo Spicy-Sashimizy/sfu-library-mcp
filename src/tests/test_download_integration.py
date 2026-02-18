@@ -62,15 +62,15 @@ class TestDownloadAuthFlow:
         assert result["success"] is True
         assert result["size_bytes"] > 0
 
-    def test_download_without_ezproxy_cookie_logs_warning(self, dl_config, caplog):
-        """Missing EZProxy cookies should be logged as a warning."""
+    def test_download_without_proxy_cookie_logs_warning(self, dl_config, caplog):
+        """Missing proxy cookies should be logged as a warning."""
         import logging
 
         cookies = {"PrimoSession": "abc"}
         downloader = ArticleDownloader(dl_config, cookies=cookies)
 
         fetch_result = FetchResult(
-            content=b"<html>Login</html>",
+            content=b"<html><head><title>Authentication Required</title></head></html>",
             status_code=200,
             content_type="text/html",
             tier_used="curl_cffi",
@@ -78,13 +78,15 @@ class TestDownloadAuthFlow:
         )
         with patch.object(downloader, "_tiered_fetch", return_value=fetch_result):
             with caplog.at_level(logging.WARNING, logger="sfu_library_mcp"):
-                downloader.download_pdf(
+                result = downloader.download_pdf(
                     "https://proxy.lib.sfu.ca/login?url=https://example.com/article.pdf",
                     "rec_no_ezproxy",
                     copy_to_host=False,
                 )
 
-        assert any("no EZProxy cookies" in r.message for r in caplog.records)
+        assert any("no proxy cookies" in r.message for r in caplog.records)
+        assert result["success"] is False
+        assert "login page" in result["error"]
 
     def test_download_403_captures_diagnostics(self, dl_config):
         """403 should include status info in error message."""

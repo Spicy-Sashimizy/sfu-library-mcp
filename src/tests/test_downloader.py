@@ -350,9 +350,11 @@ class TestDownloadPdf:
 class TestEZProxyFallback:
     """Verify EZProxy retry on tiered fetch failure."""
 
-    def test_ezproxy_retry_on_all_tiers_fail(self, downloader, tmp_path):
-        """Tiered fetch failure on non-proxied URL should retry with EZProxy."""
-        downloader.config.download_dir = str(tmp_path)
+    def test_ezproxy_retry_on_all_tiers_fail(self, dl_config, tmp_path):
+        """Tiered fetch failure on non-proxied URL should retry with EZProxy when proxy cookies exist."""
+        dl_config.download_dir = str(tmp_path)
+        # Must have proxy cookies for retry to be attempted
+        downloader = ArticleDownloader(dl_config, cookies={"proxy_session": "valid123"})
 
         fetch_result_ok = FetchResult(
             content=b"%PDF-1.4 retried content",
@@ -384,8 +386,10 @@ class TestEZProxyFallback:
             )
         assert result["success"] is False
 
-    def test_ezproxy_retry_also_fails(self, downloader):
+    def test_ezproxy_retry_also_fails(self, dl_config):
         """Both original and EZProxy retry failing should report error."""
+        # Must have proxy cookies for retry to be attempted
+        downloader = ArticleDownloader(dl_config, cookies={"proxy_session": "valid123"})
         with patch.object(
             downloader, "_tiered_fetch",
             side_effect=[DownloadError("fail1"), DownloadError("fail2")],
@@ -396,6 +400,20 @@ class TestEZProxyFallback:
         assert result["success"] is False
         assert "retried via EZProxy" in result["error"]
         assert "also failed" in result["error"]
+
+    def test_no_ezproxy_retry_without_proxy_cookies(self, dl_config):
+        """EZProxy retry should be skipped when no proxy cookies exist."""
+        downloader = ArticleDownloader(dl_config, cookies={"session": "abc123"})
+        with patch.object(
+            downloader, "_tiered_fetch",
+            side_effect=DownloadError("All failed"),
+        ):
+            result = downloader.download_pdf(
+                "https://example.com/article.pdf", "rec_no_cookies", copy_to_host=False
+            )
+        assert result["success"] is False
+        # Should fail with the original error, not an EZProxy retry error
+        assert "All failed" in result["error"]
 
 
 class TestDownloadFromDirectUrl:
