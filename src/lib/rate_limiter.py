@@ -11,7 +11,7 @@ import time
 from urllib.parse import urlparse
 
 from lib.config import ServerConfig
-from lib.downloader import unwrap_proxied_hostname
+from lib.proxy_utils import unwrap_proxied_hostname
 
 logger = logging.getLogger("sfu_library_mcp")
 

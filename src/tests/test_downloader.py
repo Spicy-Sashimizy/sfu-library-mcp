@@ -15,9 +15,8 @@ from lib.downloader import (
     DownloadError,
     FetchResult,
     PDFTextExtractionError,
-    make_proxied_url,
-    unwrap_proxied_hostname,
 )
+from lib.proxy_utils import make_proxied_url, unwrap_proxied_hostname
 from lib.publisher_router import PublisherRouter, DomainClass
 from lib.rate_limiter import DownloadRateLimiter, RateLimitExceeded
 

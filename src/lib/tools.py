@@ -27,7 +27,8 @@ from lib.citations import (
     format_ris_entry,
 )
 from lib.config import load_config
-from lib.downloader import ArticleDownloader, DownloadError, PDFTextExtractionError, make_proxied_url
+from lib.downloader import ArticleDownloader, DownloadError, PDFTextExtractionError
+from lib.proxy_utils import make_proxied_url
 from lib.publisher_router import PublisherRouter
 from lib.rate_limiter import DownloadRateLimiter, RateLimitExceeded
 from lib.formatters import format_search_results, format_item_details
