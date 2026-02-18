@@ -583,6 +583,30 @@ TOOL_DEFINITIONS: list[Tool] = [
             "required": ["collection_name"]
         }
     ),
+    Tool(
+        name="backfill_collection_pdfs",
+        description=(
+            "Find items in a Zotero collection that only have citation metadata "
+            "(no PDF attached) and attempt to download and attach PDFs for each. "
+            "Use after batch saves where downloads failed, or to enrich an "
+            "existing collection with full-text PDFs."
+        ),
+        inputSchema={
+            "type": "object",
+            "properties": {
+                "collection_name": {
+                    "type": "string",
+                    "description": "Name of the Zotero collection to backfill PDFs for"
+                },
+                "save_to_host": {
+                    "type": "boolean",
+                    "description": "Also copy PDFs to host Downloads folder (default: true)",
+                    "default": True,
+                },
+            },
+            "required": ["collection_name"],
+        },
+    ),
 ]
 
 
@@ -679,6 +703,8 @@ async def _dispatch_tool(
         return _handle_search_zotero(arguments)
     elif name == "get_zotero_collection_items":
         return _handle_get_zotero_collection_items(arguments)
+    elif name == "backfill_collection_pdfs":
+        return await _handle_backfill_collection_pdfs(arguments, lib_client)
     else:
         return [TextContent(type="text", text=f"Unknown tool: {name}")]
 
@@ -1585,5 +1611,112 @@ def _handle_get_zotero_collection_items(args: dict) -> list[TextContent]:
         output.append(f"--- Item {i} ---")
         output.append(zot_client.format_item_summary(item))
         output.append("")
+
+    return [TextContent(type="text", text="\n".join(output))]
+
+
+async def _handle_backfill_collection_pdfs(args: dict, client) -> list[TextContent]:
+    features = _get_features()
+    if not features.get("zotero_enabled", True):
+        return [TextContent(type="text", text="Zotero integration is disabled.")]
+    if not features.get("pdf_download_enabled", True):
+        return [TextContent(type="text", text="PDF download is disabled.")]
+
+    collection_name = args.get("collection_name", "")
+    save_to_host = args.get("save_to_host", True)
+
+    if not collection_name:
+        return [TextContent(type="text", text="No collection name provided.")]
+    if not client.ensure_authenticated():
+        return [TextContent(type="text", text="Authentication failed.")]
+
+    zot_client = _get_zotero_client()
+    downloader = _get_downloader(client)
+
+    # Find collection
+    try:
+        collection_key = zot_client.find_collection_by_name(collection_name)
+    except ZoteroError as e:
+        return [TextContent(type="text", text=f"Zotero error: {e}")]
+
+    if not collection_key:
+        return [TextContent(type="text", text=f"Collection '{collection_name}' not found in Zotero.")]
+
+    # Get items without PDFs
+    try:
+        items_without_pdfs = zot_client.get_items_without_pdfs(collection_key)
+    except ZoteroError as e:
+        return [TextContent(type="text", text=f"Zotero error: {e}")]
+
+    if not items_without_pdfs:
+        return [TextContent(type="text", text=f"All items in '{collection_name}' already have PDFs attached.")]
+
+    attached = 0
+    failed = 0
+    details = []
+    copy_to_host = save_to_host and features.get("host_download_enabled", True)
+
+    for item in items_without_pdfs:
+        title_short = item.get("title", "Unknown")[:60]
+        item_key = item.get("key", "")
+        doi = item.get("DOI", "")
+
+        # Try to find the article via DOI or title search
+        search_query = doi if doi else item.get("title", "")
+        if not search_query:
+            details.append(f"  {title_short}: FAILED - no DOI or title for search")
+            failed += 1
+            continue
+
+        # Search library for full record with links
+        record = None
+        try:
+            async with _request_semaphore:
+                results = client.search(query=search_query, limit=1)
+            if results and results.get("docs"):
+                record = results["docs"][0]
+        except Exception as e:
+            logger.warning("Backfill search failed for '%s': %s", search_query[:50], e)
+
+        if not record:
+            details.append(f"  {title_short}: FAILED - not found in library search")
+            failed += 1
+            continue
+
+        # Resolve PDF URL
+        url = downloader.resolve_pdf_url(record)
+        if not url:
+            details.append(f"  {title_short}: FAILED - no PDF URL found")
+            failed += 1
+            continue
+
+        # Download PDF
+        metadata = extract_metadata(record)
+        dl_result = downloader.download_pdf(url, item_key, metadata, copy_to_host=copy_to_host)
+        if not dl_result["success"]:
+            details.append(f"  {title_short}: FAILED - {dl_result['error']}")
+            failed += 1
+            continue
+
+        # Attach to Zotero item
+        try:
+            zot_client.attach_pdf(item_key, dl_result["container_path"])
+            host_info = f" (host: {dl_result['host_path']})" if dl_result.get("host_path") else ""
+            details.append(f"  {title_short}: ATTACHED{host_info}")
+            attached += 1
+        except ZoteroError as e:
+            details.append(f"  {title_short}: FAILED - attach error: {e}")
+            failed += 1
+
+    output = [
+        "=" * 50,
+        "BACKFILL COLLECTION PDFs",
+        "=" * 50,
+        f"\nCollection: {collection_name}",
+        f"Items checked: {len(items_without_pdfs)}",
+        f"PDFs attached: {attached}",
+        f"Failed: {failed}",
+        "",
+    ] + details
 
     return [TextContent(type="text", text="\n".join(output))]

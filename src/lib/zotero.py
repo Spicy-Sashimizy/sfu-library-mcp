@@ -283,6 +283,53 @@ class ZoteroClient:
         logger.info("Collection '%s' not found, creating...", name)
         return self.create_collection(name, parent_key=parent_key)
 
+    # ─── Items without PDFs ──────────────────────────────────────
+
+    def get_items_without_pdfs(self, collection_key: str, limit: int = 50) -> list[dict]:
+        """Get items in a collection that have no PDF attachments.
+
+        Uses collection_items_top() for top-level items, then checks
+        children() for each to see if any child has itemType='attachment'
+        with contentType='application/pdf'.
+        """
+        items = self._call_zotero(
+            "get_collection_items_top",
+            self.zot.collection_items_top,
+            collection_key,
+            limit=limit,
+        )
+
+        no_pdf = []
+        for item in items:
+            data = item.get("data", {})
+            meta = item.get("meta", {})
+            # Skip non-regular items (notes, attachments themselves)
+            if data.get("itemType") in ("attachment", "note"):
+                continue
+            # Quick check: if numChildren == 0, definitely no PDF
+            if meta.get("numChildren", 0) == 0:
+                no_pdf.append(self._format_item(item))
+                continue
+            # Has children — check if any are PDF attachments
+            children = self._call_zotero(
+                "get_children",
+                self.zot.children,
+                data["key"],
+            )
+            has_pdf = any(
+                c.get("data", {}).get("itemType") == "attachment"
+                and "pdf" in c.get("data", {}).get("contentType", "").lower()
+                for c in children
+            )
+            if not has_pdf:
+                no_pdf.append(self._format_item(item))
+
+        logger.info(
+            "get_items_without_pdfs: %d/%d items lack PDF attachments in collection %s",
+            len(no_pdf), len(items), collection_key,
+        )
+        return no_pdf
+
     # ─── Search and browsing ───────────────────────────────────────
 
     def search_items(self, query: str, limit: int = 20) -> list[dict]:
