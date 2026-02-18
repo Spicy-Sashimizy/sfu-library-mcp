@@ -6,6 +6,7 @@ downloads PDFs through EZProxy using a tiered strategy (curl_cffi → Playwright
 folder, and extracts text via pdftotext.
 """
 
+import concurrent.futures
 import hashlib
 import logging
 import os
@@ -22,6 +23,7 @@ import requests
 
 from lib.citations import extract_full_text_links, extract_metadata
 from lib.config import ServerConfig
+from lib.publisher_router import PublisherRouter
 from lib.rate_limiter import DownloadRateLimiter, RateLimitExceeded
 from lib.retry import CircuitBreaker
 from lib.stealth import (
@@ -72,11 +74,13 @@ class ArticleDownloader:
     """Downloads and caches PDFs, extracts text for LLM consumption."""
 
     def __init__(self, config: ServerConfig, cookies: dict | None = None,
-                 rate_limiter: DownloadRateLimiter | None = None):
+                 rate_limiter: DownloadRateLimiter | None = None,
+                 publisher_router: PublisherRouter | None = None):
         self.config = config
         self.cookies = cookies or {}
         self._session: requests.Session | None = None
         self.rate_limiter = rate_limiter
+        self._publisher_router = publisher_router
         self._circuit_breaker = CircuitBreaker(threshold=3, timeout=120.0)
 
         # Probe which download tiers are actually importable at startup
@@ -221,92 +225,101 @@ class ArticleDownloader:
         )
 
     def _fetch_playwright(self, url: str, cookies: dict | None = None) -> FetchResult:
-        """Tier 2: Fetch using Playwright headless Chromium with stealth."""
-        from playwright.sync_api import sync_playwright
+        """Tier 2: Fetch using Playwright headless Chromium with stealth.
 
+        Runs sync Playwright in a separate thread to avoid crashing when
+        called inside an asyncio event loop (MCP server runs async).
+        """
         merged_cookies = {**self.cookies, **(cookies or {})}
         logger.info("_fetch_playwright: fetching %s", url)
+        pw_timeout = self.config.playwright_timeout
 
-        with sync_playwright() as p:
-            browser = p.chromium.launch(
-                headless=True,
-                args=STEALTH_LAUNCH_ARGS,
-            )
-            context = browser.new_context(
-                **get_stealth_context_options(BROWSER_HEADERS["User-Agent"]),
-            )
+        def _run() -> FetchResult:
+            from playwright.sync_api import sync_playwright
 
-            # Inject cookies — Playwright requires domain/path
-            if merged_cookies:
-                from urllib.parse import urlparse
-                parsed = urlparse(url)
-                pw_cookies = []
-                for name, value in merged_cookies.items():
-                    pw_cookies.append({
-                        "name": name,
-                        "value": value,
-                        "domain": parsed.hostname,
-                        "path": "/",
-                    })
-                context.add_cookies(pw_cookies)
-
-            page = context.new_page()
-            apply_stealth(page)
-            pdf_content = None
-            pdf_content_type = "unknown"
-
-            def handle_response(response):
-                nonlocal pdf_content, pdf_content_type
-                ct = response.headers.get("content-type", "")
-                if "application/pdf" in ct or response.url.endswith(".pdf"):
-                    try:
-                        pdf_content = response.body()
-                        pdf_content_type = ct
-                    except Exception:
-                        pass
-
-            page.on("response", handle_response)
-
-            try:
-                resp = page.goto(url, timeout=self.config.playwright_timeout * 1000, wait_until="networkidle")
-            except Exception as e:
-                browser.close()
-                raise DownloadError(f"Playwright navigation failed: {e}")
-
-            # If we caught a PDF via response interception, use that
-            if pdf_content and pdf_content[:5] == b"%PDF-":
-                result = FetchResult(
-                    content=pdf_content,
-                    status_code=200,
-                    content_type=pdf_content_type,
-                    tier_used="playwright",
-                    url=page.url,
+            with sync_playwright() as p:
+                browser = p.chromium.launch(
+                    headless=True,
+                    args=STEALTH_LAUNCH_ARGS,
                 )
+                context = browser.new_context(
+                    **get_stealth_context_options(BROWSER_HEADERS["User-Agent"]),
+                )
+
+                # Inject cookies — Playwright requires domain/path
+                if merged_cookies:
+                    parsed = urlparse(url)
+                    pw_cookies = []
+                    for name, value in merged_cookies.items():
+                        pw_cookies.append({
+                            "name": name,
+                            "value": value,
+                            "domain": parsed.hostname,
+                            "path": "/",
+                        })
+                    context.add_cookies(pw_cookies)
+
+                page = context.new_page()
+                apply_stealth(page)
+                pdf_content = None
+                pdf_content_type = "unknown"
+
+                def handle_response(response):
+                    nonlocal pdf_content, pdf_content_type
+                    ct = response.headers.get("content-type", "")
+                    if "application/pdf" in ct or response.url.endswith(".pdf"):
+                        try:
+                            pdf_content = response.body()
+                            pdf_content_type = ct
+                        except Exception:
+                            pass
+
+                page.on("response", handle_response)
+
+                try:
+                    resp = page.goto(url, timeout=pw_timeout * 1000, wait_until="networkidle")
+                except Exception as e:
+                    browser.close()
+                    raise DownloadError(f"Playwright navigation failed: {e}")
+
+                # If we caught a PDF via response interception, use that
+                if pdf_content and pdf_content[:5] == b"%PDF-":
+                    result = FetchResult(
+                        content=pdf_content,
+                        status_code=200,
+                        content_type=pdf_content_type,
+                        tier_used="playwright",
+                        url=page.url,
+                    )
+                    browser.close()
+                    return result
+
+                # Otherwise, get the page body (may be a PDF loaded directly)
+                if resp:
+                    body = resp.body()
+                    ct = resp.headers.get("content-type", "unknown")
+                    status = resp.status
+                else:
+                    body = b""
+                    ct = "unknown"
+                    status = 0
+
                 browser.close()
-                return result
 
-            # Otherwise, get the page body (may be a PDF loaded directly)
-            if resp:
-                body = resp.body()
-                ct = resp.headers.get("content-type", "unknown")
-                status = resp.status
-            else:
-                body = b""
-                ct = "unknown"
-                status = 0
+                if status >= 400:
+                    raise DownloadError(f"Playwright HTTP {status} for {url}")
 
-            browser.close()
+                return FetchResult(
+                    content=body,
+                    status_code=status,
+                    content_type=ct,
+                    tier_used="playwright",
+                    url=url,
+                )
 
-            if status >= 400:
-                raise DownloadError(f"Playwright HTTP {status} for {url}")
-
-            return FetchResult(
-                content=body,
-                status_code=status,
-                content_type=ct,
-                tier_used="playwright",
-                url=url,
-            )
+        with concurrent.futures.ThreadPoolExecutor(max_workers=1) as executor:
+            future = executor.submit(_run)
+            return future.result(timeout=pw_timeout + 15)
 
     def _fetch_requests(self, url: str, cookies: dict | None = None) -> FetchResult:
         """Tier 3: Fetch using requests (legacy fallback)."""
@@ -350,12 +363,23 @@ class ArticleDownloader:
         }
 
         # Only attempt tiers whose packages are actually importable
-        tiers = [t for t in self.config.download_tiers if t in self._available_tiers]
-        if not tiers:
+        base_tiers = [t for t in self.config.download_tiers if t in self._available_tiers]
+        if not base_tiers:
             raise DownloadError(
                 "No download tiers available. Install curl_cffi and/or playwright, "
                 "then restart the server."
             )
+
+        # Consult publisher router for optimized tier ordering
+        if self._publisher_router:
+            tiers = self._publisher_router.get_tier_order(url, base_tiers)
+            if tiers != base_tiers:
+                logger.info(
+                    "_tiered_fetch: router reordered tiers %s -> %s for %s",
+                    base_tiers, tiers, url,
+                )
+        else:
+            tiers = base_tiers
 
         last_error = None
         attempt_index = 0
@@ -382,6 +406,9 @@ class ArticleDownloader:
             except Exception as e:
                 logger.warning("_tiered_fetch: tier '%s' failed for %s: %s", tier_name, url, e)
                 last_error = e
+                # Record failure in publisher router
+                if self._publisher_router:
+                    self._publisher_router.record_failure(url, tier_name)
 
         self._circuit_breaker.record_failure()
         raise DownloadError(
@@ -598,6 +625,9 @@ class ArticleDownloader:
             if validation_error:
                 direct_error = validation_error
                 fetch_result = None
+            elif self._publisher_router and fetch_result.tier_used in ("curl_cffi", "requests"):
+                # Confirmed PDF via direct tier — whitelist this domain
+                self._publisher_router.record_success(url, fetch_result.tier_used)
 
         # ── Phase 2: If direct failed, try EZProxy fallback ──────
         if not fetch_result and direct_error:
