@@ -64,7 +64,8 @@ def _get_downloader(lib_client) -> ArticleDownloader:
     """Get or create ArticleDownloader, recreating if cookies changed."""
     global _downloader, _downloader_cookie_id
     cookies = getattr(lib_client, "cookies", {})
-    cookie_id = id(cookies) if cookies else 0
+    # Content-based fingerprint so we detect when cookies are updated in place
+    cookie_id = hash(frozenset(cookies.items())) if cookies else 0
 
     if _downloader is None or _downloader_cookie_id != cookie_id:
         _downloader = ArticleDownloader(_get_config(), cookies)
