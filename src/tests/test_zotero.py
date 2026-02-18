@@ -303,6 +303,146 @@ class TestCollections:
         assert result[0]["num_items"] == 10
 
 
+# ─── Subcollection support ─────────────────────────────────────
+
+class TestSubcollections:
+    def test_find_collection_by_name_with_parent(self, zot_client, mock_pyzotero):
+        """Should only match collections under the specified parent."""
+        mock_pyzotero.collections.return_value = [
+            {"data": {"key": "COL1", "name": "Papers", "parentCollection": ""}, "meta": {"numItems": 5}},
+            {"data": {"key": "COL2", "name": "Papers", "parentCollection": "PARENT1"}, "meta": {"numItems": 3}},
+        ]
+        # Without parent_key: should find first match
+        result = zot_client.find_collection_by_name("Papers")
+        assert result == "COL1"
+
+        # With parent_key: should find the one under PARENT1
+        result = zot_client.find_collection_by_name("Papers", parent_key="PARENT1")
+        assert result == "COL2"
+
+    def test_find_collection_by_name_parent_not_matched(self, zot_client, mock_pyzotero):
+        """Should return None if no collection matches under the given parent."""
+        mock_pyzotero.collections.return_value = [
+            {"data": {"key": "COL1", "name": "Papers", "parentCollection": ""}, "meta": {"numItems": 5}},
+        ]
+        result = zot_client.find_collection_by_name("Papers", parent_key="NONEXISTENT")
+        assert result is None
+
+    def test_create_collection_with_parent(self, zot_client, mock_pyzotero):
+        """create_collection with parent_key should include parentCollection in payload."""
+        mock_pyzotero.create_collections.return_value = {
+            "successful": {"0": {"key": "SUB1"}},
+            "failed": {},
+        }
+        result = zot_client.create_collection("Sub Papers", parent_key="PARENT1")
+        assert result == "SUB1"
+        # Verify parentCollection was in the API payload
+        call_args = mock_pyzotero.create_collections.call_args[0][0]
+        assert call_args[0]["parentCollection"] == "PARENT1"
+
+    def test_create_collection_without_parent(self, zot_client, mock_pyzotero):
+        """create_collection without parent_key should not include parentCollection."""
+        mock_pyzotero.create_collections.return_value = {
+            "successful": {"0": {"key": "TOP1"}},
+            "failed": {},
+        }
+        result = zot_client.create_collection("Top Level")
+        assert result == "TOP1"
+        call_args = mock_pyzotero.create_collections.call_args[0][0]
+        assert "parentCollection" not in call_args[0]
+
+    def test_find_or_create_with_parent(self, zot_client, mock_pyzotero):
+        """find_or_create_collection should pass parent_key through."""
+        mock_pyzotero.collections.return_value = []
+        mock_pyzotero.create_collections.return_value = {
+            "successful": {"0": {"key": "NEW_SUB"}},
+            "failed": {},
+        }
+        result = zot_client.find_or_create_collection("New Sub", parent_key="PARENT1")
+        assert result == "NEW_SUB"
+        call_args = mock_pyzotero.create_collections.call_args[0][0]
+        assert call_args[0]["parentCollection"] == "PARENT1"
+
+
+# ─── Items without PDFs ────────────────────────────────────────
+
+class TestGetItemsWithoutPdfs:
+    def test_items_with_no_children_flagged(self, zot_client, mock_pyzotero):
+        """Items with numChildren=0 should be returned as lacking PDFs."""
+        mock_pyzotero.collection_items_top.return_value = [
+            {
+                "data": {"key": "ITEM1", "itemType": "journalArticle", "title": "No PDF", "creators": [], "collections": [], "tags": [], "DOI": "", "ISBN": "", "date": "", "publicationTitle": ""},
+                "meta": {"numChildren": 0},
+            },
+        ]
+        result = zot_client.get_items_without_pdfs("COL1")
+        assert len(result) == 1
+        assert result[0]["key"] == "ITEM1"
+
+    def test_items_with_pdf_children_skipped(self, zot_client, mock_pyzotero):
+        """Items that have PDF attachments should not be returned."""
+        mock_pyzotero.collection_items_top.return_value = [
+            {
+                "data": {"key": "ITEM2", "itemType": "journalArticle", "title": "Has PDF", "creators": [], "collections": [], "tags": [], "DOI": "", "ISBN": "", "date": "", "publicationTitle": ""},
+                "meta": {"numChildren": 1},
+            },
+        ]
+        mock_pyzotero.children.return_value = [
+            {"data": {"itemType": "attachment", "contentType": "application/pdf"}},
+        ]
+        result = zot_client.get_items_without_pdfs("COL1")
+        assert len(result) == 0
+
+    def test_items_with_note_children_flagged(self, zot_client, mock_pyzotero):
+        """Items with note children (but no PDF) should be returned."""
+        mock_pyzotero.collection_items_top.return_value = [
+            {
+                "data": {"key": "ITEM3", "itemType": "journalArticle", "title": "Has Note Only", "creators": [], "collections": [], "tags": [], "DOI": "", "ISBN": "", "date": "", "publicationTitle": ""},
+                "meta": {"numChildren": 1},
+            },
+        ]
+        mock_pyzotero.children.return_value = [
+            {"data": {"itemType": "note", "contentType": ""}},
+        ]
+        result = zot_client.get_items_without_pdfs("COL1")
+        assert len(result) == 1
+
+    def test_skips_attachment_items(self, zot_client, mock_pyzotero):
+        """Attachment items themselves should be skipped."""
+        mock_pyzotero.collection_items_top.return_value = [
+            {
+                "data": {"key": "ATT1", "itemType": "attachment", "title": "Some PDF", "creators": [], "collections": [], "tags": [], "DOI": "", "ISBN": "", "date": "", "publicationTitle": ""},
+                "meta": {"numChildren": 0},
+            },
+        ]
+        result = zot_client.get_items_without_pdfs("COL1")
+        assert len(result) == 0
+
+    def test_mixed_items(self, zot_client, mock_pyzotero):
+        """Mix of items with and without PDFs."""
+        mock_pyzotero.collection_items_top.return_value = [
+            {
+                "data": {"key": "A", "itemType": "journalArticle", "title": "No PDF", "creators": [], "collections": [], "tags": [], "DOI": "", "ISBN": "", "date": "", "publicationTitle": ""},
+                "meta": {"numChildren": 0},
+            },
+            {
+                "data": {"key": "B", "itemType": "journalArticle", "title": "Has PDF", "creators": [], "collections": [], "tags": [], "DOI": "", "ISBN": "", "date": "", "publicationTitle": ""},
+                "meta": {"numChildren": 1},
+            },
+            {
+                "data": {"key": "C", "itemType": "note", "title": "A Note", "creators": [], "collections": [], "tags": [], "DOI": "", "ISBN": "", "date": "", "publicationTitle": ""},
+                "meta": {"numChildren": 0},
+            },
+        ]
+        mock_pyzotero.children.return_value = [
+            {"data": {"itemType": "attachment", "contentType": "application/pdf"}},
+        ]
+        result = zot_client.get_items_without_pdfs("COL1")
+        # A should be included (no children), B should be excluded (has PDF), C should be excluded (note type)
+        assert len(result) == 1
+        assert result[0]["key"] == "A"
+
+
 # ─── Circuit breaker ───────────────────────────────────────────
 
 class TestCircuitBreaker:

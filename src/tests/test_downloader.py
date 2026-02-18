@@ -118,10 +118,14 @@ class TestDownloadPdf:
         mock_resp.status_code = 200
         mock_resp.iter_content.return_value = [b"%PDF-1.4 fake content"]
         mock_resp.raise_for_status.return_value = None
+        mock_resp.headers = {"Content-Type": "application/pdf"}
+        mock_resp.history = []
+        mock_resp.url = "https://example.com/test.pdf"
 
         mock_session = MagicMock()
         mock_session.get.return_value = mock_resp
         mock_session.cookies = MagicMock()
+        mock_session.cookies.keys.return_value = ["session"]
         downloader._session = mock_session
 
         result = downloader.download_pdf(
@@ -133,16 +137,21 @@ class TestDownloadPdf:
 
     @patch("lib.downloader.requests.Session")
     def test_download_pdf_not_a_pdf(self, mock_session_cls, downloader, tmp_path):
-        """HTML response should be rejected."""
+        """HTML response should be rejected with enriched error."""
         downloader.config.download_dir = str(tmp_path)
 
         mock_resp = MagicMock()
         mock_resp.status_code = 200
         mock_resp.iter_content.return_value = [b"<html>Login page</html>"]
         mock_resp.raise_for_status.return_value = None
+        mock_resp.headers = {"Content-Type": "text/html"}
+        mock_resp.history = []
+        mock_resp.url = "https://proxy.lib.sfu.ca/login"
 
         mock_session = MagicMock()
         mock_session.get.return_value = mock_resp
+        mock_session.cookies = MagicMock()
+        mock_session.cookies.keys.return_value = []
         downloader._session = mock_session
 
         result = downloader.download_pdf(
@@ -150,27 +159,39 @@ class TestDownloadPdf:
         )
         assert result["success"] is False
         assert "not a PDF" in result["error"]
+        assert "Content-Type" in result["error"]
+        assert "text/html" in result["error"]
 
     def test_download_pdf_http_error(self, downloader):
-        """HTTP errors should return failure."""
+        """HTTP errors should return failure with enriched diagnostics."""
         mock_session = MagicMock()
         mock_resp = MagicMock()
+        mock_resp.status_code = 404
+        mock_resp.headers = {"Content-Type": "text/html"}
+        mock_resp.url = "https://example.com/404"
+        mock_resp.history = []
         mock_resp.raise_for_status.side_effect = requests.exceptions.HTTPError(
-            response=MagicMock(status_code=404)
+            response=mock_resp
         )
         mock_session.get.return_value = mock_resp
+        mock_session.cookies = MagicMock()
+        mock_session.cookies.keys.return_value = []
         downloader._session = mock_session
 
         result = downloader.download_pdf(
             "https://example.com/nope.pdf", "rec_003", copy_to_host=False
         )
         assert result["success"] is False
-        assert "HTTP error" in result["error"]
+        assert "404" in result["error"]
+        assert "Content-Type" in result["error"]
+        assert "final URL" in result["error"]
 
     def test_download_pdf_timeout(self, downloader):
         """Timeout should return failure."""
         mock_session = MagicMock()
         mock_session.get.side_effect = requests.exceptions.Timeout()
+        mock_session.cookies = MagicMock()
+        mock_session.cookies.keys.return_value = []
         downloader._session = mock_session
 
         result = downloader.download_pdf(
