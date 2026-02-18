@@ -86,7 +86,7 @@ class TestDownloadAuthFlow:
 
         assert any("no proxy cookies" in r.message for r in caplog.records)
         assert result["success"] is False
-        assert "login page" in result["error"]
+        assert "login" in result["error"].lower()
 
     def test_download_403_captures_diagnostics(self, dl_config):
         """403 should include status info in error message."""

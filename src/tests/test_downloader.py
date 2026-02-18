@@ -509,8 +509,9 @@ class TestEZProxyFallback:
                 "https://example.com/article.pdf", "rec_both_fail", copy_to_host=False
             )
         assert result["success"] is False
-        assert "retried via EZProxy" in result["error"]
-        assert "also failed" in result["error"]
+        assert "Both direct and EZProxy" in result["error"]
+        assert "fail1" in result["error"]
+        assert "fail2" in result["error"]
 
     def test_no_ezproxy_retry_without_proxy_cookies(self, dl_config):
         """EZProxy retry should be skipped when no proxy cookies exist."""
