@@ -608,6 +608,33 @@ TOOL_DEFINITIONS: list[Tool] = [
             "required": ["collection_name"],
         },
     ),
+    Tool(
+        name="download_from_url",
+        description=(
+            "Download a PDF from a direct URL. Use when you have a known PDF URL "
+            "from any source (publisher page, DOI link, direct PDF link). "
+            "Supports tiered download strategies to bypass TLS fingerprint detection."
+        ),
+        inputSchema={
+            "type": "object",
+            "properties": {
+                "url": {
+                    "type": "string",
+                    "description": "Direct URL to the PDF"
+                },
+                "filename": {
+                    "type": "string",
+                    "description": "Optional filename for the downloaded PDF"
+                },
+                "use_ezproxy": {
+                    "type": "boolean",
+                    "description": "Wrap URL with EZProxy prefix for authenticated access",
+                    "default": False,
+                },
+            },
+            "required": ["url"],
+        },
+    ),
 ]
 
 
@@ -706,6 +733,8 @@ async def _dispatch_tool(
         return _handle_get_zotero_collection_items(arguments)
     elif name == "backfill_collection_pdfs":
         return await _handle_backfill_collection_pdfs(arguments, lib_client)
+    elif name == "download_from_url":
+        return _handle_download_from_url(arguments, lib_client)
     else:
         return [TextContent(type="text", text=f"Unknown tool: {name}")]
 
@@ -1612,6 +1641,43 @@ def _handle_get_zotero_collection_items(args: dict) -> list[TextContent]:
         output.append(f"--- Item {i} ---")
         output.append(zot_client.format_item_summary(item))
         output.append("")
+
+    return [TextContent(type="text", text="\n".join(output))]
+
+
+def _handle_download_from_url(args: dict, client) -> list[TextContent]:
+    features = _get_features()
+    if not features.get("pdf_download_enabled", True):
+        return [TextContent(type="text", text="PDF download is disabled. Set SFU_FEATURE_PDF_DOWNLOAD_ENABLED=true to enable.")]
+
+    url = args.get("url", "")
+    filename = args.get("filename")
+    use_ezproxy = args.get("use_ezproxy", False)
+
+    if not url:
+        return [TextContent(type="text", text="No URL provided.")]
+
+    config = _get_config()
+    if use_ezproxy and config.ezproxy_prefix not in url:
+        url = config.ezproxy_prefix + url
+
+    downloader = _get_downloader(client)
+    result = downloader.download_from_direct_url(url, filename=filename)
+
+    if not result["success"]:
+        return [TextContent(type="text", text=f"Download failed: {result['error']}")]
+
+    output = [
+        "=" * 50,
+        "PDF DOWNLOADED FROM URL",
+        "=" * 50,
+        f"\nURL: {url}",
+        f"Size: {result['size_bytes']:,} bytes",
+        f"Tier: {result['tier_used']}",
+        f"Container path: {result['container_path']}",
+    ]
+    if filename:
+        output.append(f"Filename: {filename}")
 
     return [TextContent(type="text", text="\n".join(output))]
 
