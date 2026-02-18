@@ -17,6 +17,7 @@ class MockClient:
         self._item_result = item_result
         self.token_cleared = False
         self.search_calls: list[dict] = []
+        self.cookies: dict = {}
 
     def ensure_authenticated(self, force=False):
         return self._authenticated
@@ -63,8 +64,8 @@ def mock_client_with_results(sample_pnx_record, mock_search_response):
 
 
 class TestToolDefinitions:
-    def test_exactly_14_tools(self):
-        assert len(TOOL_DEFINITIONS) == 14
+    def test_exactly_21_tools(self):
+        assert len(TOOL_DEFINITIONS) == 21
 
     def test_tool_names(self):
         names = [t.name for t in TOOL_DEFINITIONS]
@@ -75,6 +76,9 @@ class TestToolDefinitions:
             "get_full_text_links", "generate_citation",
             "batch_generate_citations", "export_search_results",
             "batch_isbn_lookup",
+            "download_article", "read_article", "save_to_zotero",
+            "list_zotero_collections", "batch_save_to_zotero",
+            "search_zotero", "get_zotero_collection_items",
         ]
         assert names == expected
 
