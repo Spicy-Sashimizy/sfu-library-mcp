@@ -223,21 +223,37 @@ class ZoteroClient:
             })
         return result
 
-    def find_collection_by_name(self, name: str) -> str | None:
-        """Find a collection by name (case-insensitive). Returns key or None."""
+    def find_collection_by_name(self, name: str, parent_key: str | None = None) -> str | None:
+        """Find a collection by name (case-insensitive), optionally under a parent.
+
+        Args:
+            name: Collection name to find.
+            parent_key: If specified, only match collections with this parentCollection.
+
+        Returns:
+            Collection key or None.
+        """
         collections = self.list_collections()
         name_lower = name.lower()
         for c in collections:
             if c["name"].lower() == name_lower:
-                return c["key"]
+                if parent_key is not None:
+                    if c.get("parent_key", "") == parent_key:
+                        return c["key"]
+                else:
+                    return c["key"]
         return None
 
-    def create_collection(self, name: str) -> str:
-        """Create a new collection. Returns its key."""
+    def create_collection(self, name: str, parent_key: str | None = None) -> str:
+        """Create a new collection, optionally as a subcollection. Returns its key."""
+        payload = {"name": name}
+        if parent_key:
+            payload["parentCollection"] = parent_key
+
         resp = self._call_zotero(
             "create_collection",
             self.zot.create_collections,
-            [{"name": name}],
+            [payload],
         )
 
         if not resp or "successful" not in resp:
@@ -249,15 +265,23 @@ class ZoteroClient:
             raise ZoteroError(f"Failed to create collection: {failed}")
 
         key = successful["0"]["key"]
-        logger.info("Created Zotero collection: %s (%s)", key, name)
+        parent_info = f" (parent: {parent_key})" if parent_key else ""
+        logger.info("Created Zotero collection: %s (%s)%s", key, name, parent_info)
         return key
 
-    def find_or_create_collection(self, name: str) -> str:
-        """Find a collection by name, or create it. Returns key."""
-        key = self.find_collection_by_name(name)
+    def find_or_create_collection(self, name: str, parent_key: str | None = None) -> str:
+        """Find a collection by name, or create it. Returns key.
+
+        Args:
+            name: Collection name.
+            parent_key: If specified, find/create under this parent collection.
+        """
+        key = self.find_collection_by_name(name, parent_key=parent_key)
         if key:
+            logger.info("Found existing collection '%s' -> %s", name, key)
             return key
-        return self.create_collection(name)
+        logger.info("Collection '%s' not found, creating...", name)
+        return self.create_collection(name, parent_key=parent_key)
 
     # ─── Search and browsing ───────────────────────────────────────
 

@@ -485,6 +485,10 @@ TOOL_DEFINITIONS: list[Tool] = [
                     "type": "string",
                     "description": "Optional: Zotero collection name to add the item to (created if it doesn't exist)"
                 },
+                "parent_collection": {
+                    "type": "string",
+                    "description": "Optional: parent collection name. When specified, the item's collection becomes a subcollection under this parent."
+                },
                 "attach_pdf": {
                     "type": "boolean",
                     "description": "Download and attach the PDF to the Zotero item (default: true)",
@@ -520,6 +524,10 @@ TOOL_DEFINITIONS: list[Tool] = [
                 "collection_name": {
                     "type": "string",
                     "description": "Zotero collection name to add items to (created if it doesn't exist)"
+                },
+                "parent_collection": {
+                    "type": "string",
+                    "description": "Optional: parent collection name. When specified, the collection becomes a subcollection under this parent."
                 },
                 "attach_pdfs": {
                     "type": "boolean",
@@ -1299,6 +1307,7 @@ async def _handle_save_to_zotero(args: dict, client) -> list[TextContent]:
 
     record_id = args.get("record_id", "")
     collection_name = args.get("collection_name", "")
+    parent_collection = args.get("parent_collection", "")
     attach_pdf = args.get("attach_pdf", True)
 
     if not client.ensure_authenticated():
@@ -1336,11 +1345,14 @@ async def _handle_save_to_zotero(args: dict, client) -> list[TextContent]:
     # Map metadata → Zotero item
     zotero_item = zot_client.metadata_to_zotero_item(metadata)
 
-    # Resolve collection
+    # Resolve parent collection first, then child collection
     collection_key = None
     if collection_name:
         try:
-            collection_key = zot_client.find_or_create_collection(collection_name)
+            parent_key = None
+            if parent_collection:
+                parent_key = zot_client.find_or_create_collection(parent_collection)
+            collection_key = zot_client.find_or_create_collection(collection_name, parent_key=parent_key)
         except ZoteroError as e:
             return [TextContent(type="text", text=f"Zotero collection error: {e}")]
 
@@ -1411,6 +1423,7 @@ async def _handle_batch_save_to_zotero(args: dict, client) -> list[TextContent]:
 
     record_ids = args.get("record_ids", [])[:20]
     collection_name = args.get("collection_name", "")
+    parent_collection = args.get("parent_collection", "")
     attach_pdfs = args.get("attach_pdfs", True)
 
     if not record_ids:
@@ -1421,11 +1434,14 @@ async def _handle_batch_save_to_zotero(args: dict, client) -> list[TextContent]:
     zot_client = _get_zotero_client()
     downloader = _get_downloader(client) if attach_pdfs and features.get("pdf_download_enabled", True) else None
 
-    # Resolve collection
+    # Resolve parent collection first, then child collection
     collection_key = None
     if collection_name:
         try:
-            collection_key = zot_client.find_or_create_collection(collection_name)
+            parent_key = None
+            if parent_collection:
+                parent_key = zot_client.find_or_create_collection(parent_collection)
+            collection_key = zot_client.find_or_create_collection(collection_name, parent_key=parent_key)
         except ZoteroError as e:
             return [TextContent(type="text", text=f"Zotero collection error: {e}")]
 
