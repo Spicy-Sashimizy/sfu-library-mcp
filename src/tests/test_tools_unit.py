@@ -490,6 +490,51 @@ class TestDownloadFromUrlTool:
         assert "No URL provided" in result[0].text
 
 
+class TestBackfillCap:
+    """Verify backfill caps items at configured limit."""
+
+    @pytest.mark.asyncio
+    async def test_backfill_capped_at_config(self, mock_client):
+        """Backfill should cap items_without_pdfs to download_backfill_cap."""
+        # This tests the cap logic: create 20 items, expect only 10 processed
+        mock_zot = MagicMock()
+        mock_zot.find_collection_by_name.return_value = "col_key_123"
+        # Return 20 items without PDFs
+        items_without_pdfs = [
+            {"title": f"Article {i}", "key": f"key_{i}", "DOI": f"10.1234/{i}"}
+            for i in range(20)
+        ]
+        mock_zot.get_items_without_pdfs.return_value = items_without_pdfs
+
+        mock_dl = MagicMock()
+        mock_dl.resolve_pdf_url.return_value = None  # All fail to find URL
+
+        with patch("lib.tools._get_zotero_client", return_value=mock_zot), \
+             patch("lib.tools._get_downloader", return_value=mock_dl), \
+             patch("lib.tools._get_rate_limiter") as mock_get_rl, \
+             patch("lib.tools._get_config") as mock_get_config:
+            from lib.config import ServerConfig
+            mock_get_config.return_value = ServerConfig(download_backfill_cap=10)
+            mock_rl = MagicMock()
+            mock_rl.get_budget_status.return_value = {
+                "session_remaining": 15, "session_budget": 15,
+                "hourly_remaining": 20, "hourly_used": 0,
+                "hourly_limit": 20, "per_domain": {},
+            }
+            mock_get_rl.return_value = mock_rl
+
+            # The search calls will return None (no record found)
+            mock_client._search_result = None
+            result = await handle_tool_call(
+                "backfill_collection_pdfs",
+                {"collection_name": "Test Collection"},
+                mock_client,
+            )
+        text = result[0].text
+        # Should report 10 items checked (capped from 20)
+        assert "Items checked: 10" in text
+
+
 class TestMetrics:
     @pytest.mark.asyncio
     async def test_metrics_recorded(self, mock_client):

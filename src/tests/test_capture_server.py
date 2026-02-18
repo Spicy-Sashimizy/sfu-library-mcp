@@ -113,6 +113,54 @@ class TestCapturesEndpoint:
         assert data[0]["success"] is True
 
 
+class TestRateLimitResponse:
+    def test_capture_returns_429_on_budget_exceeded(self, capture_client):
+        client, server = capture_client
+        server._downloader.download_from_direct_url.return_value = {
+            "success": False,
+            "container_path": None,
+            "size_bytes": 0,
+            "tier_used": None,
+            "error": "Session download budget exceeded (15 downloads). Restart the server to reset.",
+        }
+        resp = client.post("/capture", json={
+            "url": "https://example.com/paper.pdf",
+        })
+        assert resp.status_code == 429
+        data = resp.json()
+        assert "budget exceeded" in data["detail"].lower()
+
+    def test_capture_returns_429_on_hourly_limit(self, capture_client):
+        client, server = capture_client
+        server._downloader.download_from_direct_url.return_value = {
+            "success": False,
+            "container_path": None,
+            "size_bytes": 0,
+            "tier_used": None,
+            "error": "Hourly download limit exceeded (20 downloads/hour).",
+        }
+        resp = client.post("/capture", json={
+            "url": "https://example.com/paper.pdf",
+        })
+        assert resp.status_code == 429
+
+
+class TestBudgetEndpoint:
+    def test_budget_endpoint(self, capture_client):
+        client, server = capture_client
+        from lib.rate_limiter import DownloadRateLimiter
+        from lib.config import ServerConfig
+        import capture_server
+        capture_server._rate_limiter = DownloadRateLimiter(ServerConfig(
+            download_min_delay=0.0, download_max_delay=0.0,
+        ))
+        resp = client.get("/budget")
+        assert resp.status_code == 200
+        data = resp.json()
+        assert "session_remaining" in data
+        assert "hourly_remaining" in data
+
+
 class TestCorsHeaders:
     def test_cors_allows_chrome_extension(self, capture_client):
         client, _ = capture_client

@@ -11,10 +11,12 @@ import requests
 from lib.config import ServerConfig
 from lib.downloader import (
     ArticleDownloader,
+    BROWSER_HEADERS,
     DownloadError,
     FetchResult,
     PDFTextExtractionError,
 )
+from lib.rate_limiter import DownloadRateLimiter, RateLimitExceeded
 
 
 @pytest.fixture
@@ -547,3 +549,163 @@ class TestCopyToHost:
             Path("/tmp/fake.pdf"), "rec_001", None
         )
         assert result is None
+
+
+class TestBrowserHeaders:
+    def test_browser_headers_has_user_agent(self):
+        """BROWSER_HEADERS should include a Chrome User-Agent."""
+        assert "User-Agent" in BROWSER_HEADERS
+        assert "Chrome" in BROWSER_HEADERS["User-Agent"]
+
+    def test_browser_headers_has_sec_fetch(self):
+        """BROWSER_HEADERS should include Sec-Fetch headers."""
+        assert "Sec-Fetch-Dest" in BROWSER_HEADERS
+        assert "Sec-Fetch-Mode" in BROWSER_HEADERS
+
+    def test_browser_headers_has_dnt(self):
+        """BROWSER_HEADERS should include DNT."""
+        assert BROWSER_HEADERS["DNT"] == "1"
+
+
+class TestCircuitBreakerIntegration:
+    def test_circuit_breaker_initialized(self, downloader):
+        """ArticleDownloader should have a circuit breaker."""
+        assert downloader._circuit_breaker is not None
+        assert downloader._circuit_breaker.threshold == 3
+        assert downloader._circuit_breaker.timeout == 120.0
+
+    def test_circuit_breaker_blocks_after_failures(self, downloader):
+        """After threshold failures, circuit breaker should block."""
+        # Manually trip the circuit breaker
+        for _ in range(3):
+            downloader._circuit_breaker.record_failure()
+
+        with pytest.raises(DownloadError, match="circuit breaker open"):
+            downloader._tiered_fetch("https://example.com/test.pdf")
+
+    def test_circuit_breaker_resets_on_success(self, downloader):
+        """Successful fetch should reset the circuit breaker."""
+        downloader._circuit_breaker.record_failure()
+        downloader._circuit_breaker.record_failure()
+
+        expected = FetchResult(
+            content=b"%PDF-1.4", status_code=200,
+            content_type="application/pdf", tier_used="curl_cffi",
+            url="https://example.com/test.pdf",
+        )
+        with patch.object(downloader, "_fetch_curl_cffi", return_value=expected), \
+             patch("lib.downloader.time.sleep"):
+            downloader._tiered_fetch("https://example.com/test.pdf")
+
+        assert downloader._circuit_breaker.failure_count == 0
+
+
+class TestInterTierDelay:
+    @patch("lib.downloader.time.sleep")
+    def test_inter_tier_delay_on_fallback(self, mock_sleep, downloader):
+        """Falling back to tier 2 should have an inter-tier delay."""
+        expected = FetchResult(
+            content=b"%PDF-1.4", status_code=200,
+            content_type="application/pdf", tier_used="playwright",
+            url="https://example.com/test.pdf",
+        )
+        with patch.object(downloader, "_fetch_curl_cffi", side_effect=Exception("fail")), \
+             patch.object(downloader, "_fetch_playwright", return_value=expected):
+            result = downloader._tiered_fetch("https://example.com/test.pdf")
+
+        assert result.tier_used == "playwright"
+        # time.sleep should have been called for inter-tier delay
+        assert mock_sleep.called
+        delay = mock_sleep.call_args[0][0]
+        assert 1.5 <= delay <= 3.0
+
+    @patch("lib.downloader.time.sleep")
+    def test_no_delay_for_first_tier(self, mock_sleep, downloader):
+        """First tier should not have any inter-tier delay."""
+        downloader.config.download_tiers = ["curl_cffi"]
+        expected = FetchResult(
+            content=b"%PDF-1.4", status_code=200,
+            content_type="application/pdf", tier_used="curl_cffi",
+            url="https://example.com/test.pdf",
+        )
+        with patch.object(downloader, "_fetch_curl_cffi", return_value=expected):
+            downloader._tiered_fetch("https://example.com/test.pdf")
+
+        mock_sleep.assert_not_called()
+
+
+class TestPlaywrightStealth:
+    @patch("lib.downloader.sync_playwright")
+    def test_playwright_launch_args(self, mock_pw_ctx, downloader):
+        """Playwright should launch with automation detection disabled."""
+        mock_pw = MagicMock()
+        mock_pw_ctx.return_value.__enter__ = MagicMock(return_value=mock_pw)
+        mock_pw_ctx.return_value.__exit__ = MagicMock(return_value=False)
+
+        mock_browser = MagicMock()
+        mock_pw.chromium.launch.return_value = mock_browser
+        mock_context = MagicMock()
+        mock_browser.new_context.return_value = mock_context
+        mock_page = MagicMock()
+        mock_context.new_page.return_value = mock_page
+
+        # Simulate a successful response
+        mock_resp = MagicMock()
+        mock_resp.status = 200
+        mock_resp.headers = {"content-type": "application/pdf"}
+        mock_resp.body.return_value = b"%PDF-1.4 data"
+        mock_page.goto.return_value = mock_resp
+        mock_page.url = "https://example.com/test.pdf"
+
+        result = downloader._fetch_playwright("https://example.com/test.pdf")
+
+        # Check launch args
+        launch_call = mock_pw.chromium.launch.call_args
+        assert "--disable-blink-features=AutomationControlled" in launch_call[1].get("args", [])
+
+        # Check viewport
+        context_call = mock_browser.new_context.call_args
+        assert context_call[1].get("viewport") == {"width": 1920, "height": 1080}
+
+        # Check stealth script injection
+        mock_page.add_init_script.assert_called_once()
+        script = mock_page.add_init_script.call_args[0][0]
+        assert "webdriver" in script
+
+
+class TestRateLimiterIntegration:
+    def test_rate_limiter_accepted(self, dl_config):
+        """ArticleDownloader should accept a rate_limiter parameter."""
+        rl = DownloadRateLimiter(dl_config)
+        dl = ArticleDownloader(dl_config, rate_limiter=rl)
+        assert dl.rate_limiter is rl
+
+    def test_rate_limit_exceeded_returns_error(self, dl_config, tmp_path):
+        """Rate limit exceeded should return success=False with error message."""
+        dl_config.download_dir = str(tmp_path)
+        dl_config.download_session_budget = 0  # Already exhausted
+        rl = DownloadRateLimiter(dl_config)
+        dl = ArticleDownloader(dl_config, rate_limiter=rl)
+
+        result = dl.download_pdf(
+            "https://example.com/test.pdf", "rec_rl", copy_to_host=False
+        )
+        assert result["success"] is False
+        assert "budget exceeded" in result["error"].lower()
+
+    def test_no_rate_limiter_backwards_compatible(self, dl_config, tmp_path):
+        """Without rate limiter, downloads should work normally."""
+        dl_config.download_dir = str(tmp_path)
+        dl = ArticleDownloader(dl_config)
+        assert dl.rate_limiter is None
+
+        fetch_result = FetchResult(
+            content=b"%PDF-1.4 data", status_code=200,
+            content_type="application/pdf", tier_used="curl_cffi",
+            url="https://example.com/test.pdf",
+        )
+        with patch.object(dl, "_tiered_fetch", return_value=fetch_result):
+            result = dl.download_pdf(
+                "https://example.com/test.pdf", "rec_norl", copy_to_host=False
+            )
+        assert result["success"] is True
