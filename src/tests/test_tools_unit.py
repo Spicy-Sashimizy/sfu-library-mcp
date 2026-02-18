@@ -64,8 +64,8 @@ def mock_client_with_results(sample_pnx_record, mock_search_response):
 
 
 class TestToolDefinitions:
-    def test_exactly_21_tools(self):
-        assert len(TOOL_DEFINITIONS) == 21
+    def test_exactly_22_tools(self):
+        assert len(TOOL_DEFINITIONS) == 22
 
     def test_tool_names(self):
         names = [t.name for t in TOOL_DEFINITIONS]
@@ -79,6 +79,7 @@ class TestToolDefinitions:
             "download_article", "read_article", "save_to_zotero",
             "list_zotero_collections", "batch_save_to_zotero",
             "search_zotero", "get_zotero_collection_items",
+            "backfill_collection_pdfs",
         ]
         assert names == expected
 
