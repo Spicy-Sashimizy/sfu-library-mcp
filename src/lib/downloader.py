@@ -24,6 +24,13 @@ from lib.citations import extract_full_text_links, extract_metadata
 from lib.config import ServerConfig
 from lib.rate_limiter import DownloadRateLimiter, RateLimitExceeded
 from lib.retry import CircuitBreaker
+from lib.stealth import (
+    CURL_IMPERSONATE_VERSION,
+    STEALTH_LAUNCH_ARGS,
+    apply_stealth,
+    get_curl_extra_fingerprints,
+    get_stealth_context_options,
+)
 
 logger = logging.getLogger("sfu_library_mcp")
 
@@ -150,7 +157,8 @@ class ArticleDownloader:
             url,
             headers=headers,
             cookies=merged_cookies,
-            impersonate="chrome",
+            impersonate=CURL_IMPERSONATE_VERSION,
+            extra_fp=get_curl_extra_fingerprints(),
             timeout=self.config.download_timeout,
             allow_redirects=True,
         )
@@ -170,21 +178,13 @@ class ArticleDownloader:
         merged_cookies = {**self.cookies, **(cookies or {})}
         logger.info("_fetch_playwright: fetching %s", url)
 
-        # Playwright-specific headers (no Sec-Fetch — Chromium sends natively)
-        pw_headers = {
-            "User-Agent": BROWSER_HEADERS["User-Agent"],
-            "Accept-Language": BROWSER_HEADERS["Accept-Language"],
-            "DNT": "1",
-        }
-
         with sync_playwright() as p:
             browser = p.chromium.launch(
                 headless=True,
-                args=["--disable-blink-features=AutomationControlled"],
+                args=STEALTH_LAUNCH_ARGS,
             )
             context = browser.new_context(
-                viewport={"width": 1920, "height": 1080},
-                extra_http_headers=pw_headers,
+                **get_stealth_context_options(BROWSER_HEADERS["User-Agent"]),
             )
 
             # Inject cookies — Playwright requires domain/path
@@ -202,11 +202,7 @@ class ArticleDownloader:
                 context.add_cookies(pw_cookies)
 
             page = context.new_page()
-            # Stealth: hide webdriver detection signals
-            page.add_init_script("""
-                Object.defineProperty(navigator, 'webdriver', {get: () => undefined});
-                delete navigator.__proto__.webdriver;
-            """)
+            apply_stealth(page)
             pdf_content = None
             pdf_content_type = "unknown"
 
