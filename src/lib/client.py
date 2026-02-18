@@ -227,10 +227,14 @@ class SFULibraryClient:
             return False
 
     def clear_token_cache(self) -> None:
-        """Delete the token cache file."""
+        """Delete the token cache file and clear in-memory auth state."""
         if os.path.exists(self.config.token_cache_file):
             os.remove(self.config.token_cache_file)
-            logger.info("Token cache cleared")
+        self.jwt_token = None
+        self.cookies = {}
+        self.user_info = {}
+        self.token_expiry = None
+        logger.info("Token cache cleared")
 
     # ─── Authentication ──────────────────────────────────────────
 
@@ -480,19 +484,25 @@ class SFULibraryClient:
                     self.token_expiry = payload.get("exp")
                     logger.info("Authenticated as %s", self.user_info.get("userName"))
 
-            # Establish EZProxy session using the active CAS session
-            EZPROXY_LOGIN = "https://proxy.lib.sfu.ca/login"
-            try:
-                logger.info("Establishing EZProxy session...")
-                driver.get(EZPROXY_LOGIN)
-                time.sleep(3)  # Allow CAS redirect to complete
-                logger.info("EZProxy session URL: %s", driver.current_url)
-            except Exception as e:
-                logger.warning("EZProxy session setup failed (downloads may not work): %s", e)
-
+            # Phase 1: Capture Primo cookies while still on Primo domain
             for cookie in driver.get_cookies():
                 self.cookies[cookie["name"]] = cookie["value"]
-                logger.debug("Captured cookie: %s (domain: %s)", cookie["name"], cookie.get("domain", "unknown"))
+                logger.debug("Captured Primo cookie: %s (domain: %s)", cookie["name"], cookie.get("domain", "unknown"))
+
+            # Phase 2: Establish EZProxy session using the active CAS session
+            EZPROXY_TARGET = "https://proxy.lib.sfu.ca/login?url=https://www.sfu.ca"
+            try:
+                logger.info("Establishing EZProxy session...")
+                driver.get(EZPROXY_TARGET)
+                time.sleep(3)  # Allow CAS redirect to complete
+                logger.info("EZProxy session URL: %s", driver.current_url)
+                # Capture EZProxy cookies and merge (don't overwrite Primo cookies)
+                for cookie in driver.get_cookies():
+                    if cookie["name"] not in self.cookies:
+                        self.cookies[cookie["name"]] = cookie["value"]
+                        logger.debug("Captured EZProxy cookie: %s (domain: %s)", cookie["name"], cookie.get("domain", "unknown"))
+            except Exception as e:
+                logger.warning("EZProxy session setup failed (downloads may not work): %s", e)
 
             self.save_token_cache()
             return True
