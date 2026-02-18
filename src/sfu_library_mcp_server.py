@@ -19,7 +19,7 @@ from lib.tools import TOOL_DEFINITIONS, handle_tool_call
 
 # Configure logging to stderr (never stdout — MCP uses stdio JSON-RPC)
 config = load_config()
-logger = setup_logging(level=config.log_level)
+logger = setup_logging(level=config.log_level, log_file=config.log_file)
 
 # Log config warnings at startup
 for warning in validate_config(config):

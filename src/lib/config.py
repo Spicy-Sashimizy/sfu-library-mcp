@@ -47,6 +47,7 @@ class ServerConfig:
 
     # Logging
     log_level: str = "INFO"
+    log_file: str = ""
 
     # Feature flags (CONFIG-003)
     features: dict[str, bool] = field(default_factory=lambda: {
@@ -133,6 +134,7 @@ def load_config() -> ServerConfig:
         cache_max_size=int(os.environ.get("SFU_CACHE_MAX_SIZE", "100")),
         cache_max_memory_mb=int(os.environ.get("SFU_CACHE_MAX_MEMORY_MB", "50")),
         log_level=os.environ.get("SFU_LOG_LEVEL", "INFO"),
+        log_file=os.environ.get("SFU_LOG_FILE", "/tmp/sfu-library-mcp.log"),
         features=default_features,
         active_profile=os.environ.get("SFU_ACTIVE_PROFILE", "default"),
         zotero_api_key=os.environ.get("SFU_ZOTERO_API_KEY", "REDACTED_ZOTERO_API_KEY"),
