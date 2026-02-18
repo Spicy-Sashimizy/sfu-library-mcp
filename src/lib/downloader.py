@@ -103,6 +103,37 @@ class ArticleDownloader:
 
         return url
 
+    def _write_and_validate_pdf(self, resp, cache_path: Path, record_id: str) -> str | None:
+        """Write response content to cache and validate PDF magic bytes.
+
+        Returns None on success, or an error string on failure.
+        """
+        redirect_count = len(resp.history)
+        content_type = resp.headers.get("Content-Type", "unknown")
+        logger.info(
+            "download_pdf: HTTP 200, content_type=%s, redirects=%d, final_url=%s",
+            content_type, redirect_count, resp.url,
+        )
+
+        cache_path.parent.mkdir(parents=True, exist_ok=True)
+        with open(cache_path, "wb") as f:
+            for chunk in resp.iter_content(chunk_size=8192):
+                f.write(chunk)
+
+        with open(cache_path, "rb") as f:
+            header = f.read(200)
+        if not header[:5] == b"%PDF-":
+            logger.warning(
+                "Downloaded content is not a PDF for %s: content_type=%s final_url=%s body_preview=%r",
+                record_id, content_type, resp.url, header[:200],
+            )
+            cache_path.unlink(missing_ok=True)
+            return (
+                f"Downloaded content is not a PDF (Content-Type: {content_type}, "
+                f"final URL: {resp.url}). May be a login page or HTML redirect."
+            )
+        return None
+
     def download_pdf(
         self,
         url: str,
@@ -162,43 +193,35 @@ class ArticleDownloader:
                 "Download HTTP error for %s: status=%s content_type=%s final_url=%s redirects=%d",
                 record_id, status, content_type, final_url, redirect_count,
             )
-            result["error"] = (
-                f"HTTP error {status} (Content-Type: {content_type}, "
-                f"final URL: {final_url})"
-            )
-            return result
+            # On 403, retry through EZProxy if not already proxied
+            if status == 403 and self.config.ezproxy_prefix not in url:
+                proxied_url = self.config.ezproxy_prefix + url
+                logger.info("download_pdf: 403 on OA URL, retrying through EZProxy: %s", proxied_url)
+                try:
+                    resp = self.session.get(proxied_url, timeout=self.config.download_timeout, stream=True)
+                    resp.raise_for_status()
+                except Exception as retry_err:
+                    logger.error("download_pdf: EZProxy retry also failed: %s", retry_err)
+                    result["error"] = (
+                        f"HTTP error {status} (retried via EZProxy, also failed). "
+                        f"Original URL: {url}"
+                    )
+                    return result
+            else:
+                result["error"] = (
+                    f"HTTP error {status} (Content-Type: {content_type}, "
+                    f"final URL: {final_url})"
+                )
+                return result
         except requests.exceptions.RequestException as e:
             result["error"] = f"Download failed: {e}"
             logger.error("Download failed for %s: %s", record_id, e)
             return result
 
-        # Log successful HTTP response diagnostics
-        redirect_count = len(resp.history)
-        content_type = resp.headers.get("Content-Type", "unknown")
-        logger.info(
-            "download_pdf: HTTP 200, content_type=%s, redirects=%d, final_url=%s",
-            content_type, redirect_count, resp.url,
-        )
-
-        # Write to cache
-        cache_path.parent.mkdir(parents=True, exist_ok=True)
-        with open(cache_path, "wb") as f:
-            for chunk in resp.iter_content(chunk_size=8192):
-                f.write(chunk)
-
-        # Validate PDF magic bytes
-        with open(cache_path, "rb") as f:
-            header = f.read(200)
-        if not header[:5] == b"%PDF-":
-            logger.warning(
-                "Downloaded content is not a PDF for %s: content_type=%s final_url=%s body_preview=%r",
-                record_id, content_type, resp.url, header[:200],
-            )
-            cache_path.unlink(missing_ok=True)
-            result["error"] = (
-                f"Downloaded content is not a PDF (Content-Type: {content_type}, "
-                f"final URL: {resp.url}). May be a login page or HTML redirect."
-            )
+        # Write response to cache and validate PDF
+        validation_error = self._write_and_validate_pdf(resp, cache_path, record_id)
+        if validation_error:
+            result["error"] = validation_error
             return result
 
         size = cache_path.stat().st_size
