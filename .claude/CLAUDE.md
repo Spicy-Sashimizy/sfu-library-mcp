@@ -29,7 +29,31 @@ Step 5: Run `git push` (if remote configured)
 **IF NO REMOTE:** Still commit locally. Inform user no remote is configured.
 
 ---
-﻿# Code Search Preferences
+
+## MANDATORY: Virtual Environment (venv)
+
+**The MCP server runs using the project venv, NOT the system Python.**
+
+- Venv path: `/workspaces/sfu-library-mcp/.venv/bin/python3`
+- The MCP server is launched via Docker exec using this venv
+- **ALL package installs MUST target the venv:**
+  ```bash
+  # Correct — installs into the venv
+  sudo /workspaces/sfu-library-mcp/.venv/bin/pip install <package>
+
+  # WRONG — installs into system Python, MCP server won't see it
+  pip install <package>
+  pip3 install <package>
+  ```
+- **After installing new packages:** The MCP server process must be restarted (restart Claude Desktop or close/reopen conversation)
+- **To verify a package is available to the MCP server:**
+  ```bash
+  /workspaces/sfu-library-mcp/.venv/bin/python3 -c "import <package>; print('OK')"
+  ```
+- The venv is owned by root, so `sudo` is required for pip installs
+
+---
+# Code Search Preferences
 
 When searching for code patterns or understanding the codebase:
 - **Prefer Pommel MCP tools** for semantic code search
