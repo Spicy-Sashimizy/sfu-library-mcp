@@ -372,7 +372,7 @@ class ArticleDownloader:
         signatures = [
             b"<title>authentication required</title>",
             b"<title>login</title>",
-            b"cas – central authentication service",
+            b"cas " + b"\xe2\x80\x93" + b" central authentication service",
             b"proxy.lib.sfu.ca/login",
             b"id=\"username\"",
         ]
