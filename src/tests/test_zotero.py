@@ -187,9 +187,8 @@ class TestDuplicateDetection:
         assert result["existing_key"] == "ABC123"
 
     def test_check_duplicate_isbn_match(self, zot_client, mock_pyzotero):
-        # First call for DOI check returns nothing, second for ISBN
+        # DOI is empty so DOI check is skipped; first call is ISBN check
         mock_pyzotero.items.side_effect = [
-            [],  # DOI check
             [{"data": {"key": "DEF456", "ISBN": "9780262018029", "title": "ML Book", "creators": [], "collections": [], "tags": []}}],
         ]
         metadata = {"doi": "", "isbn": "9780262018029", "title": "ML Book", "authors": []}
@@ -198,9 +197,8 @@ class TestDuplicateDetection:
         assert result["match_type"] == "ISBN"
 
     def test_check_duplicate_title_author_match(self, zot_client, mock_pyzotero):
+        # DOI and ISBN are empty so those checks are skipped; first call is title check
         mock_pyzotero.items.side_effect = [
-            [],  # DOI check (no DOI)
-            # title check
             [{"data": {
                 "key": "GHI789",
                 "title": "Machine Learning: A Probabilistic Perspective",
@@ -222,9 +220,8 @@ class TestDuplicateDetection:
         assert result["match_type"] == "title+author"
 
     def test_check_duplicate_title_similar_diff_author(self, zot_client, mock_pyzotero):
+        # DOI and ISBN are empty so those checks are skipped; first call is title check
         mock_pyzotero.items.side_effect = [
-            [],  # DOI check (no DOI)
-            # title check
             [{"data": {
                 "key": "JKL012",
                 "title": "Machine Learning: A Probabilistic Perspective",
