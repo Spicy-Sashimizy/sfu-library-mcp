@@ -79,6 +79,26 @@ class ArticleDownloader:
         self.rate_limiter = rate_limiter
         self._circuit_breaker = CircuitBreaker(threshold=3, timeout=120.0)
 
+        # Probe which download tiers are actually importable at startup
+        self._available_tiers: set[str] = {"requests"}  # always available
+        try:
+            import curl_cffi  # noqa: F401
+            self._available_tiers.add("curl_cffi")
+        except ImportError:
+            logger.warning("curl_cffi not installed — Tier 1 (TLS impersonation) unavailable")
+        try:
+            from playwright.sync_api import sync_playwright  # noqa: F401
+            self._available_tiers.add("playwright")
+        except ImportError:
+            logger.warning("playwright not installed — Tier 2 (headless browser) unavailable")
+
+        configured = config.download_tiers
+        available = [t for t in configured if t in self._available_tiers]
+        skipped = [t for t in configured if t not in self._available_tiers]
+        if skipped:
+            logger.warning("Download tiers unavailable (missing packages): %s", skipped)
+        logger.info("Active download tiers: %s", available)
+
     @property
     def session(self) -> requests.Session:
         if self._session is None:
@@ -300,20 +320,30 @@ class ArticleDownloader:
             "requests": self._fetch_requests,
         }
 
-        tiers = self.config.download_tiers
-        last_error = None
+        # Only attempt tiers whose packages are actually importable
+        tiers = [t for t in self.config.download_tiers if t in self._available_tiers]
+        if not tiers:
+            raise DownloadError(
+                "No download tiers available. Install curl_cffi and/or playwright, "
+                "then restart the server."
+            )
 
-        for i, tier_name in enumerate(tiers):
+        last_error = None
+        attempt_index = 0
+
+        for tier_name in tiers:
             method = tier_methods.get(tier_name)
             if method is None:
                 logger.warning("_tiered_fetch: unknown tier '%s', skipping", tier_name)
                 continue
 
             # Inter-tier delay to prevent rapid-fire cascade
-            if i > 0:
+            if attempt_index > 0:
                 delay = random.uniform(1.5, 3.0)
                 logger.info("_tiered_fetch: waiting %.1fs before trying tier '%s'", delay, tier_name)
                 time.sleep(delay)
+
+            attempt_index += 1
 
             try:
                 result = method(url, cookies)
