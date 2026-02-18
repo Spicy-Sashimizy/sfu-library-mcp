@@ -490,21 +490,22 @@ class SFULibraryClient:
                 logger.debug("Captured Primo cookie: %s (domain: %s)", cookie["name"], cookie.get("domain", "unknown"))
 
             # Phase 2: Establish EZProxy session using the active CAS session
-            EZPROXY_TARGET = "https://proxy.lib.sfu.ca/login?url=https://www.sfu.ca"
+            # SFU uses hostname-based EZProxy: login.proxy.lib.sfu.ca/login?qurl=...
+            EZPROXY_TARGET = self.config.ezproxy_login_url + "https://www.sfu.ca"
             try:
-                logger.info("Establishing EZProxy session...")
+                logger.info("Establishing EZProxy session via %s", EZPROXY_TARGET)
                 driver.get(EZPROXY_TARGET)
 
                 # Wait for CAS redirect chain to complete (login -> CAS -> EZProxy -> target)
-                # The login page URL contains proxy.lib.sfu.ca/login; after success
-                # it should redirect to the target (sfu.ca) or at least away from /login
+                # The login host is login.proxy.lib.sfu.ca; after success
+                # it should redirect to the target (sfu.ca) or at least away from login host
                 max_wait = 30
                 poll_interval = 1
                 waited = 0
                 while waited < max_wait:
                     current = driver.current_url
                     # Success: redirected away from the EZProxy login page
-                    if "proxy.lib.sfu.ca/login" not in current:
+                    if "login.proxy.lib.sfu.ca" not in current:
                         logger.info("EZProxy redirect completed after %ds: %s", waited, current)
                         break
                     time.sleep(poll_interval)
