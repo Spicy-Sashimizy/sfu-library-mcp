@@ -27,7 +27,7 @@ from lib.citations import (
     format_ris_entry,
 )
 from lib.config import load_config
-from lib.downloader import ArticleDownloader, DownloadError, PDFTextExtractionError
+from lib.downloader import ArticleDownloader, DownloadError, PDFTextExtractionError, make_proxied_url
 from lib.publisher_router import PublisherRouter
 from lib.rate_limiter import DownloadRateLimiter, RateLimitExceeded
 from lib.formatters import format_search_results, format_item_details
@@ -1731,8 +1731,8 @@ def _handle_download_from_url(args: dict, client) -> list[TextContent]:
         return [TextContent(type="text", text="No URL provided.")]
 
     config = _get_config()
-    if use_ezproxy and config.ezproxy_prefix not in url:
-        url = config.ezproxy_prefix + url
+    if use_ezproxy and config.ezproxy_proxy_base not in url:
+        url = make_proxied_url(url, config.ezproxy_proxy_base)
 
     downloader = _get_downloader(client)
     result = downloader.download_from_direct_url(url, filename=filename)

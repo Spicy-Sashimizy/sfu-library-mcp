@@ -11,6 +11,7 @@ import time
 from urllib.parse import urlparse
 
 from lib.config import ServerConfig
+from lib.downloader import unwrap_proxied_hostname
 
 logger = logging.getLogger("sfu_library_mcp")
 
@@ -38,14 +39,19 @@ class DownloadRateLimiter:
 
     @staticmethod
     def _extract_domain(url: str) -> str:
-        """Extract the registrable domain from a URL."""
+        """Extract the registrable domain from a URL.
+
+        Unwraps hostname-based proxy URLs first so rate limits apply
+        to the actual publisher domain, not the proxy domain.
+        """
         try:
             hostname = urlparse(url).hostname or ""
         except Exception:
             return "unknown"
         if not hostname:
             return "unknown"
-        # Strip common prefixes like www.
+        # Unwrap hostname-based proxy
+        hostname = unwrap_proxied_hostname(hostname)
         parts = hostname.lower().split(".")
         if len(parts) >= 2:
             return ".".join(parts[-2:])

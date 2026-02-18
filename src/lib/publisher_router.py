@@ -12,6 +12,8 @@ import threading
 from enum import Enum
 from urllib.parse import urlparse
 
+from lib.downloader import unwrap_proxied_hostname
+
 logger = logging.getLogger("sfu_library_mcp")
 
 
@@ -46,7 +48,8 @@ class PublisherRouter:
         """Extract the registrable domain from a URL.
 
         Strips subdomains (e.g. onlinelibrary.wiley.com -> wiley.com).
-        Same logic as DownloadRateLimiter._extract_domain.
+        Unwraps hostname-based proxy URLs first
+        (e.g. onlinelibrary-wiley-com.proxy.lib.sfu.ca -> wiley.com).
         """
         try:
             hostname = urlparse(url).hostname or ""
@@ -54,6 +57,8 @@ class PublisherRouter:
             return "unknown"
         if not hostname:
             return "unknown"
+        # Unwrap hostname-based proxy
+        hostname = unwrap_proxied_hostname(hostname)
         parts = hostname.lower().split(".")
         if len(parts) >= 2:
             return ".".join(parts[-2:])
