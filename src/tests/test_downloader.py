@@ -78,16 +78,18 @@ class TestCachePath:
 
 
 class TestEZProxyWrapping:
-    def test_wrap_ezproxy_adds_prefix(self, downloader, sample_article_record):
-        """Non-OA URLs should get EZProxy prefix."""
+    def test_resolve_returns_raw_url(self, downloader, sample_article_record):
+        """resolve_pdf_url should return raw URL (EZProxy handled by download_pdf)."""
         # Make it non-OA by removing openaccess
         sample_article_record["pnx"]["links"]["openaccess"] = []
         url = downloader.resolve_pdf_url(sample_article_record)
         assert url is not None
-        assert url.startswith("https://proxy.lib.sfu.ca/login?url=")
+        # Raw URL should NOT have EZProxy prefix — download_pdf adds it as fallback
+        assert "proxy.lib.sfu.ca" not in url
+        assert url == "https://example.com/article.pdf"
 
-    def test_wrap_ezproxy_idempotent(self, downloader, sample_article_record):
-        """Already-wrapped URL should not be double-wrapped."""
+    def test_already_proxied_url_returned_as_is(self, downloader, sample_article_record):
+        """Already-wrapped URL in PNX record should be returned unchanged."""
         sample_article_record["pnx"]["links"]["openaccess"] = []
         sample_article_record["pnx"]["links"]["linktopdf"] = [
             "https://proxy.lib.sfu.ca/login?url=https://example.com/article.pdf"
@@ -117,11 +119,12 @@ class TestResolvePdfUrl:
         assert url is not None
         assert "fulltext" in url
 
-    def test_resolve_pdf_url_wraps_non_oa(self, downloader, sample_pnx_record):
-        """Non-open-access URLs should be wrapped with EZProxy."""
+    def test_resolve_pdf_url_no_wrap_non_oa(self, downloader, sample_pnx_record):
+        """Non-open-access URLs should NOT be wrapped — download_pdf handles EZProxy."""
         url = downloader.resolve_pdf_url(sample_pnx_record)
         assert url is not None
-        assert url.startswith("https://proxy.lib.sfu.ca/login?url=")
+        # Raw URL returned, EZProxy is a fallback strategy in download_pdf()
+        assert "proxy.lib.sfu.ca" not in url
 
     def test_resolve_pdf_url_no_wrap_oa(self, downloader, sample_article_record):
         """Open access URLs should NOT be wrapped."""
@@ -140,6 +143,114 @@ class TestResolvePdfUrl:
         }
         url = downloader.resolve_pdf_url(item)
         assert url is None
+
+
+class TestResolveAllPdfUrls:
+    """Test the resolve_all_pdf_urls method."""
+
+    def test_returns_all_urls_in_priority_order(self, downloader, sample_article_record):
+        """Should return pdf, doi, source, and html URLs in order."""
+        # sample_article_record has pdf_links, doi, and html_links
+        urls = downloader.resolve_all_pdf_urls(sample_article_record)
+        assert len(urls) >= 2
+        # PDF link should be first
+        assert urls[0] == "https://example.com/article.pdf"
+
+    def test_deduplicates_urls(self, downloader, sample_article_record):
+        """Same URL in multiple fields should only appear once."""
+        sample_article_record["pnx"]["links"]["linktorsrc"] = ["https://example.com/article.pdf"]
+        urls = downloader.resolve_all_pdf_urls(sample_article_record)
+        pdf_count = sum(1 for u in urls if u == "https://example.com/article.pdf")
+        assert pdf_count == 1
+
+    def test_returns_empty_for_no_links(self, downloader):
+        """No links should return empty list."""
+        item = {"pnx": {"links": {}, "addata": {}}}
+        urls = downloader.resolve_all_pdf_urls(item)
+        assert urls == []
+
+    def test_source_only_record(self, downloader, sample_pnx_record):
+        """Record with only source links should return those."""
+        urls = downloader.resolve_all_pdf_urls(sample_pnx_record)
+        assert len(urls) >= 1
+        assert any("fulltext" in u for u in urls)
+
+
+class TestDirectFirstEZProxyFallback:
+    """Test that download_pdf tries direct URL first, then EZProxy."""
+
+    def test_direct_succeeds_no_ezproxy(self, downloader, tmp_path):
+        """When direct URL succeeds, EZProxy should not be tried."""
+        downloader.config.download_dir = str(tmp_path)
+        fetch_result = FetchResult(
+            content=b"%PDF-1.4 direct content",
+            status_code=200,
+            content_type="application/pdf",
+            tier_used="curl_cffi",
+            url="https://example.com/article.pdf",
+        )
+        with patch.object(downloader, "_tiered_fetch", return_value=fetch_result) as mock_fetch:
+            result = downloader.download_pdf(
+                "https://example.com/article.pdf", "rec_direct", copy_to_host=False
+            )
+        assert result["success"] is True
+        # Only called once (direct), not twice (would include EZProxy)
+        assert mock_fetch.call_count == 1
+        assert "proxy.lib.sfu.ca" not in mock_fetch.call_args_list[0][0][0]
+
+    def test_direct_fails_ezproxy_succeeds(self, dl_config, tmp_path):
+        """When direct fails, should fall back to EZProxy with proxy cookies."""
+        dl_config.download_dir = str(tmp_path)
+        downloader = ArticleDownloader(dl_config, cookies={"proxy_session": "valid123"})
+
+        direct_fail = DownloadError("Connection refused")
+        ezproxy_ok = FetchResult(
+            content=b"%PDF-1.4 via proxy",
+            status_code=200,
+            content_type="application/pdf",
+            tier_used="curl_cffi",
+            url="https://proxy.lib.sfu.ca/login?url=https://example.com/article.pdf",
+        )
+        with patch.object(
+            downloader, "_tiered_fetch",
+            side_effect=[direct_fail, ezproxy_ok],
+        ) as mock_fetch:
+            result = downloader.download_pdf(
+                "https://example.com/article.pdf", "rec_fallback", copy_to_host=False
+            )
+        assert result["success"] is True
+        # Called twice: direct first, then EZProxy
+        assert mock_fetch.call_count == 2
+        assert "proxy.lib.sfu.ca" not in mock_fetch.call_args_list[0][0][0]
+        assert "proxy.lib.sfu.ca" in mock_fetch.call_args_list[1][0][0]
+
+    def test_direct_login_page_triggers_ezproxy(self, dl_config, tmp_path):
+        """Login page on direct should trigger EZProxy fallback."""
+        dl_config.download_dir = str(tmp_path)
+        downloader = ArticleDownloader(dl_config, cookies={"proxy_session": "valid123"})
+
+        login_page = FetchResult(
+            content=b"<html><title>Login</title><form id=\"username\"></form></html>",
+            status_code=200,
+            content_type="text/html",
+            tier_used="curl_cffi",
+            url="https://example.com/article.pdf",
+        )
+        pdf_ok = FetchResult(
+            content=b"%PDF-1.4 authenticated",
+            status_code=200,
+            content_type="application/pdf",
+            tier_used="curl_cffi",
+            url="https://proxy.lib.sfu.ca/login?url=https://example.com/article.pdf",
+        )
+        with patch.object(
+            downloader, "_tiered_fetch",
+            side_effect=[login_page, pdf_ok],
+        ):
+            result = downloader.download_pdf(
+                "https://example.com/article.pdf", "rec_login", copy_to_host=False
+            )
+        assert result["success"] is True
 
 
 class TestTieredFetch:
