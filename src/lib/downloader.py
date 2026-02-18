@@ -68,28 +68,38 @@ class ArticleDownloader:
         """
         links = extract_full_text_links(item)
         if not links:
+            logger.info("resolve_pdf_url: no links extracted from record")
             return None
 
         is_oa = links.get("open_access", False)
         url = None
+        link_type = None
 
         # Priority order
         if links.get("pdf_links"):
             url = links["pdf_links"][0]
+            link_type = "pdf_links"
         elif links.get("doi_url"):
             url = links["doi_url"]
+            link_type = "doi_url"
         elif links.get("source_links"):
             url = links["source_links"][0]
+            link_type = "source_links"
         elif links.get("html_links"):
             url = links["html_links"][0]
+            link_type = "html_links"
 
         if not url:
+            logger.info("resolve_pdf_url: links dict present but no usable URL found")
             return None
+
+        logger.info("resolve_pdf_url: selected %s -> %s (open_access=%s)", link_type, url, is_oa)
 
         # Wrap with EZProxy if not open access and not already wrapped
         if not is_oa and self.config.ezproxy_prefix not in url:
-            logger.debug("Wrapping URL with EZProxy: %s", url)
+            original_url = url
             url = self.config.ezproxy_prefix + url
+            logger.info("resolve_pdf_url: EZProxy wrapped %s -> %s", original_url, url)
 
         return url
 
@@ -124,6 +134,16 @@ class ArticleDownloader:
                 result["host_path"] = self._copy_to_host(cache_path, record_id, metadata)
             return result
 
+        # Log cookie state for diagnostics
+        cookie_names = list(self.session.cookies.keys())
+        ezproxy_cookies = [n for n in cookie_names if "ezproxy" in n.lower()]
+        logger.info(
+            "download_pdf: cookies=%s, ezproxy_cookies=%s",
+            cookie_names, ezproxy_cookies or "NONE",
+        )
+        if not ezproxy_cookies:
+            logger.warning("download_pdf: no EZProxy cookies found — auth may fail for proxied URLs")
+
         logger.info("Downloading PDF from %s for record %s", url, record_id)
         try:
             resp = self.session.get(url, timeout=self.config.download_timeout, stream=True)
@@ -133,13 +153,32 @@ class ArticleDownloader:
             logger.error("Download timeout for %s: %s", record_id, url)
             return result
         except requests.exceptions.HTTPError as e:
-            result["error"] = f"HTTP error {e.response.status_code}: {e}"
-            logger.error("Download HTTP error for %s: %s", record_id, e)
+            status = e.response.status_code if e.response is not None else "unknown"
+            content_type = (e.response.headers.get("Content-Type", "unknown")
+                           if e.response is not None else "unknown")
+            final_url = e.response.url if e.response is not None else url
+            redirect_count = len(e.response.history) if e.response is not None else 0
+            logger.error(
+                "Download HTTP error for %s: status=%s content_type=%s final_url=%s redirects=%d",
+                record_id, status, content_type, final_url, redirect_count,
+            )
+            result["error"] = (
+                f"HTTP error {status} (Content-Type: {content_type}, "
+                f"final URL: {final_url})"
+            )
             return result
         except requests.exceptions.RequestException as e:
             result["error"] = f"Download failed: {e}"
             logger.error("Download failed for %s: %s", record_id, e)
             return result
+
+        # Log successful HTTP response diagnostics
+        redirect_count = len(resp.history)
+        content_type = resp.headers.get("Content-Type", "unknown")
+        logger.info(
+            "download_pdf: HTTP 200, content_type=%s, redirects=%d, final_url=%s",
+            content_type, redirect_count, resp.url,
+        )
 
         # Write to cache
         cache_path.parent.mkdir(parents=True, exist_ok=True)
@@ -149,11 +188,17 @@ class ArticleDownloader:
 
         # Validate PDF magic bytes
         with open(cache_path, "rb") as f:
-            header = f.read(5)
-        if header != b"%PDF-":
-            logger.warning("Downloaded content is not a PDF for %s (got %r)", record_id, header[:20])
+            header = f.read(200)
+        if not header[:5] == b"%PDF-":
+            logger.warning(
+                "Downloaded content is not a PDF for %s: content_type=%s final_url=%s body_preview=%r",
+                record_id, content_type, resp.url, header[:200],
+            )
             cache_path.unlink(missing_ok=True)
-            result["error"] = "Downloaded content is not a PDF (may be a login page or HTML redirect)"
+            result["error"] = (
+                f"Downloaded content is not a PDF (Content-Type: {content_type}, "
+                f"final URL: {resp.url}). May be a login page or HTML redirect."
+            )
             return result
 
         size = cache_path.stat().st_size
