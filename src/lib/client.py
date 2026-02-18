@@ -494,13 +494,46 @@ class SFULibraryClient:
             try:
                 logger.info("Establishing EZProxy session...")
                 driver.get(EZPROXY_TARGET)
-                time.sleep(3)  # Allow CAS redirect to complete
+
+                # Wait for CAS redirect chain to complete (login -> CAS -> EZProxy -> target)
+                # The login page URL contains proxy.lib.sfu.ca/login; after success
+                # it should redirect to the target (sfu.ca) or at least away from /login
+                max_wait = 30
+                poll_interval = 1
+                waited = 0
+                while waited < max_wait:
+                    current = driver.current_url
+                    # Success: redirected away from the EZProxy login page
+                    if "proxy.lib.sfu.ca/login" not in current:
+                        logger.info("EZProxy redirect completed after %ds: %s", waited, current)
+                        break
+                    time.sleep(poll_interval)
+                    waited += poll_interval
+                else:
+                    logger.warning(
+                        "EZProxy redirect did not complete within %ds (still on %s)",
+                        max_wait, driver.current_url,
+                    )
+
                 logger.info("EZProxy session URL: %s", driver.current_url)
-                # Capture EZProxy cookies and merge (don't overwrite Primo cookies)
+
+                # Capture ALL cookies from all domains (EZProxy sets cookies
+                # on proxy.lib.sfu.ca which don't contain "ezproxy" in the name)
                 for cookie in driver.get_cookies():
-                    if cookie["name"] not in self.cookies:
-                        self.cookies[cookie["name"]] = cookie["value"]
-                        logger.debug("Captured EZProxy cookie: %s (domain: %s)", cookie["name"], cookie.get("domain", "unknown"))
+                    self.cookies[cookie["name"]] = cookie["value"]
+                    domain = cookie.get("domain", "unknown")
+                    logger.debug("Captured EZProxy-phase cookie: %s (domain: %s)", cookie["name"], domain)
+
+                # Log summary of captured cookies by domain
+                ez_domains = set()
+                for cookie in driver.get_cookies():
+                    d = cookie.get("domain", "")
+                    if "proxy" in d or "ezproxy" in d:
+                        ez_domains.add(d)
+                if ez_domains:
+                    logger.info("EZProxy cookies captured from domains: %s", ez_domains)
+                else:
+                    logger.warning("No proxy-domain cookies captured — EZProxy auth may have failed")
             except Exception as e:
                 logger.warning("EZProxy session setup failed (downloads may not work): %s", e)
 
