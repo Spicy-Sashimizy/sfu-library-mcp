@@ -1302,9 +1302,16 @@ async def _handle_download_article(args: dict, client) -> list[TextContent]:
     copy_to_host = save_to_host and features.get("host_download_enabled", True)
 
     # Try each available URL (direct + EZProxy fallback per URL) until one succeeds
+    config = _get_config()
+    budget = config.download_budget_seconds
+    start_time = time.time()
     errors = []
     result = None
     for url in urls:
+        elapsed = time.time() - start_time
+        if elapsed > budget:
+            errors.append(f"  (skipped remaining URLs — {budget:.0f}s time budget exceeded)")
+            break
         result = downloader.download_pdf(url, record_id, metadata, copy_to_host=copy_to_host)
         if result["success"]:
             break
@@ -1351,9 +1358,16 @@ async def _handle_read_article(args: dict, client) -> list[TextContent]:
     if not urls:
         return [TextContent(type="text", text=f"No PDF URL found for record {record_id}. The item may not have an accessible PDF.")]
 
+    config = _get_config()
+    budget = config.download_budget_seconds
+    start_time = time.time()
     errors = []
     result = None
     for url in urls:
+        elapsed = time.time() - start_time
+        if elapsed > budget:
+            errors.append(f"  (skipped remaining URLs — {budget:.0f}s time budget exceeded)")
+            break
         result = downloader.download_pdf(url, record_id, metadata, copy_to_host=False)
         if result["success"]:
             break

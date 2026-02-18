@@ -92,6 +92,7 @@ class ServerConfig:
     download_min_delay: float = 3.0   # seconds, minimum inter-download delay
     download_max_delay: float = 8.0   # seconds, maximum inter-download delay
     download_backfill_cap: int = 10   # max items per backfill run
+    download_budget_seconds: float = 90.0  # total time budget for all URL attempts per article
 
     # Multi-profile support (CONFIG-004)
     active_profile: str = "default"
@@ -170,6 +171,7 @@ def load_config() -> ServerConfig:
         download_min_delay=float(os.environ.get("SFU_DOWNLOAD_MIN_DELAY", "3.0")),
         download_max_delay=float(os.environ.get("SFU_DOWNLOAD_MAX_DELAY", "8.0")),
         download_backfill_cap=int(os.environ.get("SFU_DOWNLOAD_BACKFILL_CAP", "10")),
+        download_budget_seconds=float(os.environ.get("SFU_DOWNLOAD_BUDGET_SECONDS", "90")),
     )
 
 
