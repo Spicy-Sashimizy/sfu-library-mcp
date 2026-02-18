@@ -458,7 +458,7 @@ class TestDownloadFromUrlTool:
 
     @pytest.mark.asyncio
     async def test_download_from_url_with_ezproxy(self, mock_client):
-        """use_ezproxy=True should wrap the URL."""
+        """use_ezproxy=True should wrap the URL in hostname-based proxy format."""
         mock_result = {
             "success": True,
             "container_path": "/tmp/test.pdf",
@@ -475,9 +475,10 @@ class TestDownloadFromUrlTool:
                 {"url": "https://example.com/paper.pdf", "use_ezproxy": True},
                 mock_client,
             )
-        # Check that the URL was wrapped
+        # Check that the URL was wrapped in hostname-based proxy format
         call_args = mock_dl.download_from_direct_url.call_args
-        assert "proxy.lib.sfu.ca" in call_args[1].get("url", call_args[0][0] if call_args[0] else "")
+        called_url = call_args[1].get("url", call_args[0][0] if call_args[0] else "")
+        assert "example-com.proxy.lib.sfu.ca" in called_url
 
     @pytest.mark.asyncio
     async def test_download_from_url_empty_url(self, mock_client):

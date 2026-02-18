@@ -197,6 +197,8 @@ def dl_config_tiered():
         download_timeout=30,
         max_pdf_text_chars=1000,
         ezproxy_prefix="https://proxy.lib.sfu.ca/login?url=",
+        ezproxy_login_url="https://login.proxy.lib.sfu.ca/login?qurl=",
+        ezproxy_proxy_base="proxy.lib.sfu.ca",
         download_tiers=["curl_cffi", "playwright", "requests"],
         playwright_timeout=10,
     )

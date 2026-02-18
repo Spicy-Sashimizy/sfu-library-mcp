@@ -22,8 +22,20 @@ class TestExtractDomain:
     def test_deep_subdomain(self):
         assert PublisherRouter.extract_domain("https://journals.sagepub.com/doi/full/10.1177/123") == "sagepub.com"
 
-    def test_proxy_url(self):
-        """Proxy-wrapped URLs should extract the proxy domain."""
+    def test_proxy_url_hostname_based(self):
+        """Hostname-based proxy URLs should extract the original publisher domain."""
+        assert PublisherRouter.extract_domain("https://onlinelibrary-wiley-com.proxy.lib.sfu.ca/doi/123") == "wiley.com"
+
+    def test_proxy_url_sagepub(self):
+        """Hostname-based proxy URLs for SAGE should extract sagepub.com."""
+        assert PublisherRouter.extract_domain("https://journals-sagepub-com.proxy.lib.sfu.ca/doi/pdf/10.1177/123") == "sagepub.com"
+
+    def test_proxy_url_sciencedirect(self):
+        """Hostname-based proxy URLs for ScienceDirect should extract sciencedirect.com."""
+        assert PublisherRouter.extract_domain("https://www-sciencedirect-com.proxy.lib.sfu.ca/science/article/123") == "sciencedirect.com"
+
+    def test_legacy_prefix_proxy_url(self):
+        """Legacy prefix-mode proxy URLs should extract the proxy domain (sfu.ca)."""
         assert PublisherRouter.extract_domain("https://proxy.lib.sfu.ca/login?url=https://example.com") == "sfu.ca"
 
     def test_empty_url(self):

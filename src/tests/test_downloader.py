@@ -15,6 +15,8 @@ from lib.downloader import (
     DownloadError,
     FetchResult,
     PDFTextExtractionError,
+    make_proxied_url,
+    unwrap_proxied_hostname,
 )
 from lib.publisher_router import PublisherRouter, DomainClass
 from lib.rate_limiter import DownloadRateLimiter, RateLimitExceeded
@@ -28,6 +30,8 @@ def dl_config():
         download_timeout=30,
         max_pdf_text_chars=1000,
         ezproxy_prefix="https://proxy.lib.sfu.ca/login?url=",
+        ezproxy_login_url="https://login.proxy.lib.sfu.ca/login?qurl=",
+        ezproxy_proxy_base="proxy.lib.sfu.ca",
         download_tiers=["curl_cffi", "playwright", "requests"],
     )
 
@@ -93,7 +97,7 @@ class TestEZProxyWrapping:
         """Already-wrapped URL in PNX record should be returned unchanged."""
         sample_article_record["pnx"]["links"]["openaccess"] = []
         sample_article_record["pnx"]["links"]["linktopdf"] = [
-            "https://proxy.lib.sfu.ca/login?url=https://example.com/article.pdf"
+            "https://example-com.proxy.lib.sfu.ca/article.pdf"
         ]
         url = downloader.resolve_pdf_url(sample_article_record)
         assert url is not None
@@ -210,7 +214,7 @@ class TestDirectFirstEZProxyFallback:
             status_code=200,
             content_type="application/pdf",
             tier_used="curl_cffi",
-            url="https://proxy.lib.sfu.ca/login?url=https://example.com/article.pdf",
+            url="https://example-com.proxy.lib.sfu.ca/article.pdf",
         )
         with patch.object(
             downloader, "_tiered_fetch",
@@ -220,10 +224,10 @@ class TestDirectFirstEZProxyFallback:
                 "https://example.com/article.pdf", "rec_fallback", copy_to_host=False
             )
         assert result["success"] is True
-        # Called twice: direct first, then EZProxy
+        # Called twice: direct first, then EZProxy (hostname-based)
         assert mock_fetch.call_count == 2
         assert "proxy.lib.sfu.ca" not in mock_fetch.call_args_list[0][0][0]
-        assert "proxy.lib.sfu.ca" in mock_fetch.call_args_list[1][0][0]
+        assert "example-com.proxy.lib.sfu.ca" in mock_fetch.call_args_list[1][0][0]
 
     def test_direct_login_page_triggers_ezproxy(self, dl_config, tmp_path):
         """Login page on direct should trigger EZProxy fallback."""
@@ -242,7 +246,7 @@ class TestDirectFirstEZProxyFallback:
             status_code=200,
             content_type="application/pdf",
             tier_used="curl_cffi",
-            url="https://proxy.lib.sfu.ca/login?url=https://example.com/article.pdf",
+            url="https://example-com.proxy.lib.sfu.ca/article.pdf",
         )
         with patch.object(
             downloader, "_tiered_fetch",
@@ -405,12 +409,12 @@ class TestDownloadPdf:
             status_code=200,
             content_type="text/html",
             tier_used="curl_cffi",
-            url="https://proxy.lib.sfu.ca/login",
+            url="https://login.proxy.lib.sfu.ca/login",
         )
-        # URL contains ezproxy prefix so no EZProxy retry
+        # URL contains proxy base so no EZProxy retry
         with patch.object(downloader, "_tiered_fetch", return_value=fetch_result):
             result = downloader.download_pdf(
-                "https://proxy.lib.sfu.ca/login?url=https://example.com/test.pdf",
+                "https://example-com.proxy.lib.sfu.ca/test.pdf",
                 "rec_002",
                 copy_to_host=False,
             )
@@ -422,7 +426,7 @@ class TestDownloadPdf:
         """All tiers failing should return error."""
         with patch.object(downloader, "_tiered_fetch", side_effect=DownloadError("All download tiers failed for url. Last error: timeout")):
             result = downloader.download_pdf(
-                "https://proxy.lib.sfu.ca/login?url=https://example.com/nope.pdf",
+                "https://example-com.proxy.lib.sfu.ca/nope.pdf",
                 "rec_003",
                 copy_to_host=False,
             )
@@ -473,7 +477,7 @@ class TestEZProxyFallback:
             status_code=200,
             content_type="application/pdf",
             tier_used="curl_cffi",
-            url="https://proxy.lib.sfu.ca/login?url=https://example.com/article.pdf",
+            url="https://example-com.proxy.lib.sfu.ca/article.pdf",
         )
         # First call fails, second (EZProxy) succeeds
         with patch.object(
@@ -492,7 +496,7 @@ class TestEZProxyFallback:
             side_effect=DownloadError("All failed"),
         ):
             result = downloader.download_pdf(
-                "https://proxy.lib.sfu.ca/login?url=https://example.com/article.pdf",
+                "https://example-com.proxy.lib.sfu.ca/article.pdf",
                 "rec_no_retry",
                 copy_to_host=False,
             )
@@ -1039,15 +1043,68 @@ class TestPublisherRouterIntegration:
             status_code=200,
             content_type="text/html",
             tier_used="curl_cffi",
-            url="https://proxy.lib.sfu.ca/login",
+            url="https://login.proxy.lib.sfu.ca/login",
         )
         with patch.object(dl_with_router, "_tiered_fetch", return_value=fetch_result):
             result = dl_with_router.download_pdf(
-                "https://proxy.lib.sfu.ca/login?url=https://example.com/test.pdf",
+                "https://example-com.proxy.lib.sfu.ca/test.pdf",
                 "rec_html",
                 copy_to_host=False,
             )
 
         assert result["success"] is False
         # Should NOT be DIRECT_OK since the PDF validation failed
-        assert router.get_domain_class("https://proxy.lib.sfu.ca/anything") != DomainClass.DIRECT_OK
+        assert router.get_domain_class("https://example.com/anything") != DomainClass.DIRECT_OK
+
+
+class TestMakeProxiedUrl:
+    """Test the make_proxied_url utility function."""
+
+    def test_dots_to_hyphens(self):
+        result = make_proxied_url("https://onlinelibrary.wiley.com/doi/epdf/10.1111/aspp.12689")
+        assert result == "https://onlinelibrary-wiley-com.proxy.lib.sfu.ca/doi/epdf/10.1111/aspp.12689"
+
+    def test_sciencedirect(self):
+        result = make_proxied_url("https://www.sciencedirect.com/science/article/pii/S095539592100013X")
+        assert result == "https://www-sciencedirect-com.proxy.lib.sfu.ca/science/article/pii/S095539592100013X"
+
+    def test_oup(self):
+        result = make_proxied_url("https://academic.oup.com/ips/article/18/1/olad022/7529023")
+        assert result == "https://academic-oup-com.proxy.lib.sfu.ca/ips/article/18/1/olad022/7529023"
+
+    def test_already_proxied(self):
+        """Already-proxied URLs should be returned as-is."""
+        url = "https://onlinelibrary-wiley-com.proxy.lib.sfu.ca/doi/123"
+        assert make_proxied_url(url) == url
+
+    def test_preserves_path_and_query(self):
+        result = make_proxied_url("https://example.com/path/to/page?foo=bar&baz=1#section")
+        assert result == "https://example-com.proxy.lib.sfu.ca/path/to/page?foo=bar&baz=1#section"
+
+    def test_no_hostname(self):
+        """URLs without hostname should be returned as-is."""
+        assert make_proxied_url("not-a-url") == "not-a-url"
+
+    def test_custom_proxy_base(self):
+        result = make_proxied_url("https://example.com/page", proxy_base="custom.proxy.edu")
+        assert result == "https://example-com.custom.proxy.edu/page"
+
+
+class TestUnwrapProxiedHostname:
+    """Test the unwrap_proxied_hostname utility function."""
+
+    def test_unwrap_wiley(self):
+        assert unwrap_proxied_hostname("onlinelibrary-wiley-com.proxy.lib.sfu.ca") == "onlinelibrary.wiley.com"
+
+    def test_unwrap_sagepub(self):
+        assert unwrap_proxied_hostname("journals-sagepub-com.proxy.lib.sfu.ca") == "journals.sagepub.com"
+
+    def test_unwrap_sciencedirect(self):
+        assert unwrap_proxied_hostname("www-sciencedirect-com.proxy.lib.sfu.ca") == "www.sciencedirect.com"
+
+    def test_non_proxied_passthrough(self):
+        """Non-proxied hostnames should be returned as-is."""
+        assert unwrap_proxied_hostname("example.com") == "example.com"
+
+    def test_custom_proxy_base(self):
+        assert unwrap_proxied_hostname("foo-bar-com.custom.proxy.edu", proxy_base="custom.proxy.edu") == "foo.bar.com"

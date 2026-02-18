@@ -19,6 +19,8 @@ def dl_config():
         download_timeout=30,
         max_pdf_text_chars=1000,
         ezproxy_prefix="https://proxy.lib.sfu.ca/login?url=",
+        ezproxy_login_url="https://login.proxy.lib.sfu.ca/login?qurl=",
+        ezproxy_proxy_base="proxy.lib.sfu.ca",
         download_tiers=["curl_cffi", "playwright", "requests"],
     )
 
@@ -55,7 +57,7 @@ class TestDownloadAuthFlow:
         )
         with patch.object(downloader, "_tiered_fetch", return_value=fetch_result):
             result = downloader.download_pdf(
-                "https://proxy.lib.sfu.ca/login?url=https://example.com/article.pdf",
+                "https://example-com.proxy.lib.sfu.ca/article.pdf",
                 "rec_auth_test",
                 copy_to_host=False,
             )
@@ -79,7 +81,7 @@ class TestDownloadAuthFlow:
         with patch.object(downloader, "_tiered_fetch", return_value=fetch_result):
             with caplog.at_level(logging.WARNING, logger="sfu_library_mcp"):
                 result = downloader.download_pdf(
-                    "https://proxy.lib.sfu.ca/login?url=https://example.com/article.pdf",
+                    "https://example-com.proxy.lib.sfu.ca/article.pdf",
                     "rec_no_ezproxy",
                     copy_to_host=False,
                 )
@@ -98,7 +100,7 @@ class TestDownloadAuthFlow:
             side_effect=DownloadError("All download tiers failed for url. Last error: HTTP 403"),
         ):
             result = downloader.download_pdf(
-                "https://proxy.lib.sfu.ca/login?url=https://example.com/article.pdf",
+                "https://example-com.proxy.lib.sfu.ca/article.pdf",
                 "rec_403",
                 copy_to_host=False,
             )
@@ -116,11 +118,11 @@ class TestDownloadAuthFlow:
             status_code=200,
             content_type="text/html; charset=utf-8",
             tier_used="curl_cffi",
-            url="https://proxy.lib.sfu.ca/login",
+            url="https://login.proxy.lib.sfu.ca/login",
         )
         with patch.object(downloader, "_tiered_fetch", return_value=fetch_result):
             result = downloader.download_pdf(
-                "https://proxy.lib.sfu.ca/login?url=https://example.com/article.pdf",
+                "https://example-com.proxy.lib.sfu.ca/article.pdf",
                 "rec_html_redirect",
                 copy_to_host=False,
             )
