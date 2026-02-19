@@ -705,13 +705,13 @@ class TestCircuitBreakerIntegration:
     def test_circuit_breaker_initialized(self, downloader):
         """ArticleDownloader should have a circuit breaker."""
         assert downloader._circuit_breaker is not None
-        assert downloader._circuit_breaker.threshold == 3
-        assert downloader._circuit_breaker.timeout == 120.0
+        assert downloader._circuit_breaker.threshold == 5
+        assert downloader._circuit_breaker.timeout == 60.0
 
     def test_circuit_breaker_blocks_after_failures(self, downloader):
         """After threshold failures, circuit breaker should block."""
-        # Manually trip the circuit breaker
-        for _ in range(3):
+        # Manually trip the circuit breaker (threshold is 5 from config)
+        for _ in range(5):
             downloader._circuit_breaker.record_failure()
 
         with pytest.raises(DownloadError, match="circuit breaker open"):
