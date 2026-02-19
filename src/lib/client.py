@@ -498,14 +498,34 @@ class SFULibraryClient:
 
                 # Wait for CAS redirect chain to complete (login -> CAS -> EZProxy -> target)
                 # The login host is login.proxy.lib.sfu.ca; after success
-                # it should redirect to the target (sfu.ca) or at least away from login host
+                # it should redirect to the target (sfu.ca) or at least away from login host.
+                # Note: failed auth can land on proxy.lib.sfu.ca/login (without the
+                # "login." prefix), so we must check for ANY login-related URL.
                 max_wait = 30
                 poll_interval = 1
                 waited = 0
+
+                def _is_still_on_login(url: str) -> bool:
+                    """Return True if the URL looks like an EZProxy/CAS login page."""
+                    from urllib.parse import urlparse
+                    parsed = urlparse(url)
+                    hostname = parsed.hostname or ""
+                    path = parsed.path or ""
+                    # login.proxy.lib.sfu.ca (the initial login host)
+                    if "login.proxy.lib.sfu.ca" in hostname:
+                        return True
+                    # proxy.lib.sfu.ca/login (fallback login page)
+                    if hostname == "proxy.lib.sfu.ca" and "/login" in path:
+                        return True
+                    # CAS single-sign-on page
+                    if "cas.sfu.ca" in hostname:
+                        return True
+                    return False
+
                 while waited < max_wait:
                     current = driver.current_url
-                    # Success: redirected away from the EZProxy login page
-                    if "login.proxy.lib.sfu.ca" not in current:
+                    # Success: redirected away from all login-related pages
+                    if not _is_still_on_login(current):
                         logger.info("EZProxy redirect completed after %ds: %s", waited, current)
                         break
                     time.sleep(poll_interval)

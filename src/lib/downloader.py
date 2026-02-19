@@ -82,7 +82,10 @@ class ArticleDownloader:
         self._session: requests.Session | None = None
         self.rate_limiter = rate_limiter
         self._publisher_router = publisher_router
-        self._circuit_breaker = CircuitBreaker(threshold=3, timeout=120.0)
+        self._circuit_breaker = CircuitBreaker(
+            threshold=config.circuit_breaker_threshold,
+            timeout=config.circuit_breaker_timeout,
+        )
 
         # Probe which download tiers are actually importable at startup
         self._available_tiers: set[str] = {"requests"}  # always available
