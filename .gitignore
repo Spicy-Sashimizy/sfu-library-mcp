@@ -1,6 +1,9 @@
 .pommel/
 .pommel
 
+# Python virtual environment
+.venv/
+
 
 # ============================================
 # CLAUDEBOX SECRET PROTECTION - .gitignore
