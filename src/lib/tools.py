@@ -704,6 +704,25 @@ TOOL_DEFINITIONS: list[Tool] = [
             "required": ["url"],
         },
     ),
+    Tool(
+        name="get_diagnostics",
+        description=(
+            "Get a comprehensive diagnostic report for the SFU Library MCP server. "
+            "Shows token status, cookie inventory, EZProxy session state, download tier "
+            "availability, circuit breaker and rate limiter state, log file info, "
+            "recent errors, and tool metrics."
+        ),
+        inputSchema={
+            "type": "object",
+            "properties": {
+                "include_recent_errors": {
+                    "type": "boolean",
+                    "description": "Include last 10 ERROR/WARNING lines from log file (default: true)",
+                    "default": True,
+                }
+            },
+        },
+    ),
 ]
 
 
@@ -804,6 +823,8 @@ async def _dispatch_tool(
         return await _handle_backfill_collection_pdfs(arguments, lib_client)
     elif name == "download_from_url":
         return _handle_download_from_url(arguments, lib_client)
+    elif name == "get_diagnostics":
+        return _handle_get_diagnostics(arguments, lib_client)
     else:
         return [TextContent(type="text", text=f"Unknown tool: {name}")]
 
@@ -1942,4 +1963,142 @@ async def _handle_backfill_collection_pdfs(args: dict, client) -> list[TextConte
         "",
     ] + details
 
+    return [TextContent(type="text", text="\n".join(output))]
+
+
+# ─── Diagnostics handler ────────────────────────────────────────
+
+def _handle_get_diagnostics(args: dict, client) -> list[TextContent]:
+    """Generate a comprehensive diagnostic report."""
+    import os
+    import datetime
+
+    include_errors = args.get("include_recent_errors", True)
+    output = ["=" * 60, "SFU LIBRARY MCP — DIAGNOSTIC REPORT", "=" * 60]
+
+    # 1. Token status
+    output.append("\n--- Token Status ---")
+    try:
+        status = client.get_token_status()
+        if status.get("valid"):
+            output.append("  Status: VALID")
+            output.append(f"  User: {status.get('user', 'Unknown')} ({status.get('userId', '')})")
+            output.append(f"  Group: {status.get('userGroup', '')}")
+            output.append(f"  Expires: {status.get('expiresIn', '')} ({status.get('expiresAt', '')})")
+        else:
+            output.append(f"  Status: INVALID — {status.get('message', 'Unknown')}")
+    except Exception as e:
+        output.append(f"  Error: {e}")
+
+    # 2. Cookie inventory
+    output.append("\n--- Cookie Inventory ---")
+    cookies = getattr(client, "cookies", {})
+    output.append(f"  Total cookies: {len(cookies)}")
+    proxy_cookies = [n for n in cookies if "proxy" in n.lower() or "ezproxy" in n.lower()]
+    secure_cookies = [n for n in cookies if n.startswith("__Secure-") or n.startswith("__Host-")]
+    output.append(f"  Proxy cookies: {proxy_cookies if proxy_cookies else '(none)'}")
+    output.append(f"  __Secure-/__Host- cookies: {secure_cookies if secure_cookies else '(none)'}")
+    if cookies:
+        output.append(f"  All cookie names: {list(cookies.keys())}")
+
+    # 3. EZProxy session status
+    output.append("\n--- EZProxy Session ---")
+    if proxy_cookies:
+        output.append("  Status: Cookies present (session likely active)")
+    else:
+        output.append("  Status: NO proxy cookies — session not established")
+        output.append("  Action: Re-authenticate to establish EZProxy session")
+
+    # 4. Download tier availability
+    output.append("\n--- Download Tier Availability ---")
+    tier_status = {}
+    try:
+        import curl_cffi  # noqa: F401
+        tier_status["curl_cffi"] = "AVAILABLE"
+    except ImportError:
+        tier_status["curl_cffi"] = "NOT INSTALLED"
+    try:
+        from playwright.sync_api import sync_playwright  # noqa: F401
+        tier_status["playwright"] = "AVAILABLE"
+    except ImportError:
+        tier_status["playwright"] = "NOT INSTALLED"
+    tier_status["requests"] = "AVAILABLE (built-in)"
+    for tier, status_str in tier_status.items():
+        output.append(f"  {tier}: {status_str}")
+
+    # 5. Circuit breaker state
+    output.append("\n--- Circuit Breaker ---")
+    try:
+        downloader = _get_downloader(client)
+        cb = downloader._circuit_breaker
+        can_proceed = cb.can_proceed()
+        output.append(f"  Can proceed: {can_proceed}")
+        output.append(f"  Failure count: {cb._failure_count}")
+        output.append(f"  Threshold: {cb._threshold}")
+        output.append(f"  Timeout: {cb._timeout}s")
+        if hasattr(cb, '_last_failure_time') and cb._last_failure_time:
+            last_fail = datetime.datetime.fromtimestamp(cb._last_failure_time).isoformat()
+            output.append(f"  Last failure: {last_fail}")
+    except Exception as e:
+        output.append(f"  Error: {e}")
+
+    # 6. Rate limiter state
+    output.append("\n--- Rate Limiter ---")
+    try:
+        rate_limiter = _get_rate_limiter()
+        budget_status = rate_limiter.get_budget_status()
+        output.append(f"  Session remaining: {budget_status['session_remaining']}/{budget_status['session_budget']}")
+        output.append(f"  Hourly: {budget_status['hourly_used']}/{budget_status['hourly_limit']} used")
+        if budget_status.get("per_domain"):
+            output.append(f"  Per-domain stats: {budget_status['per_domain']}")
+    except Exception as e:
+        output.append(f"  Error: {e}")
+
+    # 7. Log file info
+    output.append("\n--- Log File ---")
+    log_path = "/tmp/sfu-library-mcp.log"
+    try:
+        if os.path.exists(log_path):
+            stat = os.stat(log_path)
+            size_kb = stat.st_size / 1024
+            modified = datetime.datetime.fromtimestamp(stat.st_mtime).isoformat()
+            output.append(f"  Path: {log_path}")
+            output.append(f"  Size: {size_kb:.1f} KB")
+            output.append(f"  Last modified: {modified}")
+        else:
+            output.append(f"  Path: {log_path} (not found)")
+    except Exception as e:
+        output.append(f"  Error: {e}")
+
+    # 8. Recent errors from log
+    if include_errors:
+        output.append("\n--- Recent Errors/Warnings (last 10) ---")
+        try:
+            if os.path.exists(log_path):
+                with open(log_path, "r") as f:
+                    lines = f.readlines()
+                error_lines = [
+                    line.rstrip() for line in lines
+                    if " ERROR " in line or " WARNING " in line
+                ]
+                for line in error_lines[-10:]:
+                    output.append(f"  {line[:200]}")
+                if not error_lines:
+                    output.append("  (no errors or warnings found)")
+            else:
+                output.append("  (log file not found)")
+        except Exception as e:
+            output.append(f"  Error reading log: {e}")
+
+    # 9. Tool metrics
+    output.append("\n--- Tool Metrics ---")
+    metrics = get_metrics()
+    if metrics:
+        for tool_name, m in sorted(metrics.items()):
+            avg_latency = m["total_latency"] / m["count"] if m["count"] > 0 else 0
+            output.append(f"  {tool_name}: {m['count']} calls, {m['errors']} errors, avg {avg_latency:.2f}s")
+    else:
+        output.append("  (no metrics recorded yet)")
+
+    output.append("\n" + "=" * 60)
     return [TextContent(type="text", text="\n".join(output))]
