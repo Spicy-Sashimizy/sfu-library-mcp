@@ -19,6 +19,7 @@ services:
       - claude-local:/home/vscode/.local:cached
       - C:/Users/gordo/.claudebox/credentials.json:/home/vscode/.claudebox-credentials/credentials.json:ro
       - C:/Users/gordo/Downloads:/mnt/host-downloads
+      - C:/Users/gordo/AppData/Roaming/Claude/logs:/mnt/claude-desktop-logs:ro
     entrypoint: ["/bin/bash", "/usr/local/bin/claudebox-entrypoint.sh"]
     command: sleep infinity
     env_file:
