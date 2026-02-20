@@ -496,14 +496,15 @@ class SFULibraryClient:
                 logger.info("Establishing EZProxy session via %s", EZPROXY_TARGET)
                 driver.get(EZPROXY_TARGET)
 
+                # Allow initial redirect chain to start before polling
+                time.sleep(3)
+                logger.info("EZProxy: initial URL after 3s sleep: %s", driver.current_url)
+
                 # Wait for CAS redirect chain to complete (login -> CAS -> EZProxy -> target)
-                # The login host is login.proxy.lib.sfu.ca; after success
-                # it should redirect to the target (sfu.ca) or at least away from login host.
-                # Note: failed auth can land on proxy.lib.sfu.ca/login (without the
-                # "login." prefix), so we must check for ANY login-related URL.
                 max_wait = 30
                 poll_interval = 1
                 waited = 0
+                last_url = driver.current_url
 
                 def _is_still_on_login(url: str) -> bool:
                     """Return True if the URL looks like an EZProxy/CAS login page."""
@@ -511,19 +512,20 @@ class SFULibraryClient:
                     parsed = urlparse(url)
                     hostname = parsed.hostname or ""
                     path = parsed.path or ""
-                    # login.proxy.lib.sfu.ca (the initial login host)
                     if "login.proxy.lib.sfu.ca" in hostname:
                         return True
-                    # proxy.lib.sfu.ca/login (fallback login page)
                     if hostname == "proxy.lib.sfu.ca" and "/login" in path:
                         return True
-                    # CAS single-sign-on page
                     if "cas.sfu.ca" in hostname:
                         return True
                     return False
 
                 while waited < max_wait:
                     current = driver.current_url
+                    # Log URL transitions
+                    if current != last_url:
+                        logger.info("EZProxy redirect step [%ds]: %s -> %s", waited, last_url, current)
+                        last_url = current
                     # Success: redirected away from all login-related pages
                     if not _is_still_on_login(current):
                         logger.info("EZProxy redirect completed after %ds: %s", waited, current)
@@ -540,17 +542,30 @@ class SFULibraryClient:
 
                 # Capture ALL cookies from all domains (EZProxy sets cookies
                 # on proxy.lib.sfu.ca which don't contain "ezproxy" in the name)
-                for cookie in driver.get_cookies():
+                all_cookies = driver.get_cookies()
+                for cookie in all_cookies:
                     self.cookies[cookie["name"]] = cookie["value"]
                     domain = cookie.get("domain", "unknown")
-                    logger.debug("Captured EZProxy-phase cookie: %s (domain: %s)", cookie["name"], domain)
+                    logger.info("Captured EZProxy-phase cookie: %s (domain: %s, secure: %s, path: %s)",
+                                cookie["name"], domain, cookie.get("secure", False), cookie.get("path", "/"))
 
-                # Log summary of captured cookies by domain
-                ez_domains = set()
-                for cookie in driver.get_cookies():
-                    d = cookie.get("domain", "")
-                    if "proxy" in d or "ezproxy" in d:
-                        ez_domains.add(d)
+                # Log complete cookie summary
+                cookie_domains: dict[str, list[str]] = {}
+                secure_prefix_cookies = []
+                for cookie in all_cookies:
+                    d = cookie.get("domain", "unknown")
+                    cookie_domains.setdefault(d, []).append(cookie["name"])
+                    if cookie["name"].startswith("__Secure-") or cookie["name"].startswith("__Host-"):
+                        secure_prefix_cookies.append(cookie["name"])
+
+                logger.info("EZProxy cookie summary: %d cookies across %d domains",
+                            len(all_cookies), len(cookie_domains))
+                for domain, names in cookie_domains.items():
+                    logger.info("  Domain %s: %s", domain, names)
+                if secure_prefix_cookies:
+                    logger.info("  __Secure-/__Host- prefixed cookies: %s", secure_prefix_cookies)
+
+                ez_domains = {d for d in cookie_domains if "proxy" in d or "ezproxy" in d}
                 if ez_domains:
                     logger.info("EZProxy cookies captured from domains: %s", ez_domains)
                 else:
