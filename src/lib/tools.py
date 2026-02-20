@@ -160,6 +160,42 @@ def _lookup_cached_record(record_id: str) -> dict | None:
     return _record_cache.get(record_id)
 
 
+# ─── Skip flag schema properties (shared across download tools) ──
+
+_SKIP_FLAG_PROPERTIES = {
+    "skip_ezproxy": {
+        "type": "boolean",
+        "description": "Skip EZProxy fallback entirely (default: false)",
+        "default": False,
+    },
+    "skip_rate_limit": {
+        "type": "boolean",
+        "description": "Skip rate limiter delay/budget checks (default: false)",
+        "default": False,
+    },
+    "skip_tiers": {
+        "type": "array",
+        "items": {"type": "string"},
+        "description": "Tiers to skip, e.g. [\"playwright\", \"requests\"]",
+    },
+    "skip_pdf_check": {
+        "type": "boolean",
+        "description": "Skip PDF magic-byte validation — accept any content (default: false)",
+        "default": False,
+    },
+    "skip_login_check": {
+        "type": "boolean",
+        "description": "Skip login/auth page detection (default: false)",
+        "default": False,
+    },
+    "skip_copy_to_host": {
+        "type": "boolean",
+        "description": "Skip copying PDF to host Downloads folder (default: false)",
+        "default": False,
+    },
+}
+
+
 # ─── Tool definitions ───────────────────────────────────────────
 
 TOOL_DEFINITIONS: list[Tool] = [
@@ -476,7 +512,8 @@ TOOL_DEFINITIONS: list[Tool] = [
                     "type": "boolean",
                     "description": "Also copy PDF to host Downloads folder (default: true)",
                     "default": True
-                }
+                },
+                **_SKIP_FLAG_PROPERTIES,
             },
             "required": ["record_id"]
         }
@@ -493,7 +530,8 @@ TOOL_DEFINITIONS: list[Tool] = [
                 "record_id": {
                     "type": "string",
                     "description": "The record ID of the item (obtained from search results)"
-                }
+                },
+                **_SKIP_FLAG_PROPERTIES,
             },
             "required": ["record_id"]
         }
@@ -661,6 +699,7 @@ TOOL_DEFINITIONS: list[Tool] = [
                     "description": "Wrap URL with EZProxy prefix for authenticated access",
                     "default": False,
                 },
+                **_SKIP_FLAG_PROPERTIES,
             },
             "required": ["url"],
         },
@@ -1295,6 +1334,18 @@ async def _handle_batch_isbn(args: dict, client) -> list[TextContent]:
 
 # ─── PDF Download + Zotero handlers ───────────────────────────
 
+def _extract_skip_flags(args: dict) -> dict:
+    """Extract skip flag arguments into a dict for downloader."""
+    flags = {}
+    for key in ("skip_ezproxy", "skip_rate_limit", "skip_pdf_check",
+                "skip_login_check", "skip_copy_to_host"):
+        if args.get(key):
+            flags[key] = True
+    if args.get("skip_tiers"):
+        flags["skip_tiers"] = args["skip_tiers"]
+    return flags
+
+
 async def _handle_download_article(args: dict, client) -> list[TextContent]:
     features = _get_features()
     if not features.get("pdf_download_enabled", True):
@@ -1302,6 +1353,7 @@ async def _handle_download_article(args: dict, client) -> list[TextContent]:
 
     record_id = args.get("record_id", "")
     save_to_host = args.get("save_to_host", True)
+    skip_flags = _extract_skip_flags(args)
 
     if not client.ensure_authenticated():
         return [TextContent(type="text", text="Authentication failed.")]
@@ -1317,6 +1369,8 @@ async def _handle_download_article(args: dict, client) -> list[TextContent]:
 
     metadata = extract_metadata(item)
     copy_to_host = save_to_host and features.get("host_download_enabled", True)
+    if skip_flags.get("skip_copy_to_host"):
+        copy_to_host = False
 
     # Try each available URL (direct + EZProxy fallback per URL) until one succeeds
     config = _get_config()
@@ -1329,7 +1383,7 @@ async def _handle_download_article(args: dict, client) -> list[TextContent]:
         if elapsed > budget:
             errors.append(f"  (skipped remaining URLs — {budget:.0f}s time budget exceeded)")
             break
-        result = downloader.download_pdf(url, record_id, metadata, copy_to_host=copy_to_host)
+        result = downloader.download_pdf(url, record_id, metadata, copy_to_host=copy_to_host, skip_flags=skip_flags)
         if result["success"]:
             break
         errors.append(f"  {url}: {result['error']}")
@@ -1359,6 +1413,7 @@ async def _handle_read_article(args: dict, client) -> list[TextContent]:
         return [TextContent(type="text", text="PDF download is disabled. Set SFU_FEATURE_PDF_DOWNLOAD_ENABLED=true to enable.")]
 
     record_id = args.get("record_id", "")
+    skip_flags = _extract_skip_flags(args)
 
     if not client.ensure_authenticated():
         return [TextContent(type="text", text="Authentication failed.")]
@@ -1385,7 +1440,7 @@ async def _handle_read_article(args: dict, client) -> list[TextContent]:
         if elapsed > budget:
             errors.append(f"  (skipped remaining URLs — {budget:.0f}s time budget exceeded)")
             break
-        result = downloader.download_pdf(url, record_id, metadata, copy_to_host=False)
+        result = downloader.download_pdf(url, record_id, metadata, copy_to_host=False, skip_flags=skip_flags)
         if result["success"]:
             break
         errors.append(f"  {url}: {result['error']}")
@@ -1727,6 +1782,7 @@ def _handle_download_from_url(args: dict, client) -> list[TextContent]:
     url = args.get("url", "")
     filename = args.get("filename")
     use_ezproxy = args.get("use_ezproxy", False)
+    skip_flags = _extract_skip_flags(args)
 
     if not url:
         return [TextContent(type="text", text="No URL provided.")]
@@ -1736,7 +1792,7 @@ def _handle_download_from_url(args: dict, client) -> list[TextContent]:
         url = make_proxied_url(url, config.ezproxy_proxy_base)
 
     downloader = _get_downloader(client)
-    result = downloader.download_from_direct_url(url, filename=filename)
+    result = downloader.download_from_direct_url(url, filename=filename, skip_flags=skip_flags)
 
     if not result["success"]:
         return [TextContent(type="text", text=f"Download failed: {result['error']}")]

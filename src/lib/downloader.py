@@ -368,7 +368,8 @@ class ArticleDownloader:
             url=resp.url,
         )
 
-    def _tiered_fetch(self, url: str, cookies: dict | None = None) -> FetchResult:
+    def _tiered_fetch(self, url: str, cookies: dict | None = None,
+                      skip_tiers: list[str] | None = None) -> FetchResult:
         """Iterate through configured tiers in order, returning first success."""
         # Circuit breaker check
         if not self._circuit_breaker.can_proceed():
@@ -384,6 +385,14 @@ class ArticleDownloader:
 
         # Only attempt tiers whose packages are actually importable
         base_tiers = [t for t in self.config.download_tiers if t in self._available_tiers]
+
+        # Apply skip_tiers filter
+        if skip_tiers:
+            skipped = [t for t in base_tiers if t in skip_tiers]
+            base_tiers = [t for t in base_tiers if t not in skip_tiers]
+            if skipped:
+                logger.info("_tiered_fetch: skipped tiers per skip_flags: %s", skipped)
+
         if not base_tiers:
             raise DownloadError(
                 "No download tiers available. Install curl_cffi and/or playwright, "
@@ -526,12 +535,25 @@ class ArticleDownloader:
         record_id: str,
         metadata: dict | None = None,
         copy_to_host: bool = True,
+        skip_flags: dict | None = None,
     ) -> dict:
         """Download a PDF from the given URL using tiered strategy.
 
         Returns dict with keys: success, container_path, host_path,
         size_bytes, tier_used, error.
+
+        skip_flags (optional):
+            skip_ezproxy (bool): Skip EZProxy fallback entirely
+            skip_rate_limit (bool): Skip rate limiter delay/budget checks
+            skip_tiers (list[str]): Tiers to skip, e.g. ["playwright", "requests"]
+            skip_pdf_check (bool): Skip PDF magic-byte validation
+            skip_login_check (bool): Skip login/auth page detection
+            skip_copy_to_host (bool): Skip copying PDF to host Downloads folder
         """
+        sf = skip_flags or {}
+        if sf:
+            logger.info("download_pdf: skip_flags active: %s", sf)
+
         cache_path = self._cache_path(record_id)
         result = {
             "success": False,
@@ -549,7 +571,7 @@ class ArticleDownloader:
             result["container_path"] = str(cache_path)
             result["size_bytes"] = cache_path.stat().st_size
             result["tier_used"] = "cache"
-            if copy_to_host:
+            if copy_to_host and not sf.get("skip_copy_to_host"):
                 result["host_path"] = self._copy_to_host(cache_path, record_id, metadata)
             return result
 
@@ -572,7 +594,7 @@ class ArticleDownloader:
         logger.info("Downloading PDF from %s for record %s", url, record_id)
 
         # Rate limiter check
-        if self.rate_limiter:
+        if self.rate_limiter and not sf.get("skip_rate_limit"):
             try:
                 self.rate_limiter.acquire(url)
             except RateLimitExceeded as e:
@@ -583,6 +605,9 @@ class ArticleDownloader:
         url_already_proxied = self.config.ezproxy_proxy_base in url
         def _should_try_ezproxy() -> bool:
             """Don't try EZProxy if URL is already proxied or we have no proxy cookies."""
+            if sf.get("skip_ezproxy"):
+                logger.info("download_pdf: EZProxy fallback skipped (skip_ezproxy flag)")
+                return False
             if url_already_proxied:
                 return False
             if not has_proxy_cookies:
@@ -601,7 +626,7 @@ class ArticleDownloader:
             proxied_url = make_proxied_url(url, self.config.ezproxy_proxy_base)
             logger.info("download_pdf: direct failed (%s), retrying via EZProxy: %s", direct_error, proxied_url)
             try:
-                proxy_result = self._tiered_fetch(proxied_url)
+                proxy_result = self._tiered_fetch(proxied_url, skip_tiers=sf.get("skip_tiers"))
             except DownloadError as retry_err:
                 logger.error("download_pdf: EZProxy fallback also failed: %s", retry_err)
                 result["error"] = (
@@ -609,7 +634,7 @@ class ArticleDownloader:
                     f"Direct: {direct_error}. EZProxy: {retry_err}"
                 )
                 return None
-            if self._is_login_page(proxy_result.content):
+            if not sf.get("skip_login_check") and self._is_login_page(proxy_result.content):
                 logger.warning("download_pdf: EZProxy returned login page for %s", record_id)
                 result["error"] = (
                     f"Both direct and EZProxy downloads failed. "
@@ -617,25 +642,31 @@ class ArticleDownloader:
                     f"EZProxy: returned a login page (session may be expired)."
                 )
                 return None
-            proxy_validation = self._write_and_validate_fetch_result(proxy_result, cache_path, record_id)
-            if proxy_validation:
-                result["error"] = (
-                    f"Both direct and EZProxy downloads failed. "
-                    f"Direct: {direct_error}. EZProxy: {proxy_validation}"
-                )
-                return None
+            if sf.get("skip_pdf_check"):
+                # Write content without PDF validation
+                cache_path.parent.mkdir(parents=True, exist_ok=True)
+                with open(cache_path, "wb") as f:
+                    f.write(proxy_result.content)
+            else:
+                proxy_validation = self._write_and_validate_fetch_result(proxy_result, cache_path, record_id)
+                if proxy_validation:
+                    result["error"] = (
+                        f"Both direct and EZProxy downloads failed. "
+                        f"Direct: {direct_error}. EZProxy: {proxy_validation}"
+                    )
+                    return None
             return proxy_result
 
         # ── Phase 1: Try direct URL ──────────────────────────────
         fetch_result = None
         direct_error = None
         try:
-            fetch_result = self._tiered_fetch(url)
+            fetch_result = self._tiered_fetch(url, skip_tiers=sf.get("skip_tiers"))
         except DownloadError as e:
             direct_error = str(e)
 
         # Detect login page on direct fetch
-        if fetch_result and self._is_login_page(fetch_result.content):
+        if fetch_result and not sf.get("skip_login_check") and self._is_login_page(fetch_result.content):
             logger.warning(
                 "download_pdf: direct fetch returned login/auth page for %s (tier=%s, url=%s)",
                 record_id, fetch_result.tier_used, fetch_result.url,
@@ -645,11 +676,17 @@ class ArticleDownloader:
 
         # Validate PDF on direct fetch
         if fetch_result:
-            validation_error = self._write_and_validate_fetch_result(fetch_result, cache_path, record_id)
-            if validation_error:
-                direct_error = validation_error
-                fetch_result = None
-            elif self._publisher_router and fetch_result.tier_used in ("curl_cffi", "requests"):
+            if sf.get("skip_pdf_check"):
+                # Write content without PDF validation
+                cache_path.parent.mkdir(parents=True, exist_ok=True)
+                with open(cache_path, "wb") as f:
+                    f.write(fetch_result.content)
+            else:
+                validation_error = self._write_and_validate_fetch_result(fetch_result, cache_path, record_id)
+                if validation_error:
+                    direct_error = validation_error
+                    fetch_result = None
+            if fetch_result and self._publisher_router and fetch_result.tier_used in ("curl_cffi", "requests"):
                 # Confirmed PDF via direct tier — whitelist this domain
                 self._publisher_router.record_success(url, fetch_result.tier_used)
 
@@ -679,7 +716,7 @@ class ArticleDownloader:
         if self.rate_limiter:
             self.rate_limiter.record_download(url)
 
-        if copy_to_host:
+        if copy_to_host and not sf.get("skip_copy_to_host"):
             result["host_path"] = self._copy_to_host(cache_path, record_id, metadata)
 
         elapsed = time.time() - dl_start_time
@@ -694,13 +731,24 @@ class ArticleDownloader:
         url: str,
         cookies: dict | None = None,
         filename: str | None = None,
+        skip_flags: dict | None = None,
     ) -> dict:
         """Download a PDF from a direct URL (e.g. from capture server or MCP tool).
 
         Uses tiered fetch with optional extra cookies (e.g. from Chrome extension).
 
         Returns dict with keys: success, container_path, size_bytes, tier_used, error.
+
+        skip_flags (optional):
+            skip_rate_limit (bool): Skip rate limiter delay/budget checks
+            skip_tiers (list[str]): Tiers to skip
+            skip_pdf_check (bool): Skip PDF magic-byte validation
+            skip_login_check (bool): Skip login/auth page detection
         """
+        sf = skip_flags or {}
+        if sf:
+            logger.info("download_from_direct_url: skip_flags active: %s", sf)
+
         # Use URL hash as record ID for caching
         url_hash = hashlib.sha256(url.encode()).hexdigest()[:16]
         cache_path = self._cache_path(url_hash)
@@ -727,7 +775,7 @@ class ArticleDownloader:
         dl_start_time = time.time()
 
         # Rate limiter check
-        if self.rate_limiter:
+        if self.rate_limiter and not sf.get("skip_rate_limit"):
             try:
                 self.rate_limiter.acquire(url)
             except RateLimitExceeded as e:
@@ -735,7 +783,7 @@ class ArticleDownloader:
                 return result
 
         try:
-            fetch_result = self._tiered_fetch(url, cookies)
+            fetch_result = self._tiered_fetch(url, cookies, skip_tiers=sf.get("skip_tiers"))
         except DownloadError as e:
             result["error"] = str(e)
             elapsed = time.time() - dl_start_time
@@ -746,7 +794,7 @@ class ArticleDownloader:
             return result
 
         # Detect login page before writing to cache
-        if self._is_login_page(fetch_result.content):
+        if not sf.get("skip_login_check") and self._is_login_page(fetch_result.content):
             logger.warning(
                 "download_from_direct_url: response is a login/auth page (tier=%s, url=%s)",
                 fetch_result.tier_used, fetch_result.url,
@@ -762,15 +810,21 @@ class ArticleDownloader:
             )
             return result
 
-        validation_error = self._write_and_validate_fetch_result(fetch_result, cache_path, url_hash)
-        if validation_error:
-            result["error"] = validation_error
-            elapsed = time.time() - dl_start_time
-            logger.info(
-                "DOWNLOAD_SUMMARY: url=%s success=False elapsed=%.1fs error=validation_failed",
-                url[:80], elapsed,
-            )
-            return result
+        if sf.get("skip_pdf_check"):
+            # Write content without PDF validation
+            cache_path.parent.mkdir(parents=True, exist_ok=True)
+            with open(cache_path, "wb") as f:
+                f.write(fetch_result.content)
+        else:
+            validation_error = self._write_and_validate_fetch_result(fetch_result, cache_path, url_hash)
+            if validation_error:
+                result["error"] = validation_error
+                elapsed = time.time() - dl_start_time
+                logger.info(
+                    "DOWNLOAD_SUMMARY: url=%s success=False elapsed=%.1fs error=validation_failed",
+                    url[:80], elapsed,
+                )
+                return result
 
         size = cache_path.stat().st_size
         logger.info("Direct URL download success: %d bytes at %s (tier: %s)", size, cache_path, fetch_result.tier_used)
