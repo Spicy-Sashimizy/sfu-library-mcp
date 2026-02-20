@@ -553,15 +553,18 @@ class ArticleDownloader:
                 result["host_path"] = self._copy_to_host(cache_path, record_id, metadata)
             return result
 
+        dl_start_time = time.time()
+
         # Log cookie state for diagnostics
         cookie_names = list(self.cookies.keys())
         has_proxy_cookies = any(
             "ezproxy" in n.lower() or "proxy" in n.lower()
             for n in cookie_names
         )
+        secure_prefix_cookies = [n for n in cookie_names if n.startswith("__Secure-") or n.startswith("__Host-")]
         logger.info(
-            "download_pdf: cookies=%s, has_proxy_cookies=%s",
-            cookie_names, has_proxy_cookies,
+            "download_pdf: cookies=%s, has_proxy_cookies=%s, secure_prefix=%s",
+            cookie_names, has_proxy_cookies, secure_prefix_cookies,
         )
         if not has_proxy_cookies:
             logger.warning("download_pdf: no proxy cookies found — auth may fail for proxied URLs")
@@ -658,6 +661,11 @@ class ArticleDownloader:
                 # otherwise set the direct error
                 if not result["error"]:
                     result["error"] = direct_error
+                elapsed = time.time() - dl_start_time
+                logger.info(
+                    "DOWNLOAD_SUMMARY: record=%s success=False elapsed=%.1fs error=%s url=%s",
+                    record_id, elapsed, result["error"], url,
+                )
                 return result
 
         size = cache_path.stat().st_size
@@ -674,6 +682,11 @@ class ArticleDownloader:
         if copy_to_host:
             result["host_path"] = self._copy_to_host(cache_path, record_id, metadata)
 
+        elapsed = time.time() - dl_start_time
+        logger.info(
+            "DOWNLOAD_SUMMARY: record=%s success=True elapsed=%.1fs size=%d tier=%s url=%s",
+            record_id, elapsed, size, fetch_result.tier_used, url,
+        )
         return result
 
     def download_from_direct_url(
@@ -711,6 +724,7 @@ class ArticleDownloader:
             return result
 
         logger.info("download_from_direct_url: %s", url)
+        dl_start_time = time.time()
 
         # Rate limiter check
         if self.rate_limiter:
@@ -724,6 +738,11 @@ class ArticleDownloader:
             fetch_result = self._tiered_fetch(url, cookies)
         except DownloadError as e:
             result["error"] = str(e)
+            elapsed = time.time() - dl_start_time
+            logger.info(
+                "DOWNLOAD_SUMMARY: url=%s success=False elapsed=%.1fs error=%s",
+                url[:80], elapsed, result["error"],
+            )
             return result
 
         # Detect login page before writing to cache
@@ -736,11 +755,21 @@ class ArticleDownloader:
                 "Download returned a login page instead of a PDF. "
                 "EZProxy session may have expired — try re-authenticating."
             )
+            elapsed = time.time() - dl_start_time
+            logger.info(
+                "DOWNLOAD_SUMMARY: url=%s success=False elapsed=%.1fs error=login_page",
+                url[:80], elapsed,
+            )
             return result
 
         validation_error = self._write_and_validate_fetch_result(fetch_result, cache_path, url_hash)
         if validation_error:
             result["error"] = validation_error
+            elapsed = time.time() - dl_start_time
+            logger.info(
+                "DOWNLOAD_SUMMARY: url=%s success=False elapsed=%.1fs error=validation_failed",
+                url[:80], elapsed,
+            )
             return result
 
         size = cache_path.stat().st_size
@@ -754,6 +783,11 @@ class ArticleDownloader:
         if self.rate_limiter:
             self.rate_limiter.record_download(url)
 
+        elapsed = time.time() - dl_start_time
+        logger.info(
+            "DOWNLOAD_SUMMARY: url=%s success=True elapsed=%.1fs size=%d tier=%s",
+            url[:80], elapsed, size, fetch_result.tier_used,
+        )
         return result
 
     # ─── Text extraction ───────────────────────────────────────
