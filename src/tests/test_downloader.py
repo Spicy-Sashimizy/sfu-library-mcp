@@ -562,7 +562,7 @@ class TestDownloadFromDirectUrl:
                 "https://example.com/test.pdf",
                 cookies={"extra": "value"},
             )
-        mock_fetch.assert_called_once_with("https://example.com/test.pdf", {"extra": "value"})
+        mock_fetch.assert_called_once_with("https://example.com/test.pdf", {"extra": "value"}, skip_tiers=None)
 
     def test_failure(self, downloader, tmp_path):
         downloader.config.download_dir = str(tmp_path)

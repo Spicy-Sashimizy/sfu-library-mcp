@@ -64,8 +64,8 @@ def mock_client_with_results(sample_pnx_record, mock_search_response):
 
 
 class TestToolDefinitions:
-    def test_exactly_23_tools(self):
-        assert len(TOOL_DEFINITIONS) == 23
+    def test_exactly_24_tools(self):
+        assert len(TOOL_DEFINITIONS) == 24
 
     def test_tool_names(self):
         names = [t.name for t in TOOL_DEFINITIONS]
@@ -80,6 +80,7 @@ class TestToolDefinitions:
             "list_zotero_collections", "batch_save_to_zotero",
             "search_zotero", "get_zotero_collection_items",
             "backfill_collection_pdfs", "download_from_url",
+            "get_diagnostics",
         ]
         assert names == expected
 
@@ -543,3 +544,103 @@ class TestMetrics:
         metrics = get_metrics()
         assert "get_token_status" in metrics
         assert metrics["get_token_status"]["count"] >= 1
+
+
+class TestGetDiagnostics:
+    """Tests for the get_diagnostics MCP tool."""
+
+    @pytest.mark.asyncio
+    async def test_diagnostics_returns_report(self, mock_client):
+        """Diagnostics tool should return a comprehensive report."""
+        result = await handle_tool_call("get_diagnostics", {}, mock_client)
+        text = result[0].text
+        assert "DIAGNOSTIC REPORT" in text
+        assert "Token Status" in text
+        assert "Cookie Inventory" in text
+        assert "EZProxy Session" in text
+        assert "Download Tier Availability" in text
+        assert "Circuit Breaker" in text
+        assert "Rate Limiter" in text
+        assert "Log File" in text
+        assert "Tool Metrics" in text
+
+    @pytest.mark.asyncio
+    async def test_diagnostics_without_errors(self, mock_client):
+        """Diagnostics with include_recent_errors=False should skip error section."""
+        result = await handle_tool_call(
+            "get_diagnostics",
+            {"include_recent_errors": False},
+            mock_client,
+        )
+        text = result[0].text
+        assert "DIAGNOSTIC REPORT" in text
+        assert "Recent Errors" not in text
+
+    @pytest.mark.asyncio
+    async def test_diagnostics_shows_token_valid(self, mock_client):
+        """Should show VALID token for authenticated client."""
+        result = await handle_tool_call("get_diagnostics", {}, mock_client)
+        assert "Status: VALID" in result[0].text
+
+    @pytest.mark.asyncio
+    async def test_diagnostics_shows_token_invalid(self):
+        """Should show INVALID token for unauthenticated client."""
+        unauth = MockClient(authenticated=False)
+        result = await handle_tool_call("get_diagnostics", {}, unauth)
+        assert "INVALID" in result[0].text
+
+
+class TestSkipFlags:
+    """Tests for download skip flags being passed through."""
+
+    @pytest.mark.asyncio
+    async def test_skip_flags_passed_to_downloader(self, mock_client):
+        """Skip flags should be extracted and passed to downloader."""
+        mock_result = {
+            "success": True,
+            "container_path": "/tmp/test.pdf",
+            "size_bytes": 12345,
+            "tier_used": "curl_cffi",
+            "error": None,
+        }
+        with patch("lib.tools._get_downloader") as mock_get_dl:
+            mock_dl = MagicMock()
+            mock_dl.download_from_direct_url.return_value = mock_result
+            mock_get_dl.return_value = mock_dl
+            await handle_tool_call(
+                "download_from_url",
+                {
+                    "url": "https://example.com/paper.pdf",
+                    "skip_rate_limit": True,
+                    "skip_tiers": ["playwright"],
+                },
+                mock_client,
+            )
+        call_kwargs = mock_dl.download_from_direct_url.call_args
+        skip_flags = call_kwargs[1].get("skip_flags", call_kwargs[0][2] if len(call_kwargs[0]) > 2 else {})
+        assert skip_flags.get("skip_rate_limit") is True
+        assert skip_flags.get("skip_tiers") == ["playwright"]
+
+    def test_skip_flag_properties_in_download_article_schema(self):
+        """download_article schema should include skip flag properties."""
+        tool = next(t for t in TOOL_DEFINITIONS if t.name == "download_article")
+        props = tool.inputSchema["properties"]
+        assert "skip_ezproxy" in props
+        assert "skip_rate_limit" in props
+        assert "skip_tiers" in props
+        assert "skip_pdf_check" in props
+        assert "skip_login_check" in props
+        assert "skip_copy_to_host" in props
+
+    def test_skip_flag_properties_in_read_article_schema(self):
+        """read_article schema should include skip flag properties."""
+        tool = next(t for t in TOOL_DEFINITIONS if t.name == "read_article")
+        props = tool.inputSchema["properties"]
+        assert "skip_ezproxy" in props
+
+    def test_skip_flag_properties_in_download_from_url_schema(self):
+        """download_from_url schema should include skip flag properties."""
+        tool = next(t for t in TOOL_DEFINITIONS if t.name == "download_from_url")
+        props = tool.inputSchema["properties"]
+        assert "skip_rate_limit" in props
+        assert "skip_tiers" in props
