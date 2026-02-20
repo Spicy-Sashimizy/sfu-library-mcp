@@ -255,13 +255,29 @@ class ArticleDownloader:
                     parsed = urlparse(url)
                     pw_cookies = []
                     for name, value in merged_cookies.items():
-                        pw_cookies.append({
+                        cookie_entry = {
                             "name": name,
                             "value": value,
                             "domain": parsed.hostname,
                             "path": "/",
-                        })
-                    context.add_cookies(pw_cookies)
+                        }
+                        # __Secure- prefix requires secure=True per cookie spec
+                        if name.startswith("__Secure-"):
+                            cookie_entry["secure"] = True
+                            cookie_entry["sameSite"] = "None"
+                        elif name.startswith("__Host-"):
+                            cookie_entry["secure"] = True
+                            cookie_entry["sameSite"] = "Lax"
+                        pw_cookies.append(cookie_entry)
+                    try:
+                        context.add_cookies(pw_cookies)
+                    except Exception as e:
+                        logger.warning("Bulk cookie injection failed (%s), retrying one-by-one", e)
+                        for cookie in pw_cookies:
+                            try:
+                                context.add_cookies([cookie])
+                            except Exception as ce:
+                                logger.warning("Skipping invalid cookie '%s': %s", cookie["name"], ce)
 
                 page = context.new_page()
                 apply_stealth(page)
