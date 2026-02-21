@@ -1,11 +1,16 @@
-"""Server configuration from environment variables with hardcoded fallbacks.
+"""Server configuration from environment variables and Docker secrets.
 
 Implements CONFIG-001 through CONFIG-004, ERR-005, AUTH-008.
+Secret loading priority: Docker secret file (/run/secrets/X) -> env var (SFU_X) -> empty string.
 """
 
+import logging
 import os
 from dataclasses import dataclass, field
+from pathlib import Path
 from typing import Any
+
+logger = logging.getLogger("sfu_library_mcp")
 
 
 @dataclass
@@ -20,7 +25,7 @@ class ServerConfig:
     sfu_username: str = ""
     sfu_password: str = ""
     mfa_secret: str = ""
-    mfa_device_name: str = ""  # Duo device name to select (e.g. "mfa-device")
+    mfa_device_name: str = ""  # Duo device name to select
 
     # Token management
     token_cache_file: str = ""
@@ -100,14 +105,38 @@ class ServerConfig:
     active_profile: str = "default"
 
 
-def load_config() -> ServerConfig:
-    """Load configuration from environment variables with hardcoded fallbacks.
+def _read_secret(name: str, env_var: str, default: str = "") -> str:
+    """Read a secret from Docker secret file, falling back to env var.
 
-    The hardcoded fallbacks match the original monolith values so the server
-    continues to work without any env vars set.
+    Priority: /run/secrets/{name} -> os.environ[env_var] -> default
     """
-    from pathlib import Path
+    secret_path = Path(f"/run/secrets/{name}")
+    try:
+        if secret_path.is_file():
+            value = secret_path.read_text().strip()
+            if value:
+                logger.debug("Loaded secret '%s' from Docker secret file", name)
+                return value
+    except OSError:
+        pass
 
+    env_value = os.environ.get(env_var, "")
+    if env_value:
+        logger.debug("Loaded secret '%s' from env var %s", name, env_var)
+        return env_value
+
+    if default:
+        return default
+
+    logger.debug("Secret '%s' not found in Docker secrets or env var %s", name, env_var)
+    return ""
+
+
+def load_config() -> ServerConfig:
+    """Load configuration from Docker secrets and environment variables.
+
+    Secret loading priority: Docker secret file -> env var -> empty string.
+    """
     script_dir = Path(__file__).parent.parent  # src/
     default_cache = str(script_dir / "token_cache.json")
 
@@ -135,10 +164,10 @@ def load_config() -> ServerConfig:
             default_features[key] = _bool(env_val)
 
     return ServerConfig(
-        sfu_username=os.environ.get("SFU_USERNAME", "REDACTED_SFU_USERNAME"),
-        sfu_password=os.environ.get("SFU_PASSWORD", "REDACTED_SFU_PASSWORD"),
-        mfa_secret=os.environ.get("SFU_MFA_SECRET", "REDACTED_MFA_SECRET"),
-        mfa_device_name=os.environ.get("SFU_MFA_DEVICE_NAME", "mfa-device"),
+        sfu_username=_read_secret("sfu_username", "SFU_USERNAME"),
+        sfu_password=_read_secret("sfu_password", "SFU_PASSWORD"),
+        mfa_secret=_read_secret("sfu_mfa_secret", "SFU_MFA_SECRET"),
+        mfa_device_name=_read_secret("sfu_mfa_device_name", "SFU_MFA_DEVICE_NAME"),
         token_cache_file=os.environ.get("SFU_TOKEN_CACHE_FILE", default_cache),
         token_refresh_buffer=int(os.environ.get("SFU_TOKEN_REFRESH_BUFFER", "300")),
         auth_timeout=int(os.environ.get("SFU_AUTH_TIMEOUT", "10")),
@@ -156,8 +185,8 @@ def load_config() -> ServerConfig:
         log_file=os.environ.get("SFU_LOG_FILE", "/tmp/sfu-library-mcp.log"),
         features=default_features,
         active_profile=os.environ.get("SFU_ACTIVE_PROFILE", "default"),
-        zotero_api_key=os.environ.get("SFU_ZOTERO_API_KEY", "REDACTED_ZOTERO_API_KEY"),
-        zotero_user_id=os.environ.get("SFU_ZOTERO_USER_ID", "16321308"),
+        zotero_api_key=_read_secret("zotero_api_key", "SFU_ZOTERO_API_KEY"),
+        zotero_user_id=_read_secret("zotero_user_id", "SFU_ZOTERO_USER_ID"),
         download_dir=os.environ.get("SFU_DOWNLOAD_DIR", "/tmp/sfu-library-downloads"),
         host_download_dir=os.environ.get("SFU_HOST_DOWNLOAD_DIR", "/mnt/host-downloads"),
         download_timeout=int(os.environ.get("SFU_DOWNLOAD_TIMEOUT", "60")),

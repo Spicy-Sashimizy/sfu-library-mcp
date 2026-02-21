@@ -784,7 +784,7 @@ def fetch_crossref_metadata(doi: str, timeout: int = 10) -> dict | None:
     url = f"https://api.crossref.org/works/{doi}"
     headers = {
         "Accept": "application/json",
-        "User-Agent": "SFULibraryMCP/1.0 (mailto:REDACTED_SFU_USERNAME@sfu.ca)",
+        "User-Agent": "SFULibraryMCP/1.0",
     }
 
     try:
