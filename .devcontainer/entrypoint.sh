@@ -325,6 +325,32 @@ sync_venv_deps() {
 }
 
 # ========================================
+# Playwright Browser Install
+# ========================================
+install_playwright_browsers() {
+    local WORKSPACE="/workspaces/${PROJECT_NAME:-project}"
+    local VENV_DIR="$WORKSPACE/.venv"
+    local PW_BIN="$VENV_DIR/bin/playwright"
+
+    if [ -x "$PW_BIN" ]; then
+        # Check if Chromium is already installed
+        if "$VENV_DIR/bin/python3" -c "
+from playwright.sync_api import sync_playwright
+with sync_playwright() as p:
+    b = p.chromium.launch(headless=True)
+    b.close()
+" 2>/dev/null; then
+            echo "[entrypoint] Playwright Chromium already installed"
+        else
+            echo "[entrypoint] Installing Playwright Chromium browsers..."
+            "$PW_BIN" install chromium 2>/dev/null || true
+            "$PW_BIN" install-deps chromium 2>/dev/null || true
+            echo "[entrypoint] Playwright browsers installed"
+        fi
+    fi
+}
+
+# ========================================
 # Socat Ollama Proxy (for Pommel)
 # ========================================
 start_ollama_proxy() {
@@ -353,6 +379,7 @@ main() {
     configure_gh_cli
     install_or_update_claude_code
     sync_venv_deps
+    install_playwright_browsers
     start_ollama_proxy
 
     # Test connection (non-blocking)
