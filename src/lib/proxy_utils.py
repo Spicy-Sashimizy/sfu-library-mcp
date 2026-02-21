@@ -8,7 +8,10 @@ These functions live in their own module to avoid circular imports
 between downloader, publisher_router, and rate_limiter.
 """
 
+import logging
 from urllib.parse import urlparse, urlunparse
+
+logger = logging.getLogger("sfu_library_mcp")
 
 
 def make_proxied_url(url: str, proxy_base: str = "proxy.lib.sfu.ca") -> str:
@@ -26,7 +29,9 @@ def make_proxied_url(url: str, proxy_base: str = "proxy.lib.sfu.ca") -> str:
         return url
     proxied_host = f"{parsed.hostname.replace('.', '-')}.{proxy_base}"
     proxied = parsed._replace(netloc=proxied_host)
-    return urlunparse(proxied)
+    result = urlunparse(proxied)
+    logger.debug("Proxied URL: %s -> %s", parsed.hostname, proxied_host)
+    return result
 
 
 def unwrap_proxied_hostname(hostname: str, proxy_base: str = "proxy.lib.sfu.ca") -> str:

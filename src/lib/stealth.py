@@ -5,6 +5,10 @@ and anti-detection hardening for both headless Chromium (Playwright)
 and curl_cffi HTTP clients.
 """
 
+import logging
+
+logger = logging.getLogger("sfu_library_mcp")
+
 # ─── Playwright Stealth ──────────────────────────────────────────
 
 STEALTH_SCRIPTS = """
@@ -152,6 +156,7 @@ STEALTH_LAUNCH_ARGS = [
 
 def get_stealth_context_options(user_agent: str) -> dict:
     """Return Playwright browser context options with stealth settings."""
+    logger.debug("Creating stealth context options with user_agent: %s", user_agent[:60])
     return {
         "viewport": {"width": 1920, "height": 1080},
         "device_scale_factor": 1,
@@ -168,6 +173,7 @@ def get_stealth_context_options(user_agent: str) -> dict:
 
 def apply_stealth(page) -> None:
     """Inject stealth scripts into a Playwright page."""
+    logger.debug("Applying stealth scripts to page")
     page.add_init_script(STEALTH_SCRIPTS)
 
 

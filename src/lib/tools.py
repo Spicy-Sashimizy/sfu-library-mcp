@@ -2216,7 +2216,7 @@ def _handle_get_diagnostics(args: dict, client) -> list[TextContent]:
 
     # 7. Log file info
     output.append("\n--- Log File ---")
-    log_path = "/tmp/sfu-library-mcp.log"
+    log_path = getattr(client.config, "log_file", "") or "/tmp/sfu-library-mcp.log"
     try:
         if os.path.exists(log_path):
             stat = os.stat(log_path)

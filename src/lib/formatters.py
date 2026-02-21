@@ -3,7 +3,11 @@
 Extracted from the monolith. Implements DATA-004: character encoding handling.
 """
 
+import logging
+
 from lib.validators import normalize_encoding
+
+logger = logging.getLogger("sfu_library_mcp")
 
 
 def format_search_results(results: dict | None, metadata: dict | None = None) -> str:
@@ -15,11 +19,13 @@ def format_search_results(results: dict | None, metadata: dict | None = None) ->
             Keys: query, field, sort, resource_type.
     """
     if not results:
+        logger.debug("format_search_results called with empty results")
         return "No results found or search failed."
 
     docs = results.get("docs", [])
     info = results.get("info", {})
     total = info.get("total", 0)
+    logger.debug("Formatting %d docs from %d total results", len(docs), total)
 
     output = [f"Found {total:,} total results\n"]
     output.append("=" * 60 + "\n")
@@ -119,9 +125,12 @@ def format_search_results(results: dict | None, metadata: dict | None = None) ->
 def format_item_details(item: dict | None) -> str:
     """Format detailed item information."""
     if not item:
+        logger.debug("format_item_details called with empty item")
         return "Could not retrieve item details."
 
     pnx = item.get("pnx", {})
+    record_id = pnx.get("control", {}).get("recordid", [""])[0] if pnx.get("control", {}).get("recordid") else "unknown"
+    logger.debug("Formatting item details for record: %s", record_id)
     display = pnx.get("display", {})
     control = pnx.get("control", {})
     addata = pnx.get("addata", {})

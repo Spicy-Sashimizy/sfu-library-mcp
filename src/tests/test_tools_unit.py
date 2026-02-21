@@ -19,6 +19,14 @@ class MockClient:
         self.search_calls: list[dict] = []
         self.cookies: dict = {}
 
+        # Provide a mock config for diagnostics
+        from lib.config import ServerConfig
+        self.config = ServerConfig(
+            sfu_username="testuser",
+            sfu_password="testpass",
+            mfa_secret="TESTSECRET",
+        )
+
     def ensure_authenticated(self, force=False):
         return self._authenticated
 

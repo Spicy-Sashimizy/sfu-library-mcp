@@ -300,8 +300,8 @@ class SFULibraryClient:
         pid = None
         try:
             pid = driver.service.process.pid
-        except Exception:
-            pass
+        except Exception as e:
+            logger.debug("Could not get driver PID: %s", e)
         try:
             driver.quit()
         except Exception:
@@ -399,7 +399,8 @@ class SFULibraryClient:
                             method_selected = True
                             logger.info("Selected configured MFA device: %s", link.text.strip())
                             break
-                    except Exception:
+                    except Exception as e:
+                        logger.debug("Error checking MFA device link: %s", e)
                         continue
 
             # Priority 2: Pattern-based fallback
@@ -420,7 +421,8 @@ class SFULibraryClient:
                                 method_selected = True
                                 logger.info("Selected MFA method: %s", link.text.strip())
                                 break
-                        except Exception:
+                        except Exception as e:
+                            logger.debug("Error checking MFA pattern link: %s", e)
                             continue
 
             # Priority 3: Click first available
@@ -429,8 +431,8 @@ class SFULibraryClient:
                     driver.execute_script("arguments[0].click();", method_links[0])
                     time.sleep(2)
                     logger.info("Fallback: selected first MFA method")
-                except Exception:
-                    pass
+                except Exception as e:
+                    logger.warning("Failed to click first MFA method: %s", e)
 
             # AUTH-002: MFA code submission with retry (2 attempts)
             mfa_success = False
