@@ -1,0 +1,10 @@
+# Production dependencies only (no dev tools)
+mcp>=1.26.0
+selenium>=4.15.0
+requests>=2.31.0
+pyotp>=2.9.0
+pyzotero>=1.5.0
+curl_cffi>=0.7.0
+playwright>=1.49.0
+uvicorn>=0.40.0
+starlette>=0.40.0

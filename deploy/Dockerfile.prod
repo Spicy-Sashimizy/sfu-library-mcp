@@ -1,0 +1,74 @@
+# SFU Library MCP Server — Production Image
+# Lean image: Python 3.11 + Chrome + Playwright + poppler-utils
+# No dev tools (no Node.js, Claude Code, ruff, mypy, pytest, etc.)
+
+FROM python:3.11-slim-bookworm AS base
+
+# System dependencies for Chrome, Playwright, and PDF processing
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    # Chrome/Selenium dependencies
+    wget \
+    gnupg2 \
+    unzip \
+    curl \
+    # Playwright Chromium dependencies
+    libnss3 \
+    libxss1 \
+    libasound2 \
+    libatk-bridge2.0-0 \
+    libgtk-3-0 \
+    libdrm2 \
+    libgbm1 \
+    libxshmfence1 \
+    # PDF text extraction
+    poppler-utils \
+    # Clean up
+    && rm -rf /var/lib/apt/lists/*
+
+# Install Chrome + ChromeDriver for Selenium auth
+RUN wget -q -O - https://dl.google.com/linux/linux_signing_key.pub | gpg --dearmor -o /usr/share/keyrings/google-chrome.gpg \
+    && echo "deb [arch=amd64 signed-by=/usr/share/keyrings/google-chrome.gpg] http://dl.google.com/linux/chrome/deb/ stable main" > /etc/apt/sources.list.d/google-chrome.list \
+    && apt-get update \
+    && apt-get install -y --no-install-recommends google-chrome-stable \
+    && rm -rf /var/lib/apt/lists/*
+
+# Create non-root user
+RUN groupadd -r mcp && useradd -r -g mcp -m -s /bin/bash mcp
+
+WORKDIR /app
+
+# Install Python dependencies
+COPY requirements.prod.txt .
+RUN pip install --no-cache-dir -r requirements.prod.txt
+
+# Install Playwright Chromium browser
+RUN playwright install chromium \
+    && playwright install-deps chromium
+
+# Copy application source
+COPY src/ ./src/
+
+# Create directories for volumes
+RUN mkdir -p /app/logs /app/data /app/downloads \
+    && chown -R mcp:mcp /app
+
+# Switch to non-root user
+USER mcp
+
+# Environment defaults
+ENV PYTHONPATH=/app \
+    PYTHONUNBUFFERED=1 \
+    SFU_LOG_FILE=/app/logs/sfu-library-mcp.log \
+    SFU_TOKEN_CACHE_FILE=/app/data/token_cache.json \
+    SFU_DOWNLOAD_DIR=/app/downloads \
+    MCP_HTTP_HOST=0.0.0.0 \
+    MCP_HTTP_PORT=8080
+
+EXPOSE 8080
+
+# Health check
+HEALTHCHECK --interval=30s --timeout=10s --start-period=60s --retries=3 \
+    CMD curl -sf http://localhost:8080/health || exit 1
+
+# Default: HTTP transport for production
+CMD ["python3", "src/sfu_library_mcp_http.py"]

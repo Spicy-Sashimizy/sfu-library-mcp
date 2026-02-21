@@ -132,11 +132,41 @@ def _read_secret(name: str, env_var: str, default: str = "") -> str:
     return ""
 
 
+def _load_dotenv() -> None:
+    """Load .env file from project root if it exists.
+
+    This ensures env vars are available even when the container
+    was started before the .env file was updated (e.g. docker exec).
+    Only sets vars that aren't already in the environment.
+    """
+    # Walk up from src/lib/ to find project root .env
+    for candidate in [
+        Path(__file__).parent.parent.parent / ".env",  # /workspaces/project/.env
+        Path.cwd() / ".env",
+    ]:
+        if candidate.is_file():
+            try:
+                for line in candidate.read_text().splitlines():
+                    line = line.strip()
+                    if not line or line.startswith("#") or "=" not in line:
+                        continue
+                    key, _, value = line.partition("=")
+                    key = key.strip()
+                    value = value.strip()
+                    if key and key not in os.environ:
+                        os.environ[key] = value
+                logger.debug("Loaded .env from %s", candidate)
+                return
+            except OSError:
+                pass
+
+
 def load_config() -> ServerConfig:
     """Load configuration from Docker secrets and environment variables.
 
-    Secret loading priority: Docker secret file -> env var -> empty string.
+    Secret loading priority: Docker secret file -> env var -> .env file -> empty string.
     """
+    _load_dotenv()
     script_dir = Path(__file__).parent.parent  # src/
     default_cache = str(script_dir / "token_cache.json")
 

@@ -63,10 +63,12 @@ class TestReadSecret:
 class TestServerConfig:
     def test_defaults_are_empty_without_env_vars(self, monkeypatch):
         """Without env vars or Docker secrets, credentials default to empty."""
-        # Clear any credential env vars that might be set
+        # Clear any credential env vars that might be set (including from .env)
         for var in ["SFU_USERNAME", "SFU_PASSWORD", "SFU_MFA_SECRET",
                      "SFU_MFA_DEVICE_NAME", "SFU_ZOTERO_API_KEY", "SFU_ZOTERO_USER_ID"]:
             monkeypatch.delenv(var, raising=False)
+        # Prevent _load_dotenv from re-loading .env into os.environ
+        monkeypatch.setattr("lib.config._load_dotenv", lambda: None)
         config = load_config()
         assert config.sfu_username == ""
         assert config.sfu_password == ""

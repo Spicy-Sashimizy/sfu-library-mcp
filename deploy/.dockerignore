@@ -1,0 +1,44 @@
+# Dev container config
+.devcontainer/
+.claude/
+
+# Version control
+.git/
+.gitignore
+.gitattributes
+
+# Virtual environment
+.venv/
+
+# Tests
+src/tests/
+
+# Dev files
+.pommel/
+.pommelignore
+*.pyc
+__pycache__/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+
+# Chrome extension (dev only)
+chrome-extension/
+
+# Language files (dev only)
+languages/
+
+# Dev docs
+deploy/DEPLOYMENT_PLAN.md
+deploy/truenas_setup.md
+deploy/vanpeople_advertising.md
+deploy/wechat_setup.md
+
+# IDE
+.vscode/
+.idea/
+
+# Misc
+*.md
+!deploy/*.md
+LICENSE
