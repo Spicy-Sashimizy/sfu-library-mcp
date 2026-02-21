@@ -110,6 +110,28 @@ def _get_zotero_client() -> ZoteroClient:
         _zotero_client = ZoteroClient(_get_config())
     return _zotero_client
 
+
+def _ensure_zotero_auth() -> list[TextContent] | None:
+    """Zotero-only auth pre-flight check. Returns error response or None if OK.
+
+    Independent of SFU Library auth — error messages explicitly note that
+    the other auth path is still available.
+    """
+    features = _get_features()
+    if not features.get("zotero_enabled", True):
+        return [TextContent(type="text", text="Zotero integration is disabled.")]
+    try:
+        zot = _get_zotero_client()
+        if not zot.ensure_authenticated():
+            return [TextContent(type="text", text=(
+                "Zotero authentication failed. Check SFU_ZOTERO_API_KEY and "
+                "SFU_ZOTERO_USER_ID. SFU Library search/download still available."
+            ))]
+    except ZoteroError as e:
+        return [TextContent(type="text", text=f"Zotero auth error: {e}. SFU Library tools still available.")]
+    return None
+
+
 # PERF-004: Simple metrics counters
 _metrics: dict[str, dict[str, Any]] = {}
 
@@ -723,6 +745,34 @@ TOOL_DEFINITIONS: list[Tool] = [
             },
         },
     ),
+    Tool(
+        name="get_zotero_status",
+        description=(
+            "Check Zotero API connection, credentials, and permissions. "
+            "Independent of SFU Library authentication."
+        ),
+        inputSchema={
+            "type": "object",
+            "properties": {},
+        },
+    ),
+    Tool(
+        name="zotero_authenticate",
+        description=(
+            "Verify or re-verify Zotero API credentials. "
+            "Independent of SFU Library authentication."
+        ),
+        inputSchema={
+            "type": "object",
+            "properties": {
+                "force": {
+                    "type": "boolean",
+                    "description": "Force re-verification even if already validated",
+                    "default": False,
+                }
+            },
+        },
+    ),
 ]
 
 
@@ -825,6 +875,10 @@ async def _dispatch_tool(
         return _handle_download_from_url(arguments, lib_client)
     elif name == "get_diagnostics":
         return _handle_get_diagnostics(arguments, lib_client)
+    elif name == "get_zotero_status":
+        return _handle_get_zotero_status()
+    elif name == "zotero_authenticate":
+        return _handle_zotero_authenticate(arguments)
     else:
         return [TextContent(type="text", text=f"Unknown tool: {name}")]
 
@@ -1498,17 +1552,24 @@ async def _handle_read_article(args: dict, client) -> list[TextContent]:
 
 
 async def _handle_save_to_zotero(args: dict, client) -> list[TextContent]:
-    features = _get_features()
-    if not features.get("zotero_enabled", True):
-        return [TextContent(type="text", text="Zotero integration is disabled. Set SFU_FEATURE_ZOTERO_ENABLED=true to enable.")]
+    # Independent auth checks — Zotero and SFU Library are separate paths
+    zotero_auth_err = _ensure_zotero_auth()
+    if zotero_auth_err:
+        # Zotero is down — tell user SFU Library still works
+        return zotero_auth_err
 
     record_id = args.get("record_id", "")
     collection_name = args.get("collection_name", "")
     parent_collection = args.get("parent_collection", "")
     attach_pdf = args.get("attach_pdf", True)
 
-    if not client.ensure_authenticated():
-        return [TextContent(type="text", text="Authentication failed.")]
+    sfu_authenticated = client.ensure_authenticated()
+    if not sfu_authenticated:
+        return [TextContent(type="text", text=(
+            "SFU Library authentication failed — cannot resolve record. "
+            "Zotero is connected. Use Zotero-only tools (search_zotero, "
+            "list_zotero_collections) which work independently."
+        ))]
 
     item = await _resolve_record(record_id, client)
     if not item:
@@ -1594,9 +1655,9 @@ async def _handle_save_to_zotero(args: dict, client) -> list[TextContent]:
 
 
 def _handle_list_zotero_collections() -> list[TextContent]:
-    features = _get_features()
-    if not features.get("zotero_enabled", True):
-        return [TextContent(type="text", text="Zotero integration is disabled. Set SFU_FEATURE_ZOTERO_ENABLED=true to enable.")]
+    auth_err = _ensure_zotero_auth()
+    if auth_err:
+        return auth_err
 
     zot_client = _get_zotero_client()
 
@@ -1618,9 +1679,10 @@ def _handle_list_zotero_collections() -> list[TextContent]:
 
 
 async def _handle_batch_save_to_zotero(args: dict, client) -> list[TextContent]:
-    features = _get_features()
-    if not features.get("zotero_enabled", True):
-        return [TextContent(type="text", text="Zotero integration is disabled. Set SFU_FEATURE_ZOTERO_ENABLED=true to enable.")]
+    # Independent auth checks — Zotero and SFU Library are separate paths
+    zotero_auth_err = _ensure_zotero_auth()
+    if zotero_auth_err:
+        return zotero_auth_err
 
     record_ids = args.get("record_ids", [])[:20]
     collection_name = args.get("collection_name", "")
@@ -1629,8 +1691,14 @@ async def _handle_batch_save_to_zotero(args: dict, client) -> list[TextContent]:
 
     if not record_ids:
         return [TextContent(type="text", text="No record IDs provided.")]
-    if not client.ensure_authenticated():
-        return [TextContent(type="text", text="Authentication failed.")]
+
+    sfu_authenticated = client.ensure_authenticated()
+    if not sfu_authenticated:
+        return [TextContent(type="text", text=(
+            "SFU Library authentication failed — cannot resolve records. "
+            "Zotero is connected. Use Zotero-only tools (search_zotero, "
+            "list_zotero_collections) which work independently."
+        ))]
 
     zot_client = _get_zotero_client()
     downloader = _get_downloader(client) if attach_pdfs and features.get("pdf_download_enabled", True) else None
@@ -1723,9 +1791,9 @@ async def _handle_batch_save_to_zotero(args: dict, client) -> list[TextContent]:
 
 
 def _handle_search_zotero(args: dict) -> list[TextContent]:
-    features = _get_features()
-    if not features.get("zotero_enabled", True):
-        return [TextContent(type="text", text="Zotero integration is disabled. Set SFU_FEATURE_ZOTERO_ENABLED=true to enable.")]
+    auth_err = _ensure_zotero_auth()
+    if auth_err:
+        return auth_err
 
     query = args.get("query", "")
     limit = min(args.get("limit", 20), 100)
@@ -1753,9 +1821,9 @@ def _handle_search_zotero(args: dict) -> list[TextContent]:
 
 
 def _handle_get_zotero_collection_items(args: dict) -> list[TextContent]:
-    features = _get_features()
-    if not features.get("zotero_enabled", True):
-        return [TextContent(type="text", text="Zotero integration is disabled. Set SFU_FEATURE_ZOTERO_ENABLED=true to enable.")]
+    auth_err = _ensure_zotero_auth()
+    if auth_err:
+        return auth_err
 
     collection_name = args.get("collection_name", "")
     limit = min(args.get("limit", 50), 100)
@@ -1834,9 +1902,12 @@ def _handle_download_from_url(args: dict, client) -> list[TextContent]:
 
 
 async def _handle_backfill_collection_pdfs(args: dict, client) -> list[TextContent]:
+    # Independent auth checks — Zotero and SFU Library are separate paths
+    zotero_auth_err = _ensure_zotero_auth()
+    if zotero_auth_err:
+        return zotero_auth_err
+
     features = _get_features()
-    if not features.get("zotero_enabled", True):
-        return [TextContent(type="text", text="Zotero integration is disabled.")]
     if not features.get("pdf_download_enabled", True):
         return [TextContent(type="text", text="PDF download is disabled.")]
 
@@ -1845,8 +1916,14 @@ async def _handle_backfill_collection_pdfs(args: dict, client) -> list[TextConte
 
     if not collection_name:
         return [TextContent(type="text", text="No collection name provided.")]
-    if not client.ensure_authenticated():
-        return [TextContent(type="text", text="Authentication failed.")]
+
+    sfu_authenticated = client.ensure_authenticated()
+    if not sfu_authenticated:
+        return [TextContent(type="text", text=(
+            "SFU Library authentication failed — cannot search for PDFs. "
+            "Zotero is connected. Use Zotero-only tools (search_zotero, "
+            "list_zotero_collections) which work independently."
+        ))]
 
     zot_client = _get_zotero_client()
     downloader = _get_downloader(client)
@@ -1966,6 +2043,72 @@ async def _handle_backfill_collection_pdfs(args: dict, client) -> list[TextConte
     return [TextContent(type="text", text="\n".join(output))]
 
 
+# ─── Zotero status handlers ──────────────────────────────────────
+
+def _handle_get_zotero_status() -> list[TextContent]:
+    """Handle get_zotero_status tool — verify credentials and report status."""
+    features = _get_features()
+    if not features.get("zotero_enabled", True):
+        return [TextContent(type="text", text="Zotero integration is disabled.")]
+
+    try:
+        zot = _get_zotero_client()
+        result = zot.verify_credentials()
+    except ZoteroError as e:
+        return [TextContent(type="text", text=f"Zotero error: {e}")]
+
+    output = ["=" * 50, "ZOTERO STATUS", "=" * 50]
+    if result["valid"]:
+        output.append(f"\nCredentials: VALID")
+        output.append(f"Username: {result.get('username', 'N/A')}")
+        output.append(f"User ID: {result.get('userID', 'N/A')}")
+        access = result.get("access", {})
+        output.append(f"\nPermissions:")
+        output.append(f"  Library access: {access.get('library', False)}")
+        output.append(f"  File access: {access.get('files', False)}")
+        output.append(f"  Notes access: {access.get('notes', False)}")
+        output.append(f"  Write access: {access.get('write', False)}")
+    else:
+        output.append(f"\nCredentials: INVALID")
+        output.append(f"Reason: {result.get('message', 'Unknown')}")
+
+    output.append(f"\nNote: Independent of SFU Library authentication.")
+    return [TextContent(type="text", text="\n".join(output))]
+
+
+def _handle_zotero_authenticate(args: dict) -> list[TextContent]:
+    """Handle zotero_authenticate tool — verify or re-verify credentials."""
+    features = _get_features()
+    if not features.get("zotero_enabled", True):
+        return [TextContent(type="text", text="Zotero integration is disabled.")]
+
+    force = args.get("force", False)
+
+    try:
+        zot = _get_zotero_client()
+        success = zot.ensure_authenticated(force=force)
+    except ZoteroError as e:
+        return [TextContent(type="text", text=f"Zotero auth error: {e}")]
+
+    if success:
+        status = zot.get_auth_status()
+        access = status.get("access", {})
+        output = [
+            "Zotero authentication successful!",
+            f"Username: {status.get('username', 'N/A')}",
+            f"User ID: {status.get('userID', 'N/A')}",
+            f"Write access: {access.get('write', False)}",
+            "",
+            "Note: Independent of SFU Library authentication.",
+        ]
+        return [TextContent(type="text", text="\n".join(output))]
+    else:
+        return [TextContent(type="text", text=(
+            "Zotero authentication failed. Check SFU_ZOTERO_API_KEY and "
+            "SFU_ZOTERO_USER_ID. SFU Library search/download still available."
+        ))]
+
+
 # ─── Diagnostics handler ────────────────────────────────────────
 
 def _handle_get_diagnostics(args: dict, client) -> list[TextContent]:
@@ -1990,7 +2133,24 @@ def _handle_get_diagnostics(args: dict, client) -> list[TextContent]:
     except Exception as e:
         output.append(f"  Error: {e}")
 
-    # 2. Cookie inventory
+    # 2. Zotero status (independent of SFU Library token)
+    output.append("\n--- Zotero Status ---")
+    try:
+        zot = _get_zotero_client()
+        zot_status = zot.get_auth_status()
+        output.append(f"  Credentials configured: {zot_status.get('credentials_configured', False)}")
+        output.append(f"  Validated: {zot_status.get('validated', False)}")
+        if zot_status.get("validated"):
+            output.append(f"  Username: {zot_status.get('username', 'N/A')}")
+            output.append(f"  User ID: {zot_status.get('userID', 'N/A')}")
+            access = zot_status.get("access", {})
+            output.append(f"  Write access: {access.get('write', False)}")
+        elif zot_status.get("message"):
+            output.append(f"  Status: {zot_status['message']}")
+    except Exception as e:
+        output.append(f"  Error: {e}")
+
+    # 3. Cookie inventory
     output.append("\n--- Cookie Inventory ---")
     cookies = getattr(client, "cookies", {})
     output.append(f"  Total cookies: {len(cookies)}")
