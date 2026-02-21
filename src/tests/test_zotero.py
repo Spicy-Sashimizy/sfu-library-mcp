@@ -506,6 +506,94 @@ class TestCircuitBreaker:
         assert zot_client._breaker.state == CircuitBreaker.CLOSED
 
 
+# ─── Authentication ────────────────────────────────────────────
+
+class TestZoteroAuth:
+    def test_verify_credentials_success(self, zot_client, mock_pyzotero):
+        """Successful key_info should set _authenticated and return valid."""
+        mock_pyzotero.key_info.return_value = {
+            "userID": 12345,
+            "username": "testuser",
+            "access": {
+                "user": {
+                    "library": True,
+                    "files": True,
+                    "notes": True,
+                    "write": True,
+                }
+            },
+        }
+        result = zot_client.verify_credentials()
+        assert result["valid"] is True
+        assert result["username"] == "testuser"
+        assert result["userID"] == 12345
+        assert result["access"]["write"] is True
+        assert zot_client._authenticated is True
+        assert zot_client._auth_info["username"] == "testuser"
+
+    def test_verify_credentials_failure(self, zot_client, mock_pyzotero):
+        """Failed key_info should return valid=False."""
+        mock_pyzotero.key_info.side_effect = Exception("Forbidden")
+        result = zot_client.verify_credentials()
+        assert result["valid"] is False
+        assert "Forbidden" in result["message"]
+        assert zot_client._authenticated is False
+
+    def test_ensure_authenticated_caches(self, zot_client, mock_pyzotero):
+        """Second call should not hit API when already authenticated."""
+        mock_pyzotero.key_info.return_value = {
+            "userID": 12345,
+            "username": "testuser",
+            "access": {"user": {"library": True, "files": True, "notes": True, "write": True}},
+        }
+        assert zot_client.ensure_authenticated() is True
+        assert mock_pyzotero.key_info.call_count == 1
+
+        # Second call should use cache
+        assert zot_client.ensure_authenticated() is True
+        assert mock_pyzotero.key_info.call_count == 1  # no new call
+
+    def test_ensure_authenticated_force(self, zot_client, mock_pyzotero):
+        """force=True should re-validate even when already authenticated."""
+        mock_pyzotero.key_info.return_value = {
+            "userID": 12345,
+            "username": "testuser",
+            "access": {"user": {"library": True, "files": True, "notes": True, "write": True}},
+        }
+        zot_client.ensure_authenticated()
+        assert mock_pyzotero.key_info.call_count == 1
+
+        zot_client.ensure_authenticated(force=True)
+        assert mock_pyzotero.key_info.call_count == 2
+
+    def test_ensure_authenticated_no_credentials(self):
+        """Empty key/user should return False without API call."""
+        config = ServerConfig(zotero_api_key="", zotero_user_id="")
+        client = ZoteroClient(config)
+        assert client.ensure_authenticated() is False
+
+    def test_get_auth_status_not_validated(self, zot_client):
+        """Before verification, should return unverified state."""
+        status = zot_client.get_auth_status()
+        assert status["credentials_configured"] is True
+        assert status["validated"] is False
+        assert "Not yet verified" in status["message"]
+
+    def test_get_auth_status_after_validation(self, zot_client, mock_pyzotero):
+        """After verification, should return cached info."""
+        mock_pyzotero.key_info.return_value = {
+            "userID": 12345,
+            "username": "testuser",
+            "access": {"user": {"library": True, "files": True, "notes": True, "write": True}},
+        }
+        zot_client.verify_credentials()
+        status = zot_client.get_auth_status()
+        assert status["validated"] is True
+        assert status["username"] == "testuser"
+        assert status["userID"] == 12345
+        assert status["access"]["write"] is True
+
+
 # ─── Lazy loading ──────────────────────────────────────────────
 
 class TestLazyLoading:
