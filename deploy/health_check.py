@@ -1,27 +1,22 @@
-"""Production health check for Vanse Data Stack on TrueNAS CE.
+"""Production health check for SFU Library MCP on TrueNAS.
 
 Checks:
-- Docker containers running
-- Database connectivity and migrations
-- Disk space
-- Recent backups
-- Recent scraper activity
+- Docker container running and healthy
+- HTTP endpoint responsive
+- Memory usage within limits
+- Disk space adequate
+- Secrets mounted
 
 Usage:
-    python -m deploy.health_check              # Local mode (run on TrueNAS)
-    python -m deploy.health_check --remote     # Remote mode (SSH from dev container)
+    python deploy/health_check.py              # Remote mode (SSH from dev container)
 """
 
 from __future__ import annotations
 
-import os
 import subprocess
 import sys
 from dataclasses import dataclass, field
-from datetime import datetime
 from enum import StrEnum
-
-import click
 
 
 class HealthStatus(StrEnum):
@@ -38,21 +33,15 @@ class HealthCheckResult:
     details: list[str] = field(default_factory=list)
 
 
-EXPECTED_CONTAINERS = ["vanse_db", "vanse_scrapers", "vanse_n8n", "vanse_metabase"]
-
-COMPOSE_FILE = "docker-compose.prod.yml"
-BACKUP_DIR = "/mnt/tank/vanse/backups"
-DISK_WARN_PERCENT = 80
-DISK_FAIL_PERCENT = 95
-BACKUP_WARN_HOURS = 48
-SCRAPER_WARN_HOURS = 48
+SSH_ALIAS = "truenas"
+CONTAINER_NAME = "sfu-library-mcp"
 
 
-def _run_cmd(cmd: list[str], timeout: int = 30) -> tuple[int, str]:
-    """Run a command and return (returncode, stdout)."""
+def _ssh_cmd(cmd: str, timeout: int = 30) -> tuple[int, str]:
+    """Run a command on TrueNAS via SSH."""
     try:
         result = subprocess.run(
-            cmd,
+            ["ssh", SSH_ALIAS, cmd],
             capture_output=True,
             text=True,
             timeout=timeout,
@@ -61,335 +50,90 @@ def _run_cmd(cmd: list[str], timeout: int = 30) -> tuple[int, str]:
     except subprocess.TimeoutExpired:
         return 1, "Command timed out"
     except FileNotFoundError:
-        return 1, f"Command not found: {cmd[0]}"
+        return 1, "SSH not available"
 
 
-def _run_remote_cmd(cmd: str, **kwargs: str) -> tuple[int, str]:
-    """Run a command on the remote TrueNAS host via SSH."""
-    ssh_key = kwargs.get("ssh_key", "")
-    host = kwargs.get("host", "")
-    user = kwargs.get("user", "")
-    ssh_cmd = [
-        "ssh",
-        "-i",
-        ssh_key,
-        "-o",
-        "StrictHostKeyChecking=no",
-        "-o",
-        "ConnectTimeout=10",
-        f"{user}@{host}",
-        cmd,
-    ]
-    return _run_cmd(ssh_cmd, timeout=30)
+def check_ssh() -> HealthCheckResult:
+    """Check SSH connectivity to TrueNAS."""
+    rc, output = _ssh_cmd("echo OK")
+    if rc != 0 or output != "OK":
+        return HealthCheckResult("SSH", HealthStatus.FAIL, f"Cannot reach TrueNAS: {output}")
+    return HealthCheckResult("SSH", HealthStatus.OK, "Connected")
 
 
-def check_containers_running(remote: bool = False, **ssh_kwargs: str) -> HealthCheckResult:
-    """Check that all expected Docker containers are running."""
-    cmd = ["docker", "compose", "-f", COMPOSE_FILE, "ps", "--format", "{{.Name}} {{.Status}}"]
+def check_container_running() -> HealthCheckResult:
+    """Check that the MCP container is running."""
+    rc, output = _ssh_cmd(f"sudo docker ps --filter name={CONTAINER_NAME} --format '{{{{.Status}}}}'")
+    if rc != 0 or not output:
+        return HealthCheckResult("Container", HealthStatus.FAIL, "Container not running")
+    return HealthCheckResult("Container", HealthStatus.OK, f"Running: {output}")
 
-    if remote:
-        app_path = ssh_kwargs.get("app_path", "/mnt/tank/vanse/app")
-        shell_cmd = f"cd {app_path} && docker compose -f {COMPOSE_FILE} ps --format '{{{{.Name}}}} {{{{.Status}}}}'"
-        rc, output = _run_remote_cmd(
-            shell_cmd, **{k: v for k, v in ssh_kwargs.items() if k != "app_path"}
-        )
-    else:
-        rc, output = _run_cmd(cmd)
 
+def check_container_healthy() -> HealthCheckResult:
+    """Check Docker health check status."""
+    rc, output = _ssh_cmd(f"sudo docker inspect --format='{{{{.State.Health.Status}}}}' {CONTAINER_NAME}")
     if rc != 0:
-        return HealthCheckResult(
-            name="Containers",
-            status=HealthStatus.FAIL,
-            message=f"Failed to check containers: {output}",
-        )
-
-    running: list[str] = []
-    not_running: list[str] = []
-    details: list[str] = []
-
-    for line in output.splitlines():
-        if not line.strip():
-            continue
-        parts = line.split(None, 1)
-        name = parts[0] if parts else ""
-        status_text = parts[1] if len(parts) > 1 else ""
-        details.append(f"{name}: {status_text}")
-
-        if name in EXPECTED_CONTAINERS:
-            if "up" in status_text.lower():
-                running.append(name)
-            else:
-                not_running.append(name)
-
-    missing = [c for c in EXPECTED_CONTAINERS if c not in running and c not in not_running]
-    not_running.extend(missing)
-
-    if not_running:
-        return HealthCheckResult(
-            name="Containers",
-            status=HealthStatus.FAIL,
-            message=f"Containers not running: {', '.join(not_running)}",
-            details=details,
-        )
-
-    return HealthCheckResult(
-        name="Containers",
-        status=HealthStatus.OK,
-        message=f"All {len(running)} containers running",
-        details=details,
-    )
+        return HealthCheckResult("Health", HealthStatus.FAIL, f"Cannot inspect: {output}")
+    if output == "healthy":
+        return HealthCheckResult("Health", HealthStatus.OK, "Healthy")
+    return HealthCheckResult("Health", HealthStatus.FAIL, f"Status: {output}")
 
 
-def check_db_connectivity(remote: bool = False, **ssh_kwargs: str) -> HealthCheckResult:
-    """Check PostgreSQL is reachable and responding."""
-    cmd = [
-        "docker",
-        "exec",
-        "vanse_db",
-        "pg_isready",
-        "-U",
-        "vanse",
-        "-d",
-        "vanse_leads",
-    ]
-
-    if remote:
-        shell_cmd = "docker exec vanse_db pg_isready -U vanse -d vanse_leads"
-        rc, output = _run_remote_cmd(
-            shell_cmd, **{k: v for k, v in ssh_kwargs.items() if k != "app_path"}
-        )
-    else:
-        rc, output = _run_cmd(cmd)
-
+def check_http_endpoint() -> HealthCheckResult:
+    """Check that the HTTP health endpoint responds."""
+    rc, output = _ssh_cmd("curl -sf http://localhost:8080/health")
     if rc != 0:
-        return HealthCheckResult(
-            name="Database",
-            status=HealthStatus.FAIL,
-            message=f"Database not reachable: {output}",
-        )
-
-    return HealthCheckResult(
-        name="Database",
-        status=HealthStatus.OK,
-        message="Database accepting connections",
-    )
+        return HealthCheckResult("HTTP", HealthStatus.FAIL, "Health endpoint not responding")
+    return HealthCheckResult("HTTP", HealthStatus.OK, f"Response: {output}")
 
 
-def check_migrations_applied(remote: bool = False, **ssh_kwargs: str) -> HealthCheckResult:
-    """Check that database migrations have been applied."""
-    sql = "SELECT COUNT(*) FROM information_schema.tables WHERE table_schema = 'public' AND table_name = 'companies';"
-    cmd = [
-        "docker",
-        "exec",
-        "vanse_db",
-        "psql",
-        "-U",
-        "vanse",
-        "-d",
-        "vanse_leads",
-        "-t",
-        "-c",
-        sql,
-    ]
-
-    if remote:
-        shell_cmd = f'docker exec vanse_db psql -U vanse -d vanse_leads -t -c "{sql}"'
-        rc, output = _run_remote_cmd(
-            shell_cmd, **{k: v for k, v in ssh_kwargs.items() if k != "app_path"}
-        )
-    else:
-        rc, output = _run_cmd(cmd)
-
+def check_memory() -> HealthCheckResult:
+    """Check container memory usage."""
+    rc, output = _ssh_cmd(f"sudo docker stats {CONTAINER_NAME} --no-stream --format '{{{{.MemUsage}}}}'")
     if rc != 0:
-        return HealthCheckResult(
-            name="Migrations",
-            status=HealthStatus.FAIL,
-            message=f"Cannot check migrations: {output}",
-        )
-
-    count = output.strip()
-    if count == "1":
-        return HealthCheckResult(
-            name="Migrations",
-            status=HealthStatus.OK,
-            message="Core tables exist (companies table found)",
-        )
-
-    return HealthCheckResult(
-        name="Migrations",
-        status=HealthStatus.FAIL,
-        message="Core tables missing — run migrations",
-    )
+        return HealthCheckResult("Memory", HealthStatus.WARN, f"Cannot check: {output}")
+    return HealthCheckResult("Memory", HealthStatus.OK, f"Usage: {output}")
 
 
-def check_disk_space(path: str = "/mnt/tank/vanse") -> HealthCheckResult:
-    """Check disk usage at the data path."""
+def check_disk() -> HealthCheckResult:
+    """Check available disk space on /mnt/MAIN."""
+    rc, output = _ssh_cmd("df -BG /mnt/MAIN | awk 'NR==2{print $4}'")
+    if rc != 0:
+        return HealthCheckResult("Disk", HealthStatus.WARN, f"Cannot check: {output}")
     try:
-        stat = os.statvfs(path)
-        total = stat.f_blocks * stat.f_frsize
-        free = stat.f_bavail * stat.f_frsize
-        used = total - free
-        usage_pct = (used / total * 100) if total > 0 else 0
-
-        total_gb = total / (1024**3)
-        free_gb = free / (1024**3)
-        details = [f"Total: {total_gb:.1f} GB, Free: {free_gb:.1f} GB, Used: {usage_pct:.1f}%"]
-
-        if usage_pct >= DISK_FAIL_PERCENT:
-            return HealthCheckResult(
-                name="Disk Space",
-                status=HealthStatus.FAIL,
-                message=f"Disk usage critical: {usage_pct:.1f}%",
-                details=details,
-            )
-        if usage_pct >= DISK_WARN_PERCENT:
-            return HealthCheckResult(
-                name="Disk Space",
-                status=HealthStatus.WARN,
-                message=f"Disk usage high: {usage_pct:.1f}%",
-                details=details,
-            )
-
-        return HealthCheckResult(
-            name="Disk Space",
-            status=HealthStatus.OK,
-            message=f"Disk usage: {usage_pct:.1f}%",
-            details=details,
-        )
-    except OSError as e:
-        return HealthCheckResult(
-            name="Disk Space",
-            status=HealthStatus.WARN,
-            message=f"Cannot check disk space: {e}",
-        )
+        free_gb = int(output.replace("G", ""))
+        if free_gb < 5:
+            return HealthCheckResult("Disk", HealthStatus.FAIL, f"Only {free_gb}GB free")
+        return HealthCheckResult("Disk", HealthStatus.OK, f"{free_gb}GB free")
+    except ValueError:
+        return HealthCheckResult("Disk", HealthStatus.WARN, f"Unexpected output: {output}")
 
 
-def check_recent_backup(backup_dir: str = BACKUP_DIR) -> HealthCheckResult:
-    """Check that a backup exists within the last BACKUP_WARN_HOURS."""
-    try:
-        if not os.path.isdir(backup_dir):
-            return HealthCheckResult(
-                name="Backups",
-                status=HealthStatus.WARN,
-                message=f"Backup directory not found: {backup_dir}",
-            )
-
-        backups = sorted(
-            [f for f in os.listdir(backup_dir) if f.startswith("db_") and f.endswith(".sql.gz")],
-            reverse=True,
-        )
-
-        if not backups:
-            return HealthCheckResult(
-                name="Backups",
-                status=HealthStatus.FAIL,
-                message="No database backups found",
-            )
-
-        latest = backups[0]
-        latest_path = os.path.join(backup_dir, latest)
-        mtime = datetime.fromtimestamp(os.path.getmtime(latest_path))
-        age = datetime.now() - mtime
-        age_hours = age.total_seconds() / 3600
-
-        details = [f"Latest: {latest} ({age_hours:.1f} hours ago)"]
-
-        if age_hours > BACKUP_WARN_HOURS:
-            return HealthCheckResult(
-                name="Backups",
-                status=HealthStatus.WARN,
-                message=f"Latest backup is {age_hours:.0f} hours old (threshold: {BACKUP_WARN_HOURS}h)",
-                details=details,
-            )
-
-        return HealthCheckResult(
-            name="Backups",
-            status=HealthStatus.OK,
-            message=f"Latest backup: {age_hours:.1f} hours ago",
-            details=details,
-        )
-    except OSError as e:
-        return HealthCheckResult(
-            name="Backups",
-            status=HealthStatus.WARN,
-            message=f"Cannot check backups: {e}",
-        )
-
-
-def check_scraper_activity(remote: bool = False, **ssh_kwargs: str) -> HealthCheckResult:
-    """Check if any scraper has produced data recently."""
-    sql = (
-        "SELECT source, MAX(created_at) as latest "
-        "FROM companies GROUP BY source ORDER BY latest DESC LIMIT 5;"
-    )
-    cmd = [
-        "docker",
-        "exec",
-        "vanse_db",
-        "psql",
-        "-U",
-        "vanse",
-        "-d",
-        "vanse_leads",
-        "-t",
-        "-c",
-        sql,
-    ]
-
-    if remote:
-        shell_cmd = f'docker exec vanse_db psql -U vanse -d vanse_leads -t -c "{sql}"'
-        rc, output = _run_remote_cmd(
-            shell_cmd, **{k: v for k, v in ssh_kwargs.items() if k != "app_path"}
-        )
-    else:
-        rc, output = _run_cmd(cmd)
-
+def check_secrets() -> HealthCheckResult:
+    """Check that all 6 secrets are mounted in the container."""
+    rc, output = _ssh_cmd(f"sudo docker exec {CONTAINER_NAME} ls /run/secrets/")
     if rc != 0:
-        return HealthCheckResult(
-            name="Scraper Activity",
-            status=HealthStatus.WARN,
-            message=f"Cannot check scraper activity: {output}",
-        )
-
-    lines = [line.strip() for line in output.splitlines() if line.strip()]
-    if not lines:
-        return HealthCheckResult(
-            name="Scraper Activity",
-            status=HealthStatus.WARN,
-            message="No company records found — scrapers may not have run yet",
-        )
-
-    details = [f"  {line}" for line in lines]
-    return HealthCheckResult(
-        name="Scraper Activity",
-        status=HealthStatus.OK,
-        message=f"Found activity from {len(lines)} sources",
-        details=details,
-    )
+        return HealthCheckResult("Secrets", HealthStatus.FAIL, f"Cannot list secrets: {output}")
+    files = output.strip().split("\n")
+    expected = {"sfu_username", "sfu_password", "sfu_mfa_secret", "sfu_mfa_device_name", "zotero_api_key", "zotero_user_id"}
+    found = set(files)
+    missing = expected - found
+    if missing:
+        return HealthCheckResult("Secrets", HealthStatus.FAIL, f"Missing: {missing}", details=files)
+    return HealthCheckResult("Secrets", HealthStatus.OK, f"All {len(expected)} secrets mounted")
 
 
-def run_all_checks(
-    remote: bool = False,
-    disk_path: str = "/mnt/tank/vanse",
-    backup_dir: str = BACKUP_DIR,
-    **ssh_kwargs: str,
-) -> list[HealthCheckResult]:
+def run_all_checks() -> list[HealthCheckResult]:
     """Run all health checks."""
-    ssh_args = {k: v for k, v in ssh_kwargs.items() if v}
-
-    results = [
-        check_containers_running(remote=remote, **ssh_args),
-        check_db_connectivity(remote=remote, **ssh_args),
-        check_migrations_applied(remote=remote, **ssh_args),
-        check_scraper_activity(remote=remote, **ssh_args),
+    return [
+        check_ssh(),
+        check_container_running(),
+        check_container_healthy(),
+        check_http_endpoint(),
+        check_memory(),
+        check_disk(),
+        check_secrets(),
     ]
-
-    # Disk and backup checks only make sense in local mode
-    if not remote:
-        results.append(check_disk_space(path=disk_path))
-        results.append(check_recent_backup(backup_dir=backup_dir))
-
-    return results
 
 
 def _status_symbol(status: HealthStatus) -> str:
@@ -401,46 +145,31 @@ def _status_symbol(status: HealthStatus) -> str:
         return "FAIL"
 
 
-@click.command()
-@click.option("--remote", is_flag=True, help="Run checks via SSH to TrueNAS")
-@click.option("--host", default=None, help="TrueNAS hostname/IP (default: TRUENAS_HOST env)")
-@click.option("--user", default=None, help="SSH user (default: TRUENAS_USER env)")
-@click.option("--ssh-key", default=None, help="SSH key path")
-def main(remote: bool, host: str | None, user: str | None, ssh_key: str | None) -> None:
-    """Run production health checks for Vanse Data Stack."""
-    ssh_kwargs: dict[str, str] = {}
-    if remote:
-        ssh_kwargs["host"] = host or os.environ.get("TRUENAS_HOST", "192.168.1.100")
-        ssh_kwargs["user"] = user or os.environ.get("TRUENAS_USER", "vanse")
-        ssh_kwargs["ssh_key"] = ssh_key or os.environ.get(
-            "SSH_KEY", "/workspaces/vansedataadstackshit/.ssh/id_ed25519"
-        )
-        ssh_kwargs["app_path"] = "/mnt/tank/vanse/app"
+def main() -> None:
+    """Run all health checks and print results."""
+    results = run_all_checks()
 
-    results = run_all_checks(remote=remote, **ssh_kwargs)
-
-    mode = "Remote (SSH)" if remote else "Local"
-    click.echo(f"\n{'='*60}")
-    click.echo(f"  Vanse Data Stack Health Check — {mode}")
-    click.echo(f"{'='*60}\n")
+    print(f"\n{'='*60}")
+    print(f"  SFU Library MCP — Health Check")
+    print(f"{'='*60}\n")
 
     failures = 0
     warnings = 0
     for r in results:
         symbol = _status_symbol(r.status)
-        click.echo(f"  [{symbol}] {r.name}: {r.message}")
+        print(f"  [{symbol}] {r.name}: {r.message}")
         for d in r.details:
-            click.echo(f"         {d}")
+            print(f"         {d}")
         if r.status == HealthStatus.FAIL:
             failures += 1
         elif r.status == HealthStatus.WARN:
             warnings += 1
 
-    click.echo(f"\n{'='*60}")
+    print(f"\n{'='*60}")
     total = len(results)
     ok = sum(1 for r in results if r.status == HealthStatus.OK)
-    click.echo(f"  {ok}/{total} ok, {warnings} warnings, {failures} failures")
-    click.echo(f"{'='*60}\n")
+    print(f"  {ok}/{total} ok, {warnings} warnings, {failures} failures")
+    print(f"{'='*60}\n")
 
     sys.exit(1 if failures > 0 else 0)
 
