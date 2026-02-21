@@ -29,6 +29,8 @@ class ZoteroClient:
             threshold=config.circuit_breaker_threshold,
             timeout=config.circuit_breaker_timeout,
         )
+        self._authenticated = False
+        self._auth_info = {}
 
     @property
     def zot(self):
@@ -69,6 +71,98 @@ class ZoteroClient:
                 operation_name, e, self._breaker.failure_count,
             )
             raise ZoteroError(f"Zotero API error in {operation_name}: {e}") from e
+
+    # ─── Authentication ─────────────────────────────────────────────
+
+    def verify_credentials(self) -> dict:
+        """Verify Zotero API credentials by calling key_info().
+
+        Returns:
+            dict with "valid" bool and credential details on success,
+            or "valid": False with "message" on failure.
+        """
+        if not self.config.zotero_api_key or not self.config.zotero_user_id:
+            return {
+                "valid": False,
+                "message": "Zotero credentials not configured. "
+                           "Set SFU_ZOTERO_API_KEY and SFU_ZOTERO_USER_ID.",
+            }
+        try:
+            info = self._call_zotero("key_info", self.zot.key_info)
+        except ZoteroError as e:
+            self._authenticated = False
+            self._auth_info = {}
+            return {"valid": False, "message": str(e)}
+
+        # Parse access permissions from key_info response
+        access = info.get("access", {})
+        user_access = access.get("user", {})
+        username = info.get("username", "")
+        user_id = info.get("userID", self.config.zotero_user_id)
+
+        self._authenticated = True
+        self._auth_info = {
+            "username": username,
+            "userID": user_id,
+            "access": {
+                "library": user_access.get("library", False),
+                "files": user_access.get("files", False),
+                "notes": user_access.get("notes", False),
+                "write": user_access.get("write", False),
+            },
+        }
+        logger.info("Zotero credentials verified for user: %s (ID: %s)", username, user_id)
+        return {
+            "valid": True,
+            "username": username,
+            "userID": user_id,
+            "access": self._auth_info["access"],
+        }
+
+    def get_auth_status(self) -> dict:
+        """Return cached Zotero auth state (no API call).
+
+        Returns:
+            dict with credentials_configured, validated, and cached info.
+        """
+        credentials_configured = bool(
+            self.config.zotero_api_key and self.config.zotero_user_id
+        )
+        if not self._authenticated:
+            return {
+                "credentials_configured": credentials_configured,
+                "validated": False,
+                "message": "Not yet verified. Call verify_credentials() or ensure_authenticated().",
+            }
+        return {
+            "credentials_configured": credentials_configured,
+            "validated": True,
+            "username": self._auth_info.get("username", ""),
+            "userID": self._auth_info.get("userID", ""),
+            "access": self._auth_info.get("access", {}),
+        }
+
+    def ensure_authenticated(self, force: bool = False) -> bool:
+        """Ensure Zotero credentials are valid (lazy, cached).
+
+        Args:
+            force: If True, re-verify even if already authenticated.
+
+        Returns:
+            True if credentials are valid, False otherwise.
+        """
+        if force:
+            self._authenticated = False
+            self._auth_info = {}
+
+        if self._authenticated:
+            return True
+
+        if not self.config.zotero_api_key or not self.config.zotero_user_id:
+            return False
+
+        result = self.verify_credentials()
+        return result["valid"]
 
     # ─── Author parsing ────────────────────────────────────────────
 
