@@ -211,4 +211,10 @@ def validate_config(config: ServerConfig) -> list[str]:
     if config.log_level.upper() not in valid_levels:
         warnings.append(f"Invalid log_level: {config.log_level}")
 
+    # Zotero credential validation
+    if not config.zotero_api_key:
+        warnings.append("SFU_ZOTERO_API_KEY is empty — Zotero tools will fail")
+    if not config.zotero_user_id:
+        warnings.append("SFU_ZOTERO_USER_ID is empty — Zotero tools will fail")
+
     return warnings
