@@ -10,11 +10,9 @@ Endpoints:
   GET  /health — Health check (returns {"status": "ok", "tools": <count>})
 """
 
-import asyncio
-import json
+import contextlib
 import os
-import sys
-from contextlib import asynccontextmanager
+from collections.abc import AsyncIterator
 
 import uvicorn
 from starlette.applications import Starlette
@@ -23,7 +21,7 @@ from starlette.responses import JSONResponse
 from starlette.routing import Mount, Route
 
 from mcp.server import Server
-from mcp.server.streamable_http import StreamableHTTPServerTransport
+from mcp.server.streamable_http_manager import StreamableHTTPSessionManager
 from mcp.types import Tool, TextContent
 
 from lib.logging_setup import setup_logging
@@ -75,51 +73,29 @@ async def health_check(request: Request) -> JSONResponse:
     })
 
 
-# ─── MCP Streamable HTTP handler ─────────────────────────────────
+# ─── Session manager (handles transport lifecycle) ────────────────
 
-async def handle_mcp(request: Request):
-    """Handle MCP requests using StreamableHTTPServerTransport.
+session_manager = StreamableHTTPSessionManager(
+    app=mcp_server,
+    json_response=True,
+    stateless=True,
+)
 
-    Each request gets its own transport instance (stateless mode).
-    """
-    # Create a transport for this request (stateless — no session persistence)
-    transport = StreamableHTTPServerTransport(
-        mcp_session_id=None,  # Stateless mode
-        is_json_response_enabled=True,
-    )
 
-    async with transport.connect() as (read_stream, write_stream):
-        # Start the MCP server processing in the background
-        server_task = asyncio.create_task(
-            mcp_server.run(read_stream, write_stream, mcp_server.create_initialization_options())
-        )
-
-        try:
-            # Let the transport handle the HTTP request
-            await transport.handle_request(
-                request.scope, request.receive, request._send
-            )
-        finally:
-            # Clean up: terminate transport and wait for server task
-            if not transport.is_terminated:
-                await transport.terminate()
-            # Give the server task a moment to finish
-            try:
-                await asyncio.wait_for(server_task, timeout=5.0)
-            except (asyncio.TimeoutError, Exception):
-                server_task.cancel()
-                try:
-                    await server_task
-                except asyncio.CancelledError:
-                    pass
+@contextlib.asynccontextmanager
+async def lifespan(app: Starlette) -> AsyncIterator[None]:
+    """Start and stop the MCP session manager with the Starlette app."""
+    async with session_manager.run():
+        yield
 
 
 # ─── Starlette app ────────────────────────────────────────────────
 
 app = Starlette(
+    lifespan=lifespan,
     routes=[
         Route("/health", health_check, methods=["GET"]),
-        Route("/mcp", handle_mcp, methods=["GET", "POST", "DELETE"]),
+        Mount("/mcp", app=session_manager.handle_request),
     ],
 )
 
