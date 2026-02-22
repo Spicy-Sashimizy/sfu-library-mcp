@@ -18,7 +18,7 @@ import uvicorn
 from starlette.applications import Starlette
 from starlette.requests import Request
 from starlette.responses import JSONResponse
-from starlette.routing import Mount, Route
+from starlette.routing import Route
 
 from mcp.server import Server
 from mcp.server.streamable_http_manager import StreamableHTTPSessionManager
@@ -90,14 +90,26 @@ async def lifespan(app: Starlette) -> AsyncIterator[None]:
 
 
 # ─── Starlette app ────────────────────────────────────────────────
+#
+# Mount at /mcp redirects /mcp → /mcp/ (307) which some MCP clients
+# don't follow. Use a thin ASGI wrapper to route /mcp and /mcp/
+# directly to the session manager without redirects.
 
-app = Starlette(
+_starlette = Starlette(
     lifespan=lifespan,
     routes=[
         Route("/health", health_check, methods=["GET"]),
-        Mount("/mcp", app=session_manager.handle_request),
     ],
 )
+
+
+async def app(scope, receive, send):
+    """ASGI entry point — routes /mcp directly, delegates the rest to Starlette."""
+    if scope["type"] == "http" and scope.get("path", "").rstrip("/") == "/mcp":
+        await session_manager.handle_request(scope, receive, send)
+    else:
+        # Lifespan, /health, and 404s handled by Starlette
+        await _starlette(scope, receive, send)
 
 
 def main():
