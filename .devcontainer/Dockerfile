@@ -70,8 +70,8 @@ RUN curl -fsSL https://cli.github.com/packages/githubcli-archive-keyring.gpg | d
 
 
 # Install Gitleaks for pre-commit secret scanning (industry standard, 800+ rules)
-RUN GITLEAKS_VERSION="8.24.2" && \
-    curl -sSfL "https://github.com/gitleaks/gitleaks/releases/download/v${GITLEAKS_VERSION}/gitleaks_${GITLEAKS_VERSION}_linux_amd64.tar.gz" \
+RUN GITLEAKS_VERSION="8.30.0" && \
+    curl -sSfL "https://github.com/gitleaks/gitleaks/releases/download/v${GITLEAKS_VERSION}/gitleaks_${GITLEAKS_VERSION}_linux_x64.tar.gz" \
     | tar xz -C /usr/local/bin gitleaks && \
     chmod +x /usr/local/bin/gitleaks
 
