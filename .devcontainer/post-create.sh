@@ -906,7 +906,7 @@ PRE_COMMIT_HOOK="$HOOKS_DIR/pre-commit"
 
 mkdir -p "$HOOKS_DIR"
 
-# Create pre-commit hook
+# Create pre-commit hook (Gitleaks-based with regex fallback)
 cat > "$PRE_COMMIT_HOOK" << 'PRECOMMIT_EOF'
 #!/bin/bash
 # ClaudeBox Pre-commit Secret Scanner

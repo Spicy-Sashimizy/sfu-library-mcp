@@ -1,0 +1,35 @@
+# Gitleaks configuration for ClaudeBox projects
+# https://github.com/gitleaks/gitleaks
+#
+# This file is copied into new projects at creation time.
+# Customize per-project by editing .gitleaks.toml in the project root.
+
+title = "ClaudeBox Gitleaks Config"
+
+[allowlist]
+  description = "Global allowlist for ClaudeBox projects"
+
+  # Paths that should never be scanned
+  paths = [
+    '''\.env\.example''',
+    '''\.env\.template''',
+    '''\.gitattributes''',
+    '''node_modules/.*''',
+    '''dist/.*''',
+    '''build/.*''',
+    '''__pycache__/.*''',
+    '''\.git/.*''',
+    '''vendor/.*''',
+    '''venv/.*''',
+    '''\.next/.*''',
+    '''tests/fixtures/.*''',
+    '''test/fixtures/.*''',
+  ]
+
+  # Regex patterns to ignore (false positives)
+  regexes = [
+    '''EXAMPLE_''',
+    '''YOUR_.*_HERE''',
+    '''placeholder''',
+    '''xxx+''',
+  ]

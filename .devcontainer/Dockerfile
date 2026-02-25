@@ -68,6 +68,13 @@ RUN curl -fsSL https://cli.github.com/packages/githubcli-archive-keyring.gpg | d
     && apt-get clean -y \
     && rm -rf /var/lib/apt/lists/*
 
+
+# Install Gitleaks for pre-commit secret scanning (industry standard, 800+ rules)
+RUN GITLEAKS_VERSION="8.24.2" && \
+    curl -sSfL "https://github.com/gitleaks/gitleaks/releases/download/v${GITLEAKS_VERSION}/gitleaks_${GITLEAKS_VERSION}_linux_amd64.tar.gz" \
+    | tar xz -C /usr/local/bin gitleaks && \
+    chmod +x /usr/local/bin/gitleaks
+
 # Add health check endpoint for version monitoring
 # Checks native installer path first, then falls back to npm global
 RUN echo '#!/bin/bash\nif [ -x "$HOME/.local/bin/claude" ]; then\n  VERSION=$("$HOME/.local/bin/claude" --version 2>/dev/null || echo "unknown")\nelif command -v claude &>/dev/null; then\n  VERSION=$(claude --version 2>/dev/null || echo "unknown")\nelse\n  VERSION="not-installed"\nfi\necho "Content-Type: application/json"\necho ""\ncat /usr/local/share/claude-version.json' > /usr/local/bin/claude-version && \
