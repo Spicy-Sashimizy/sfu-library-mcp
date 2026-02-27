@@ -1,53 +1,48 @@
-# ClaudeBox Project: ${PROJECT_NAME}
-name: claudebox-${PROJECT_NAME}
+# ClaudeBox Project: sfu-library-mcp
+name: claudebox-sfu-library-mcp
 
 services:
   app:
-    container_name: claudebox-${PROJECT_NAME}-app
+    container_name: claudebox-sfu-library-mcp-app
     build:
       context: .
       dockerfile: Dockerfile
     volumes:
-      - ..:/workspaces/${PROJECT_NAME}:cached
+      - ..:/workspaces/sfu-library-mcp:cached
       - claude-config:/home/vscode/.claude:cached
       - pommel_data:/home/vscode/.pommel-data:cached
       - gh-cli-config:/home/vscode/.config/gh:cached
-      - claude-local:/home/vscode/.local:cached
-      - ${CLAUDEBOX_ROOT}/mcp-servers/pommel/devcontainer-server.py:/usr/local/bin/pommel-mcp-server.py:ro
-      # SSH keys for Git operations (GitHub authentication)
-      # Mounted writable to allow permission fixes in entrypoint.sh
-      - ${USERPROFILE}/.ssh:/home/vscode/.ssh
-      # Entrypoint script for persistent SSH/Git setup
+      - C:\Users\gordo\.claudebox\mcp-servers\pommel\devcontainer-server.py:/usr/local/bin/pommel-mcp-server.py:ro
+      - C:/Users/gordo/.ssh:/home/vscode/.ssh
       - ./entrypoint.sh:/usr/local/bin/claudebox-entrypoint.sh:ro
-      # Git credentials for HTTPS authentication (OAuth token)
-      - ${USERPROFILE}/.claudebox/git-credentials/.git-credentials:/mnt/claudebox-git-creds/.git-credentials:ro
-      # Public branch generator scripts (portfolio README generation)
-      - ${CLAUDEBOX_ROOT}/scripts/generate-public-branch.sh:/usr/local/bin/generate-public-branch.sh:ro
-      - ${CLAUDEBOX_ROOT}/scripts/public-branch-helper.py:/usr/local/bin/public-branch-helper.py:ro
-      - ${CLAUDEBOX_ROOT}/scripts/public-branch-prompts.sh:/usr/local/bin/public-branch-prompts.sh:ro
+      - C:/Users/gordo/.claudebox/git-credentials/.git-credentials:/mnt/claudebox-git-creds/.git-credentials:ro
+      - claude-local:/home/vscode/.local:cached
+      - C:/Users/gordo/.claudebox/credentials.json:/home/vscode/.claudebox-credentials/credentials.json:ro
+      - C:/Users/gordo/Downloads:/mnt/host-downloads
+      - C:/Users/gordo/AppData/Roaming/Claude/logs:/mnt/claude-desktop-logs:ro
     entrypoint: ["/bin/bash", "/usr/local/bin/claudebox-entrypoint.sh"]
-    command: ["sleep", "infinity"]
+    command: sleep infinity
     env_file:
       - ../.env
     environment:
       - DATABASE_URL=postgresql://${DB_USER:-dev}:${DB_PASSWORD:-dev}@postgres:5432/${DB_NAME:-app_dev}
       - REDIS_URL=redis://:${REDIS_PASSWORD:-dev}@redis:6379/0
-      - PYTHONPATH=/workspaces/${PROJECT_NAME}
+      - PYTHONPATH=/workspaces/sfu-library-mcp
       - CLAUDE_CONFIG_DIR=/home/vscode/.claude
-      - OLLAMA_HOST=http://host.docker.internal:11434
-      - POMMEL_DATA_DIR=/home/vscode/.pommel-data
       - CLAUDE_BACKEND=${CLAUDE_BACKEND:-anthropic}
       - CLAUDEBOX_CREDENTIALS_FILE=/home/vscode/.claudebox-credentials/credentials.json
-      - PROJECT_NAME=${PROJECT_NAME}
-      - POMMEL_HOST=claudebox-${PROJECT_NAME}-pommel
+      - OLLAMA_HOST=http://host.docker.internal:11434
+      - POMMEL_DATA_DIR=/home/vscode/.pommel-data
+      - PROJECT_NAME=sfu-library-mcp
+      - POMMEL_HOST=claudebox-sfu-library-mcp-pommel
       - POMMEL_PORT=7420
     networks:
-      - ${PROJECT_NETWORK}
+      - claudebox-sfu-library-mcp-net
       - claudebox-shared
     extra_hosts:
       - "host.docker.internal:host-gateway"
     labels:
-      - "com.claudebox.project=${PROJECT_NAME}"
+      - "com.claudebox.project=sfu-library-mcp"
       - "com.claudebox.service=app"
       - "com.claudebox.managed=true"
     depends_on:
@@ -57,7 +52,7 @@ services:
         condition: service_healthy
 
   cloudflared:
-    container_name: claudebox-${PROJECT_NAME}-tunnel
+    container_name: claudebox-sfu-library-mcp-tunnel
     image: cloudflare/cloudflared:latest
     restart: unless-stopped
     env_file:
@@ -66,16 +61,16 @@ services:
     depends_on:
       - app
     networks:
-      - ${PROJECT_NETWORK}
+      - claudebox-sfu-library-mcp-net
     labels:
-      - "com.claudebox.project=${PROJECT_NAME}"
+      - "com.claudebox.project=sfu-library-mcp"
       - "com.claudebox.service=tunnel"
       - "com.claudebox.managed=true"
     profiles:
       - tunnel
 
   postgres:
-    container_name: claudebox-${PROJECT_NAME}-db
+    container_name: claudebox-sfu-library-mcp-db
     image: postgres:16
     restart: unless-stopped
     environment:
@@ -85,9 +80,9 @@ services:
     volumes:
       - postgres_data:/var/lib/postgresql/data
     networks:
-      - ${PROJECT_NETWORK}
+      - claudebox-sfu-library-mcp-net
     labels:
-      - "com.claudebox.project=${PROJECT_NAME}"
+      - "com.claudebox.project=sfu-library-mcp"
       - "com.claudebox.service=database"
       - "com.claudebox.managed=true"
     healthcheck:
@@ -97,16 +92,16 @@ services:
       retries: 5
 
   redis:
-    container_name: claudebox-${PROJECT_NAME}-redis
+    container_name: claudebox-sfu-library-mcp-redis
     image: redis:7-alpine
-    restart: unless-stopped
     command: ["redis-server", "--requirepass", "${REDIS_PASSWORD:-dev}"]
+    restart: unless-stopped
     volumes:
       - redis_data:/data
     networks:
-      - ${PROJECT_NETWORK}
+      - claudebox-sfu-library-mcp-net
     labels:
-      - "com.claudebox.project=${PROJECT_NAME}"
+      - "com.claudebox.project=sfu-library-mcp"
       - "com.claudebox.service=cache"
       - "com.claudebox.managed=true"
     healthcheck:
@@ -116,48 +111,42 @@ services:
       retries: 5
 
 networks:
-  ${PROJECT_NETWORK}:
-    name: claudebox-${PROJECT_NAME}-net
+  claudebox-sfu-library-mcp-net:
+    name: claudebox-sfu-library-mcp-net
     driver: bridge
     labels:
-      - "com.claudebox.project=${PROJECT_NAME}"
+      - "com.claudebox.project=sfu-library-mcp"
       - "com.claudebox.managed=true"
-
   claudebox-shared:
     external: true
     name: claudebox-shared-net
 
 volumes:
   postgres_data:
-    name: claudebox-${PROJECT_NAME}-postgres
+    name: claudebox-sfu-library-mcp-postgres
     labels:
-      com.claudebox.project: ${PROJECT_NAME}
+      com.claudebox.project: sfu-library-mcp
       com.claudebox.managed: "true"
   redis_data:
-    name: claudebox-${PROJECT_NAME}-redis
+    name: claudebox-sfu-library-mcp-redis
     labels:
-      com.claudebox.project: ${PROJECT_NAME}
+      com.claudebox.project: sfu-library-mcp
       com.claudebox.managed: "true"
-
   pommel_data:
-    name: claudebox-${PROJECT_NAME}-pommel
+    name: claudebox-sfu-library-mcp-pommel
     labels:
-      com.claudebox.project: ${PROJECT_NAME}
+      com.claudebox.project: sfu-library-mcp
       com.claudebox.managed: "true"
-
+  gh-cli-config:
+    name: claudebox-sfu-library-mcp-gh-cli
+    labels:
+      com.claudebox.project: sfu-library-mcp
+      com.claudebox.managed: "true"
   claude-config:
     name: claudebox-shared-config
-    labels:
-      com.claudebox.managed: "true"
-
-  gh-cli-config:
-    name: claudebox-${PROJECT_NAME}-gh-cli
-    labels:
-      com.claudebox.project: ${PROJECT_NAME}
-      com.claudebox.managed: "true"
-
+    external: true
   claude-local:
-    name: claudebox-${PROJECT_NAME}-local
+    name: claudebox-sfu-library-mcp-local
     labels:
-      com.claudebox.project: ${PROJECT_NAME}
+      com.claudebox.project: sfu-library-mcp
       com.claudebox.managed: "true"
