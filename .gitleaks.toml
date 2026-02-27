@@ -1,35 +1,239 @@
-# Gitleaks configuration for ClaudeBox projects
-# https://github.com/gitleaks/gitleaks
+# ============================================
+# GITLEAKS CONFIGURATION - ClaudeBox Projects
+# ============================================
+# Deployed to all projects via Deploy-SecretsPrevention.ps1
+# Template source: ~/.claudebox/templates/full-stack/.gitleaks.toml
 #
-# This file is copied into new projects at creation time.
-# Customize per-project by editing .gitleaks.toml in the project root.
+# Design principles:
+#   1. Catch real secrets (ZAI keys, hardcoded API keys, tokens)
+#   2. Exclude shell variable references ($VAR) — those resolve at runtime
+#   3. Exclude env var propagation files (post-create.sh, entrypoint.sh)
+#   4. Exclude documentation and config files that mention key names
+#
+# To test: gitleaks detect --source . --no-banner -v
 
 title = "ClaudeBox Gitleaks Config"
 
-[allowlist]
-  description = "Global allowlist for ClaudeBox projects"
+# ============================================
+# CUSTOM RULES
+# ============================================
 
-  # Paths that should never be scanned
+# Rule 1: ZAI/Anthropic API Key — hex.base64 format
+# Matches: ccf44d0d1a1a4e4498da13fdd7f46135.GWIbXjdZnCdhQhhV
+# These keys are 32 hex chars + dot + 10+ base64 chars
+[[rules]]
+id = "zai-anthropic-api-key"
+description = "ZAI/Anthropic API Key (hex.base64 format)"
+regex = '''[0-9a-f]{32}\.[A-Za-z0-9+/]{10,}'''
+keywords = ["anthropic", "zai", "api"]
+
+  # Rule-specific allowlist: files that legitimately reference key patterns
+  [rules.allowlist]
   paths = [
+    '''post-create\.sh''',
+    '''entrypoint\.sh''',
+    '''server\.py''',
+    '''\.gitleaks\.toml''',
+    '''CLAUDE\.md''',
     '''\.env\.example''',
     '''\.env\.template''',
-    '''\.gitattributes''',
-    '''node_modules/.*''',
-    '''dist/.*''',
-    '''build/.*''',
-    '''__pycache__/.*''',
-    '''\.git/.*''',
-    '''vendor/.*''',
-    '''venv/.*''',
-    '''\.next/.*''',
-    '''tests/fixtures/.*''',
-    '''test/fixtures/.*''',
+  ]
+  regexes = [
+    '''REDACTED''',
   ]
 
-  # Regex patterns to ignore (false positives)
-  regexes = [
-    '''EXAMPLE_''',
-    '''YOUR_.*_HERE''',
-    '''placeholder''',
-    '''xxx+''',
+# Rule 2: Hardcoded ANTHROPIC_API_KEY assignment
+# Matches: ANTHROPIC_API_KEY="sk-ant-..." or ANTHROPIC_API_KEY='actual_key'
+# Excludes: ANTHROPIC_API_KEY="$ZAI_API_KEY" (shell variable, resolved at runtime)
+# Excludes: ANTHROPIC_API_KEY="${VAR:-}" (env var with empty default)
+[[rules]]
+id = "anthropic-key-assignment"
+description = "Anthropic API key hardcoded in assignment (excludes $VAR references)"
+regex = '''(?i)ANTHROPIC_API_KEY\s*=\s*['"][^'"$]{10,}['"]'''
+keywords = ["anthropic"]
+
+  [rules.allowlist]
+  paths = [
+    '''post-create\.sh''',
+    '''entrypoint\.sh''',
+    '''\.env\.example''',
+    '''\.env\.template''',
+    '''\.gitleaks\.toml''',
+    '''CLAUDE\.md''',
   ]
+
+# Rule 3: Generic API key/secret/token hardcoded assignment
+# Matches: API_KEY="actual_long_key_value_here"
+# Excludes: API_KEY="$ENV_VAR" (shell variable reference)
+[[rules]]
+id = "generic-api-key-assignment"
+description = "Generic API key/secret/token hardcoded (excludes $VAR references)"
+regex = '''(?i)(?:API_KEY|API_SECRET|SECRET_KEY|ACCESS_TOKEN|AUTH_TOKEN)\s*[:=]\s*['"][^'"$]{20,}['"]'''
+keywords = ["api_key", "api_secret", "secret_key", "access_token", "auth_token"]
+
+  [rules.allowlist]
+  paths = [
+    '''post-create\.sh''',
+    '''entrypoint\.sh''',
+    '''\.env\.example''',
+    '''\.env\.template''',
+    '''\.gitleaks\.toml''',
+    '''CLAUDE\.md''',
+  ]
+
+# Rule 4: API key hardcoded in batch/cmd files
+# .bat/.cmd files should never contain literal API keys
+# They should reference host environment variables via %VAR% syntax
+[[rules]]
+id = "bat-file-api-key"
+description = "API key hardcoded in batch/cmd file"
+regex = '''(?i)(?:API_KEY|SECRET|TOKEN)\s*=\s*'[^'$%]{10,}''''
+keywords = ["api_key", "secret", "token"]
+paths = ['''\.bat''', '''\.cmd''']
+
+# Rule 5: Email address leak detection
+# Catches personal email addresses accidentally committed in session logs,
+# backup files, or any other tracked files.
+[[rules]]
+id = "email-address-leak"
+description = "Personal email address detected in committed file"
+regex = '''[a-zA-Z0-9._%+\-]+@(?:gmail|hotmail|yahoo|outlook|protonmail|icloud|aol|live|msn|me)\.[a-zA-Z]{2,}'''
+keywords = ["gmail", "hotmail", "yahoo", "outlook", "protonmail", "icloud", "aol", "live", "msn"]
+
+  [rules.allowlist]
+  paths = [
+    '''\.gitleaks\.toml''',
+    '''\.gitconfig''',
+    '''CLAUDE\.md''',
+  ]
+  regexes = [
+    '''claudebox@local''',
+    '''noreply@anthropic\.com''',
+    '''noreply@github\.com''',
+  ]
+
+# Rule 6: Docker exec with inline secrets
+# Catches: docker exec ... ANTHROPIC_API_KEY='actual_key_here' ...
+# Excludes: docker exec ... ANTHROPIC_API_KEY="$ZAI_API_KEY" (env var ref)
+[[rules]]
+id = "docker-exec-inline-secret"
+description = "Secret passed inline to docker exec command"
+regex = '''docker\s+exec\s+.*(?:API_KEY|SECRET|TOKEN)\s*=\s*['"][^'"$%]{10,}['"]'''
+keywords = ["docker"]
+
+  [rules.allowlist]
+  paths = [
+    '''\.gitleaks\.toml''',
+    '''CLAUDE\.md''',
+    '''README\.md''',
+  ]
+
+# Rule 7: GitHub Personal Access Token (PAT) detection
+# Default gitleaks rules may miss tokens embedded in session log text or
+# non-standard contexts. This explicit rule ensures ghp_, gho_, ghu_, and
+# github_pat_ tokens are caught regardless of surrounding context.
+# Covers: classic PATs (ghp_), OAuth tokens (gho_), user-to-server (ghu_),
+#          and fine-grained PATs (github_pat_)
+[[rules]]
+id = "github-token-in-session-log"
+description = "GitHub token (PAT, OAuth, or fine-grained) detected"
+regex = '''(?:ghp_[0-9a-zA-Z]{36,}|gho_[0-9a-zA-Z]{36,}|ghu_[0-9a-zA-Z]{36,}|github_pat_[0-9a-zA-Z]{22,}_[0-9a-zA-Z]{59,})'''
+keywords = ["ghp_", "gho_", "ghu_", "github_pat_"]
+
+  [rules.allowlist]
+  paths = [
+    '''\.gitleaks\.toml''',
+    '''CLAUDE\.md''',
+    '''README\.md''',
+  ]
+  regexes = [
+    '''REDACTED''',
+    '''ghp_[xX]{36}''',
+    '''gho_[xX]{36}''',
+  ]
+
+# ============================================
+# GLOBAL ALLOWLIST
+# ============================================
+
+[allowlist]
+description = "Global allowlist for ClaudeBox projects"
+
+# Paths that should never be scanned
+paths = [
+  # Example/template files
+  '''\.env\.example''',
+  '''\.env\.template''',
+
+  # Config/docs that reference key variable names
+  '''\.gitleaks\.toml''',
+  '''\.gitattributes''',
+  '''CLAUDE\.md''',
+  '''README\.md''',
+
+  # Server files that handle API key routing (not hardcoded)
+  '''server\.py''',
+
+  # Archived/backup files
+  '''\.backup/.*''',
+
+  # Build artifacts and dependencies
+  '''node_modules/.*''',
+  '''dist/.*''',
+  '''build/.*''',
+  '''__pycache__/.*''',
+  '''\.git/.*''',
+  '''vendor/.*''',
+  '''venv/.*''',
+  '''\.next/.*''',
+
+  # Test fixtures
+  '''tests/fixtures/.*''',
+  '''test/fixtures/.*''',
+
+  # Lock files
+  '''package-lock\.json''',
+  '''yarn\.lock''',
+  '''pnpm-lock\.yaml''',
+  '''Pipfile\.lock''',
+  '''poetry\.lock''',
+]
+
+# Regex patterns to ignore (known false positives)
+regexes = [
+  # Explicit redaction markers
+  '''REDACTED''',
+  '''\*\*\*REDACTED\*\*\*''',
+
+  # Placeholder patterns
+  '''EXAMPLE_''',
+  '''YOUR_.*_HERE''',
+  '''your[-_]?api[-_]?key[-_]?here''',
+  '''placeholder''',
+  '''example[-_]?key''',
+  '''xxx+''',
+
+  # Known test/mock patterns
+  '''sk-[x]{48}''',
+  '''sk-ant-test''',
+  '''test[-_]?key''',
+  '''dummy[-_]?key''',
+  '''fake[-_]?key''',
+
+  # Joke/non-secret strings caught by generic rule
+  '''haha no get your own''',
+]
+
+# Commits to ignore (known clean commits with false positive patterns)
+# Add commit SHAs here if specific commits trigger false positives
+# commits = ["abc123..."]
+
+# ============================================
+# EXTEND DEFAULT RULES
+# ============================================
+# Gitleaks ships with ~100 default rules for GitHub tokens,
+# AWS keys, etc. Our custom rules above ADD to those defaults.
+# To disable a default rule, use:
+#   [[rules]]
+#   id = "rule-id-to-disable"
+#   regex = '''(?:DISABLED)'''

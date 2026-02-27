@@ -1,29 +1,123 @@
-# ============================================
+# ClaudeBox Line Ending Configuration
+# ====================================
+# This file ensures consistent line endings between Windows host and Linux containers.
+#
+# Windows (host): Uses CRLF (\r\n)
+# Linux (containers): Uses LF (\n)
+#
+# Git normalizes files on checkout based on these rules.
+
+# Default behavior - auto-detect
+* text=auto
+
+# Shell scripts MUST use LF (Linux containers)
+*.sh text eol=lf
+*.bash text eol=lf
+
+# Python scripts - LF for container execution
+*.py text eol=lf
+
+# Docker/Container files - LF
+Dockerfile text eol=lf
+*.dockerfile text eol=lf
+docker-compose*.yml text eol=lf
+docker-compose*.yaml text eol=lf
+
+# DevContainer configuration - LF
+devcontainer.json text eol=lf
+
+# Make files - LF
+Makefile text eol=lf
+makefile text eol=lf
+*.mk text eol=lf
+
+# Config files that may run in containers - LF
+*.conf text eol=lf
+*.cfg text eol=lf
+.env* text eol=lf
+
+# Web files - auto
+*.html text
+*.css text
+*.js text
+*.ts text
+*.jsx text
+*.tsx text
+*.json text
+*.xml text
+*.svg text
+
+# Windows-specific files - CRLF
+*.bat text eol=crlf
+*.cmd text eol=crlf
+*.ps1 text eol=crlf
+
+# Binary files - no conversion
+*.png binary
+*.jpg binary
+*.jpeg binary
+*.gif binary
+*.ico binary
+*.pdf binary
+*.zip binary
+*.tar.gz binary
+*.woff binary
+*.woff2 binary
+*.ttf binary
+*.eot binary
+
+# ==========================================
 # GIT-CRYPT ENCRYPTION PATTERNS
-# ============================================
-# Files matching these patterns are encrypted on GitHub
+# ==========================================
+# Files matching these patterns are automatically encrypted on push
+# to GitHub remote, but remain readable locally on your machine.
+#
+# IMPORTANT: These files will appear as binary garbage on GitHub!
+# Only team members with the git-crypt key can decrypt them.
 
-# Environment files
+# Environment files with secrets (but not examples/templates)
 .env filter=git-crypt diff=git-crypt
-.env.* filter=git-crypt diff=git-crypt
-!.env.example
-!.env.template
+.env.local filter=git-crypt diff=git-crypt
+.env.production filter=git-crypt diff=git-crypt
+.env.prod filter=git-crypt diff=git-crypt
+.env.staging filter=git-crypt diff=git-crypt
+.env.development filter=git-crypt diff=git-crypt
+.env.test filter=git-crypt diff=git-crypt
+.envrc filter=git-crypt diff=git-crypt
 
-# Credential files
+# Credential and API key files
 credentials.json filter=git-crypt diff=git-crypt
+oauth.json filter=git-crypt diff=git-crypt
+client_secret.json filter=git-crypt diff=git-crypt
+service_account.json filter=git-crypt diff=git-crypt
+token.json filter=git-crypt diff=git-crypt
 *credentials*.json filter=git-crypt diff=git-crypt
 *secrets*.json filter=git-crypt diff=git-crypt
 *token*.json filter=git-crypt diff=git-crypt
-oauth*.json filter=git-crypt diff=git-crypt
-client_secret*.json filter=git-crypt diff=git-crypt
-service_account*.json filter=git-crypt diff=git-crypt
+secrets.yaml filter=git-crypt diff=git-crypt
+secrets.yml filter=git-crypt diff=git-crypt
+auth.json filter=git-crypt diff=git-crypt
+config.secret.json filter=git-crypt diff=git-crypt
+*.secret.json filter=git-crypt diff=git-crypt
 
 # API keys and certificates
+secret.key filter=git-crypt diff=git-crypt
+private.key filter=git-crypt diff=git-crypt
 *.key filter=git-crypt diff=git-crypt
 *.pem filter=git-crypt diff=git-crypt
 *.p12 filter=git-crypt diff=git-crypt
+*.pfx filter=git-crypt diff=git-crypt
+id_rsa filter=git-crypt diff=git-crypt
+id_ed25519 filter=git-crypt diff=git-crypt
 
-# Secrets directories
+# Sensitive directories
+credentials/** filter=git-crypt diff=git-crypt
 secrets/** filter=git-crypt diff=git-crypt
-.secrets/** filter=git-crypt diff=git-crypt
+private/** filter=git-crypt diff=git-crypt
+.keys/** filter=git-crypt diff=git-crypt
+.certs/** filter=git-crypt diff=git-crypt
 
+# Local config files (may contain secrets)
+settings.local.json filter=git-crypt diff=git-crypt
+settings.local.yaml filter=git-crypt diff=git-crypt
+settings.local.yml filter=git-crypt diff=git-crypt

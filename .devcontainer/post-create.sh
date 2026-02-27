@@ -1,4 +1,4 @@
-#!/bin/bash
+﻿#!/bin/bash
 set -e
 
 # ==========================================
@@ -179,7 +179,7 @@ WRAPPER_EOF
                 chmod +x /home/vscode/.local/bin/claude-glm
                 chown vscode:vscode /home/vscode/.local/bin/claude-glm
                 if ! grep -q '/.local/bin' /home/vscode/.bashrc 2>/dev/null; then
-                    echo 'export PATH="/c/Users/gordo/.local/bin:/c/Users/gordo/bin:/mingw64/bin:/usr/local/bin:/usr/bin:/bin:/mingw64/bin:/usr/bin:/c/Users/gordo/bin:/c/Program Files/Python314/Scripts:/c/Program Files/Python314:/c/Program Files/Eclipse Adoptium/jre-8.0.472.8-hotspot/bin:/c/WINDOWS/system32:/c/WINDOWS:/c/WINDOWS/System32/Wbem:/c/WINDOWS/System32/WindowsPowerShell/v1.0:/c/WINDOWS/System32/OpenSSH:/cmd:/c/Program Files/Microsoft VS Code/bin:/c/Program Files/NVIDIA Corporation/NVIDIA App/NvDLISR:/c/Program Files (x86)/NVIDIA Corporation/PhysX/Common:/c/Program Files/Sunshine:/c/Program Files/Sunshine/tools:/c/Program Files/Docker/Docker/resources/bin:/c/Users/gordo/AppData/Local/Programs/oh-my-posh/bin:/c/Program Files/Python314/Scripts:/c/Program Files/Python314:/c/Program Files/Eclipse Adoptium/jre-8.0.472.8-hotspot/bin:/c/WINDOWS/system32:/c/WINDOWS:/c/WINDOWS/System32/Wbem:/c/WINDOWS/System32/WindowsPowerShell/v1.0:/c/WINDOWS/System32/OpenSSH:/cmd:/c/Program Files/Microsoft VS Code/bin:/c/Program Files/NVIDIA Corporation/NVIDIA App/NvDLISR:/c/Program Files (x86)/NVIDIA Corporation/PhysX/Common:/c/Program Files/Sunshine:/c/Program Files/Sunshine/tools:/c/Users/gordo/AppData/Local/Microsoft/WindowsApps:/c/Users/gordo/.local/bin:/c/Users/gordo/AppData/Local/Programs/Ollama:/usr/bin/vendor_perl:/usr/bin/core_perl"' >> /home/vscode/.bashrc
+                    echo 'export PATH="$HOME/.local/bin:$HOME/bin:/mingw64/bin:/usr/local/bin:/usr/bin:/bin:/mingw64/bin:/usr/bin:$HOME/bin:/c/Program Files/Python314/Scripts:/c/Program Files/Python314:/c/Program Files/Eclipse Adoptium/jre-8.0.472.8-hotspot/bin:/c/WINDOWS/system32:/c/WINDOWS:/c/WINDOWS/System32/Wbem:/c/WINDOWS/System32/WindowsPowerShell/v1.0:/c/WINDOWS/System32/OpenSSH:/cmd:/c/Program Files/Microsoft VS Code/bin:/c/Program Files/NVIDIA Corporation/NVIDIA App/NvDLISR:/c/Program Files (x86)/NVIDIA Corporation/PhysX/Common:/c/Program Files/Sunshine:/c/Program Files/Sunshine/tools:/c/Program Files/Docker/Docker/resources/bin:$HOME/AppData/Local/Programs/oh-my-posh/bin:/c/Program Files/Python314/Scripts:/c/Program Files/Python314:/c/Program Files/Eclipse Adoptium/jre-8.0.472.8-hotspot/bin:/c/WINDOWS/system32:/c/WINDOWS:/c/WINDOWS/System32/Wbem:/c/WINDOWS/System32/WindowsPowerShell/v1.0:/c/WINDOWS/System32/OpenSSH:/cmd:/c/Program Files/Microsoft VS Code/bin:/c/Program Files/NVIDIA Corporation/NVIDIA App/NvDLISR:/c/Program Files (x86)/NVIDIA Corporation/PhysX/Common:/c/Program Files/Sunshine:/c/Program Files/Sunshine/tools:$HOME/AppData/Local/Microsoft/WindowsApps:$HOME/.local/bin:$HOME/AppData/Local/Programs/Ollama:/usr/bin/vendor_perl:/usr/bin/core_perl"' >> /home/vscode/.bashrc
                 fi
                 echo "  Available models: glm-4.7, glm-4.5, glm-4-flash"
                 echo "  Use: claude --model glm-4.7 OR claude-glm glm (alias for glm-4.7)"
@@ -227,7 +227,7 @@ elif [ -f "/workspaces/${PROJECT_NAME}/.devcontainer/pommel-mcp-server.py" ]; th
 fi
 
 # Install MCP Python package (required for the server)
-pip install mcp >/dev/null 2>&1 || pip install --user mcp >/dev/null 2>&1 || true
+pip install --break-system-packages mcp >/dev/null 2>&1 || pip install --user mcp >/dev/null 2>&1 || true
 echo "  - Installed MCP Python package"
 
 # Configure MCP server in Claude Code settings.json
@@ -305,39 +305,36 @@ if [ -f "package.json" ]; then
     npm install
 fi
 
-if [ -f "requirements.txt" ]; then
+if [ -f "requirements.txt" ] || [ -f "pyproject.toml" ]; then
     echo ""
-    echo "Installing Python dependencies..."
-    pip install -r requirements.txt
+    echo "Setting up Python virtual environment..."
+    python3 -m venv .venv
 
-    # Also install into .venv if it exists (MCP server uses the venv)
-    VENV_DIR="/workspaces/${PROJECT_NAME:-project}/.venv"
-    if [ -d "$VENV_DIR" ]; then
-        echo "Installing Python dependencies into .venv..."
-        sudo "$VENV_DIR/bin/pip" install -r requirements.txt 2>/dev/null || \
-            "$VENV_DIR/bin/pip" install -r requirements.txt 2>/dev/null || true
-    else
-        echo "Creating .venv and installing dependencies..."
-        python3 -m venv "$VENV_DIR"
-        sudo "$VENV_DIR/bin/pip" install -r requirements.txt 2>/dev/null || \
-            "$VENV_DIR/bin/pip" install -r requirements.txt 2>/dev/null || true
+    if [ -f "requirements.txt" ]; then
+        echo "Installing Python dependencies from requirements.txt..."
+        .venv/bin/pip install --upgrade pip >/dev/null 2>&1
+        .venv/bin/pip install -r requirements.txt
     fi
 
-    # Install src/requirements.txt if it exists (may have additional deps like pyzotero)
-    if [ -f "src/requirements.txt" ]; then
-        echo "Installing src/requirements.txt..."
-        pip install -r src/requirements.txt 2>/dev/null || true
-        if [ -d "$VENV_DIR" ]; then
-            sudo "$VENV_DIR/bin/pip" install -r src/requirements.txt 2>/dev/null || \
-                "$VENV_DIR/bin/pip" install -r src/requirements.txt 2>/dev/null || true
-        fi
+    if [ -f "pyproject.toml" ]; then
+        echo "Installing Python project from pyproject.toml..."
+        .venv/bin/pip install --upgrade pip >/dev/null 2>&1
+        .venv/bin/pip install -e ".[dev]" 2>/dev/null || .venv/bin/pip install -e .
     fi
+
+    # Auto-activate venv for interactive shells
+    if ! grep -q 'Auto-activate project Python venv' /home/vscode/.bashrc 2>/dev/null; then
+        cat >> /home/vscode/.bashrc <<'BASHRC_VENV_EOF'
+
+# Auto-activate project Python venv if it exists
+if [ -f "/workspaces/${PROJECT_NAME:-project}/.venv/bin/activate" ]; then
+    source "/workspaces/${PROJECT_NAME:-project}/.venv/bin/activate"
 fi
+BASHRC_VENV_EOF
+    fi
 
-if [ -f "pyproject.toml" ]; then
-    echo ""
-    echo "Installing Python project..."
-    pip install -e ".[dev]" 2>/dev/null || pip install -e .
+    chown -R vscode:vscode .venv
+    echo "Python virtual environment ready at .venv/"
 fi
 
 if [ -f "go.mod" ]; then
@@ -384,7 +381,7 @@ while [ $RETRY_COUNT -lt $MAX_RETRIES ]; do
         else
             echo "âš  WARNING: Cannot reach host Ollama at $OLLAMA_HOST"
             echo "  Pommel will not work until Ollama is started."
-            echo "  Run on host: C:\\Users\\gordo\\.claudebox\\scripts\\setup-host-ollama.ps1"
+            echo "  Run on host: ~/.claudebox\\scripts\\setup-host-ollama.ps1"
             break
         fi
     fi
@@ -683,6 +680,13 @@ if command -v git-crypt >/dev/null 2>&1; then
     # Create key storage directory
     mkdir -p "$GITCRYPT_KEY_DIR"
 
+    # Enforce filter.required=true locally for repos that have git-crypt initialized
+    # Global stays false (safe default), but local config enforces encryption
+    if [ -d ".git-crypt" ]; then
+        git config --local filter.git-crypt.required true 2>/dev/null || true
+        echo "  git-crypt filter.required=true (repo has .git-crypt)"
+    fi
+
     # Check if this repo already has git-crypt initialized
     if [ -d ".git-crypt" ]; then
         echo "  Git-crypt already initialized"
@@ -789,7 +793,7 @@ if [ -d "$SSH_DIR" ]; then
 
     # Test SSH connection to GitHub
     if command -v ssh >/dev/null 2>&1; then
-        if ssh -o BatchMode=yes -o StrictHostKeyChecking=no -o ConnectTimeout=5 -T git@github.com 2>&1 | grep -q "successfully authenticated"; then
+        if ssh -o BatchMode=yes -o StrictHostKeyChecking=accept-new -o ConnectTimeout=5 -T git@github.com 2>&1 | grep -q "successfully authenticated"; then
             echo "  ✓ SSH authentication to GitHub working"
         else
             echo "  ⚠ SSH authentication to GitHub not working"
@@ -874,7 +878,6 @@ if [ -f "$OAUTH_CREDS" ]; then
 
     # Configure git to use the OAuth credentials file
     git config --global credential.helper "store --file=/home/vscode/.git-credentials"
-    git config --global credential.helper store
 
     echo "  ✓ OAuth credentials configured"
     echo "    Git push/pull will work automatically without authentication prompts"
@@ -910,7 +913,7 @@ mkdir -p "$HOOKS_DIR"
 cat > "$PRE_COMMIT_HOOK" << 'PRECOMMIT_EOF'
 #!/bin/bash
 # ClaudeBox Pre-commit Secret Scanner
-# Blocks commits containing potential secrets
+# Uses Gitleaks (industry standard, 800+ rules) with regex fallback
 
 set -e
 
@@ -921,62 +924,243 @@ NC='\033[0m'
 
 echo -e "${GREEN}Scanning for secrets...${NC}"
 
-# Patterns that indicate secrets
-SECRET_PATTERNS=(
-    'ghp_[a-zA-Z0-9]{36}'
-    'gho_[a-zA-Z0-9]{36}'
-    'sk-[a-zA-Z0-9]{48}'
-    'sk-proj-[a-zA-Z0-9-_]{80,}'
-    'AIza[0-9A-Za-z\\-_]{35}'
-    'AKIA[0-9A-Z]{16}'
-    '-----BEGIN (RSA |DSA |EC |OPENSSH )?PRIVATE KEY'
-    'xox[baprs]-[0-9]{10,13}-[0-9]{10,13}[a-zA-Z0-9-]*'
-)
-
-# Files to skip
-SKIP_PATTERNS='\.env\.example$|\.env\.template$|\.gitattributes$|pre-commit$|\.md$'
-
-STAGED_FILES=$(git diff --cached --name-only --diff-filter=ACM 2>/dev/null || true)
-SECRETS_FOUND=0
-
-for file in $STAGED_FILES; do
-    # Skip excluded files
-    if echo "$file" | grep -qE "$SKIP_PATTERNS"; then
-        continue
+if command -v gitleaks &>/dev/null; then
+    # Primary: Gitleaks (800+ secret patterns, actively maintained)
+    if ! gitleaks protect --staged --redact --exit-code 1 2>&1; then
+        echo -e "\n${RED}COMMIT BLOCKED: Gitleaks detected potential secret(s)${NC}"
+        echo -e "${YELLOW}Options:${NC}"
+        echo "  1. Remove secrets and use .env files (gitignored)"
+        echo "  2. Add files to .gitattributes for git-crypt encryption"
+        echo "  3. Add a [allowlist] entry to .gitleaks.toml for false positives"
+        echo "  4. Bypass: git commit --no-verify (use with caution)"
+        exit 1
     fi
+    echo -e "${GREEN}Gitleaks: no secrets detected${NC}"
+else
+    # Fallback: regex patterns (for containers without Gitleaks installed)
+    echo -e "${YELLOW}WARNING: gitleaks not installed, using regex fallback${NC}"
 
-    # Skip binary/encrypted files
-    if file "$file" 2>/dev/null | grep -q "binary\|data"; then
-        continue
-    fi
+    SECRET_PATTERNS=(
+        'ghp_[a-zA-Z0-9]{36}'
+        'gho_[a-zA-Z0-9]{36}'
+        'github_pat_[a-zA-Z0-9_]{82}'
+        'sk-[a-zA-Z0-9]{48}'
+        'sk-proj-[a-zA-Z0-9\-_]{80,}'
+        'sk-ant-[a-zA-Z0-9\-_]{80,}'
+        'AIza[0-9A-Za-z\\-_]{35}'
+        'AKIA[0-9A-Z]{16}'
+        'hf_[a-zA-Z0-9]{34}'
+        '-----BEGIN (RSA |DSA |EC |OPENSSH )?PRIVATE KEY'
+        'xox[baprs]-[0-9]{10,13}-[0-9]{10,13}[a-zA-Z0-9-]*'
+        '[0-9a-f]{32}\.[A-Za-z0-9+/]{10,}'
+        '[a-zA-Z0-9._%+-]+@(gmail|hotmail|yahoo|outlook|protonmail|icloud|aol|live)\.[a-zA-Z]{2,}'
+    )
 
-    CONTENT=$(git show ":$file" 2>/dev/null || true)
-    [ -z "$CONTENT" ] && continue
+    SKIP_PATTERNS='\.env\.example$|\.env\.template$|\.gitattributes$|pre-commit$|\.md$|\.gitconfig$'
 
-    for pattern in "${SECRET_PATTERNS[@]}"; do
-        if echo "$CONTENT" | grep -qE "$pattern" 2>/dev/null; then
-            SECRETS_FOUND=$((SECRETS_FOUND + 1))
-            echo -e "${RED}POTENTIAL SECRET in ${file}${NC}"
-            break
+    STAGED_FILES=$(git diff --cached --name-only --diff-filter=ACM 2>/dev/null || true)
+    SECRETS_FOUND=0
+
+    for file in $STAGED_FILES; do
+        if echo "$file" | grep -qE "$SKIP_PATTERNS"; then
+            continue
         fi
+        if file "$file" 2>/dev/null | grep -q "binary\|data"; then
+            continue
+        fi
+        CONTENT=$(git show ":$file" 2>/dev/null || true)
+        [ -z "$CONTENT" ] && continue
+        for pattern in "${SECRET_PATTERNS[@]}"; do
+            if echo "$CONTENT" | grep -qE "$pattern" 2>/dev/null; then
+                SECRETS_FOUND=$((SECRETS_FOUND + 1))
+                echo -e "${RED}POTENTIAL SECRET in ${file}${NC}"
+                break
+            fi
+        done
     done
-done
 
-if [ $SECRETS_FOUND -gt 0 ]; then
-    echo -e "\n${RED}COMMIT BLOCKED: $SECRETS_FOUND potential secret(s) detected${NC}"
-    echo -e "${YELLOW}Options:${NC}"
-    echo "  1. Remove secrets and use .env files (gitignored)"
-    echo "  2. Add files to .gitattributes for git-crypt encryption"
-    echo "  3. Bypass: git commit --no-verify (use with caution)"
-    exit 1
+    if [ $SECRETS_FOUND -gt 0 ]; then
+        echo -e "\n${RED}COMMIT BLOCKED: $SECRETS_FOUND potential secret(s) detected${NC}"
+        echo -e "${YELLOW}Options:${NC}"
+        echo "  1. Remove secrets and use .env files (gitignored)"
+        echo "  2. Add files to .gitattributes for git-crypt encryption"
+        echo "  3. Bypass: git commit --no-verify (use with caution)"
+        exit 1
+    fi
+
+    echo -e "${GREEN}No secrets detected${NC}"
 fi
-
-echo -e "${GREEN}No secrets detected${NC}"
 exit 0
 PRECOMMIT_EOF
 
 chmod +x "$PRE_COMMIT_HOOK"
 echo "  Pre-commit hook installed"
+
+# ==========================================================
+# PRE-PUSH HOOK: Last-Chance Secret Scanner
+# ==========================================================
+echo "Installing pre-push secret scanner..."
+
+PRE_PUSH_HOOK="$HOOKS_DIR/pre-push"
+
+cat > "$PRE_PUSH_HOOK" << 'PREPUSH_EOF'
+#!/bin/bash
+# ClaudeBox Pre-push Secret Scanner
+# Last-chance check before secrets leave the machine.
+# Uses Gitleaks (primary) with regex fallback.
+
+set -e
+
+RED='\033[0;31m'
+YELLOW='\033[1;33m'
+GREEN='\033[0;32m'
+NC='\033[0m'
+
+ZERO="0000000000000000000000000000000000000000"
+
+echo -e "${GREEN}Pre-push: scanning for secrets...${NC}"
+
+# Collect all commit ranges being pushed
+RANGES=""
+while read local_ref local_oid remote_ref remote_oid; do
+    if [ "$local_oid" = "$ZERO" ]; then
+        continue
+    fi
+    if [ "$remote_oid" = "$ZERO" ]; then
+        RANGES="${RANGES} ${local_oid} --not --remotes"
+    else
+        RANGES="${RANGES} ${remote_oid}..${local_oid}"
+    fi
+done
+
+if [ -z "$RANGES" ]; then
+    exit 0
+fi
+
+if command -v gitleaks &>/dev/null; then
+    # Primary: Gitleaks — scan the commit range being pushed
+    FAILED=0
+    for range in $RANGES; do
+        if ! gitleaks detect --log-opts="$range" --redact --exit-code 1 2>&1; then
+            FAILED=1
+        fi
+    done
+    if [ $FAILED -ne 0 ]; then
+        echo -e "\n${RED}PUSH BLOCKED: Gitleaks detected potential secret(s) in commits${NC}"
+        echo -e "${YELLOW}Options:${NC}"
+        echo "  1. Remove secrets and amend/rebase the commits"
+        echo "  2. Add a [allowlist] entry to .gitleaks.toml for false positives"
+        echo "  3. Bypass: git push --no-verify (use with extreme caution)"
+        echo ""
+        echo -e "${YELLOW}If the secret is already in git history:${NC}"
+        echo "  pip install git-filter-repo"
+        echo "  git filter-repo --invert-paths --path <file-with-secret>"
+        exit 1
+    fi
+    echo -e "${GREEN}Gitleaks pre-push: no secrets detected${NC}"
+else
+    # Fallback: regex patterns
+    echo -e "${YELLOW}WARNING: gitleaks not installed, using regex fallback for pre-push${NC}"
+
+    SECRET_PATTERNS=(
+        'ghp_[a-zA-Z0-9]{36}'
+        'gho_[a-zA-Z0-9]{36}'
+        'github_pat_[a-zA-Z0-9_]{82}'
+        'sk-[a-zA-Z0-9]{48}'
+        'sk-proj-[a-zA-Z0-9\-_]{80,}'
+        'sk-ant-[a-zA-Z0-9\-_]{80,}'
+        'AIza[0-9A-Za-z\\-_]{35}'
+        'AKIA[0-9A-Z]{16}'
+        'hf_[a-zA-Z0-9]{34}'
+        '-----BEGIN (RSA |DSA |EC |OPENSSH )?PRIVATE KEY'
+        'xox[baprs]-[0-9]{10,13}-[0-9]{10,13}[a-zA-Z0-9-]*'
+        '[0-9a-f]{32}\.[A-Za-z0-9+/]{10,}'
+        '[a-zA-Z0-9._%+-]+@(gmail|hotmail|yahoo|outlook|protonmail|icloud|aol|live)\.[a-zA-Z]{2,}'
+    )
+
+    SKIP_PATTERNS='\.env\.example$|\.env\.template$|\.gitattributes$|pre-commit$|pre-push$|\.md$|\.gitconfig$'
+    SECRETS_FOUND=0
+
+    for range in $RANGES; do
+        changed_files=$(git diff --name-only --diff-filter=ACM $range 2>/dev/null || true)
+        for file in $changed_files; do
+            if echo "$file" | grep -qE "$SKIP_PATTERNS"; then
+                continue
+            fi
+            if file "$file" 2>/dev/null | grep -q "binary\|data"; then
+                continue
+            fi
+            CONTENT=$(git show "HEAD:$file" 2>/dev/null || true)
+            [ -z "$CONTENT" ] && continue
+            for pattern in "${SECRET_PATTERNS[@]}"; do
+                if echo "$CONTENT" | grep -qE "$pattern" 2>/dev/null; then
+                    SECRETS_FOUND=$((SECRETS_FOUND + 1))
+                    echo -e "${RED}POTENTIAL SECRET in ${file}${NC}"
+                    break
+                fi
+            done
+        done
+    done
+
+    if [ $SECRETS_FOUND -gt 0 ]; then
+        echo -e "\n${RED}PUSH BLOCKED: $SECRETS_FOUND potential secret(s) detected${NC}"
+        echo -e "${YELLOW}Options:${NC}"
+        echo "  1. Remove secrets and amend/rebase the commits"
+        echo "  2. Bypass: git push --no-verify (use with extreme caution)"
+        echo ""
+        echo -e "${YELLOW}If the secret is already in git history:${NC}"
+        echo "  pip install git-filter-repo"
+        echo "  git filter-repo --invert-paths --path <file-with-secret>"
+        exit 1
+    fi
+
+    echo -e "${GREEN}Pre-push: no secrets detected${NC}"
+fi
+exit 0
+PREPUSH_EOF
+
+chmod +x "$PRE_PUSH_HOOK"
+echo "  Pre-push hook installed"
+
+# ==========================================================
+# POST-COMMIT HOOK: Public Branch Auto-Regeneration
+# ==========================================================
+echo "Setting up post-commit hook for public branch generation..."
+
+POST_COMMIT_HOOK="$HOOKS_DIR/post-commit"
+cat > "$POST_COMMIT_HOOK" << 'POSTCOMMIT_EOF'
+#!/bin/bash
+# ClaudeBox Post-commit: Trigger public branch regeneration with cooldown
+# Auto-generates portfolio README on orphan 'public' branch
+# Cooldown: 4 hours between regenerations to avoid excessive runs
+
+PROJECT_NAME="$(basename "$(git rev-parse --show-toplevel)")"
+COOLDOWN_FILE="/tmp/public-branch-cooldown-${PROJECT_NAME}"
+COOLDOWN_SECONDS=14400  # 4 hours
+GENERATOR="/usr/local/bin/generate-public-branch.sh"
+
+# Skip if generator not available
+[ -f "$GENERATOR" ] || exit 0
+
+# Skip if currently on the public branch (prevent infinite loop)
+CURRENT_BRANCH="$(git rev-parse --abbrev-ref HEAD 2>/dev/null)"
+[ "$CURRENT_BRANCH" = "public" ] && exit 0
+
+# Check cooldown
+if [ -f "$COOLDOWN_FILE" ]; then
+    LAST_GEN=$(cat "$COOLDOWN_FILE" 2>/dev/null || echo "0")
+    NOW=$(date +%s)
+    ELAPSED=$(( NOW - LAST_GEN ))
+    [ "$ELAPSED" -lt "$COOLDOWN_SECONDS" ] && exit 0
+fi
+
+# Record timestamp and trigger in background (non-blocking)
+date +%s > "$COOLDOWN_FILE"
+nohup bash "$GENERATOR" --tier baseline > /tmp/public-branch-gen.log 2>&1 &
+POSTCOMMIT_EOF
+
+chmod +x "$POST_COMMIT_HOOK"
+echo "  Post-commit hook installed (public branch auto-regeneration)"
 
 echo ""
 echo "=========================================="

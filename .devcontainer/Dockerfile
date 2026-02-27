@@ -16,7 +16,6 @@ RUN apt-get update && export DEBIAN_FRONTEND=noninteractive \
         gnupg \
         supervisor \
         socat \
-        poppler-utils \
     && apt-get clean -y \
     && rm -rf /var/lib/apt/lists/*
 
@@ -33,25 +32,12 @@ RUN chmod +x /usr/local/bin/start-services.sh /usr/local/bin/update-libraries.sh
 # Install Node.js 20 (for Claude Code)
 RUN curl -fsSL https://deb.nodesource.com/setup_20.x | bash - \
     && apt-get install -y nodejs \
-    && npm install -g npm@latest
+    && npm install -g npm@10.9.4
 
 # Claude Code is installed at container start via native installer (supports auto-updates)
 # See entrypoint.sh install_or_update_claude_code() function
 # Initialize version JSON placeholder (updated at runtime by entrypoint)
 RUN echo "{\"version\":\"pending\",\"installedAt\":\"pending\",\"installerType\":\"native\",\"autoUpdate\":true}" > /usr/local/share/claude-version.json
-
-# Install Google Chrome + ChromeDriver (required for Selenium-based SFU CAS/Duo MFA auth)
-RUN wget -q -O - https://dl.google.com/linux/linux_signing_key.pub | gpg --dearmor -o /usr/share/keyrings/google-chrome.gpg \
-    && echo "deb [arch=amd64 signed-by=/usr/share/keyrings/google-chrome.gpg] http://dl.google.com/linux/chrome/deb/ stable main" > /etc/apt/sources.list.d/google-chrome.list \
-    && apt-get update \
-    && apt-get install -y google-chrome-stable \
-    && CHROME_VERSION=$(google-chrome --version | grep -oP '\d+\.\d+\.\d+\.\d+') \
-    && wget -q "https://storage.googleapis.com/chrome-for-testing-public/${CHROME_VERSION}/linux64/chromedriver-linux64.zip" -O /tmp/chromedriver.zip \
-    && unzip -o /tmp/chromedriver.zip -d /tmp \
-    && mv /tmp/chromedriver-linux64/chromedriver /usr/local/bin/chromedriver \
-    && chmod +x /usr/local/bin/chromedriver \
-    && rm -rf /tmp/chromedriver* \
-    && apt-get clean -y && rm -rf /var/lib/apt/lists/*
 
 # Install Python and quality tools (CodePro features)
 # These enable the dashboard quality-status and quality-check APIs
@@ -68,12 +54,16 @@ RUN curl -fsSL https://cli.github.com/packages/githubcli-archive-keyring.gpg | d
     && apt-get clean -y \
     && rm -rf /var/lib/apt/lists/*
 
-
 # Install Gitleaks for pre-commit secret scanning (industry standard, 800+ rules)
+# SHA256 verified against official checksums.txt from GitHub releases
 RUN GITLEAKS_VERSION="8.30.0" && \
-    curl -sSfL "https://github.com/gitleaks/gitleaks/releases/download/v${GITLEAKS_VERSION}/gitleaks_${GITLEAKS_VERSION}_linux_x64.tar.gz" \
-    | tar xz -C /usr/local/bin gitleaks && \
-    chmod +x /usr/local/bin/gitleaks
+    GITLEAKS_SHA256="79a3ab579b53f71efd634f3aaf7e04a0fa0cf206b7ed434638d1547a2470a66e" && \
+    curl -sSfL -o /tmp/gitleaks.tar.gz \
+      "https://github.com/gitleaks/gitleaks/releases/download/v${GITLEAKS_VERSION}/gitleaks_${GITLEAKS_VERSION}_linux_x64.tar.gz" && \
+    echo "${GITLEAKS_SHA256}  /tmp/gitleaks.tar.gz" | sha256sum -c - && \
+    tar xz -C /usr/local/bin gitleaks < /tmp/gitleaks.tar.gz && \
+    chmod +x /usr/local/bin/gitleaks && \
+    rm /tmp/gitleaks.tar.gz
 
 # Add health check endpoint for version monitoring
 # Checks native installer path first, then falls back to npm global

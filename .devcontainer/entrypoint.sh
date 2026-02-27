@@ -96,6 +96,30 @@ configure_git() {
     su - vscode -c "git config --global filter.git-crypt.smudge 'git-crypt smudge'" 2>/dev/null || true
     su - vscode -c "git config --global filter.git-crypt.required false" 2>/dev/null || true
 
+    # LOCAL override: local .git/config beats global, so fix there too
+    if [ -n "$PROJECT_NAME" ] && [ -d "/workspaces/$PROJECT_NAME/.git" ]; then
+        local smudge_val
+        smudge_val=$(git -C "/workspaces/$PROJECT_NAME" config --local --get filter.git-crypt.smudge 2>/dev/null || true)
+        if echo "$smudge_val" | grep -q 'git-crypt\.exe' 2>/dev/null; then
+            echo "[entrypoint] Fixing Windows git-crypt paths in local config..."
+            git -C "/workspaces/$PROJECT_NAME" config --local filter.git-crypt.clean "git-crypt clean" 2>/dev/null || true
+            git -C "/workspaces/$PROJECT_NAME" config --local filter.git-crypt.smudge "git-crypt smudge" 2>/dev/null || true
+            git -C "/workspaces/$PROJECT_NAME" config --local filter.git-crypt.required false 2>/dev/null || true
+            local diff_val
+            diff_val=$(git -C "/workspaces/$PROJECT_NAME" config --local --get diff.git-crypt.textconv 2>/dev/null || true)
+            if echo "$diff_val" | grep -q 'git-crypt\.exe' 2>/dev/null; then
+                git -C "/workspaces/$PROJECT_NAME" config --local diff.git-crypt.textconv "git-crypt diff" 2>/dev/null || true
+            fi
+        fi
+
+        # Enforce filter.required=true locally for repos that have git-crypt initialized
+        # This prevents accidental plaintext commits of encrypted files
+        if [ -d "/workspaces/$PROJECT_NAME/.git-crypt" ]; then
+            git -C "/workspaces/$PROJECT_NAME" config --local filter.git-crypt.required true 2>/dev/null || true
+            echo "[entrypoint] git-crypt filter.required=true (repo has .git-crypt)"
+        fi
+    fi
+
     # NOTE: We do NOT set URL rewriting (git@github.com instead of https)
     # HTTPS with OAuth credentials is the preferred method
     # SSH can still be used by explicitly using git@github.com URLs
@@ -245,6 +269,11 @@ install_or_update_claude_code() {
     mkdir -p /home/vscode/.local/bin
     chown -R vscode:vscode /home/vscode/.local
 
+    # Ensure ~/.claude is owned by vscode (shared volume may be root-owned)
+    if [ -d /home/vscode/.claude ]; then
+        chown -R vscode:vscode /home/vscode/.claude
+    fi
+
     if [ -x "$CLAUDE_BIN" ]; then
         # Claude Code already installed (persisted from volume)
         local current_version
@@ -294,63 +323,6 @@ VEOF
 }
 
 # ========================================
-# Python Venv Dependency Sync
-# ========================================
-# Ensure .venv has all deps from requirements.txt on every start
-# This prevents missing modules (e.g. pyzotero) after container rebuild
-sync_venv_deps() {
-    local WORKSPACE="/workspaces/${PROJECT_NAME:-project}"
-    local VENV_DIR="$WORKSPACE/.venv"
-
-    if [ -d "$VENV_DIR" ] && [ -f "$WORKSPACE/requirements.txt" ]; then
-        echo "[entrypoint] Syncing .venv dependencies..."
-        "$VENV_DIR/bin/pip" install -q -r "$WORKSPACE/requirements.txt" 2>/dev/null || \
-            sudo "$VENV_DIR/bin/pip" install -q -r "$WORKSPACE/requirements.txt" 2>/dev/null || true
-        if [ -f "$WORKSPACE/src/requirements.txt" ]; then
-            "$VENV_DIR/bin/pip" install -q -r "$WORKSPACE/src/requirements.txt" 2>/dev/null || \
-                sudo "$VENV_DIR/bin/pip" install -q -r "$WORKSPACE/src/requirements.txt" 2>/dev/null || true
-        fi
-        echo "[entrypoint] .venv dependencies synced"
-    elif [ ! -d "$VENV_DIR" ] && [ -f "$WORKSPACE/requirements.txt" ]; then
-        echo "[entrypoint] Creating .venv..."
-        python3 -m venv "$VENV_DIR"
-        "$VENV_DIR/bin/pip" install -q -r "$WORKSPACE/requirements.txt" 2>/dev/null || \
-            sudo "$VENV_DIR/bin/pip" install -q -r "$WORKSPACE/requirements.txt" 2>/dev/null || true
-        if [ -f "$WORKSPACE/src/requirements.txt" ]; then
-            "$VENV_DIR/bin/pip" install -q -r "$WORKSPACE/src/requirements.txt" 2>/dev/null || \
-                sudo "$VENV_DIR/bin/pip" install -q -r "$WORKSPACE/src/requirements.txt" 2>/dev/null || true
-        fi
-        echo "[entrypoint] .venv created and dependencies installed"
-    fi
-}
-
-# ========================================
-# Playwright Browser Install
-# ========================================
-install_playwright_browsers() {
-    local WORKSPACE="/workspaces/${PROJECT_NAME:-project}"
-    local VENV_DIR="$WORKSPACE/.venv"
-    local PW_BIN="$VENV_DIR/bin/playwright"
-
-    if [ -x "$PW_BIN" ]; then
-        # Check if Chromium is already installed
-        if "$VENV_DIR/bin/python3" -c "
-from playwright.sync_api import sync_playwright
-with sync_playwright() as p:
-    b = p.chromium.launch(headless=True)
-    b.close()
-" 2>/dev/null; then
-            echo "[entrypoint] Playwright Chromium already installed"
-        else
-            echo "[entrypoint] Installing Playwright Chromium browsers..."
-            "$PW_BIN" install chromium 2>/dev/null || true
-            "$PW_BIN" install-deps chromium 2>/dev/null || true
-            echo "[entrypoint] Playwright browsers installed"
-        fi
-    fi
-}
-
-# ========================================
 # Socat Ollama Proxy (for Pommel)
 # ========================================
 start_ollama_proxy() {
@@ -363,11 +335,29 @@ start_ollama_proxy() {
 }
 
 # ========================================
+# Public Branch Scripts CRLF Check
+# ========================================
+# Volume-mounted scripts from Windows host may have CRLF line endings.
+# Source scripts should already be LF (.gitattributes enforces this),
+# but this warns if CRLF is somehow present on read-only mounts.
+fix_public_branch_scripts() {
+    for script in generate-public-branch.sh public-branch-helper.py public-branch-prompts.sh; do
+        if [ -f "/usr/local/bin/$script" ] && head -1 "/usr/local/bin/$script" | grep -qP '\r$'; then
+            echo "[entrypoint] WARNING: /usr/local/bin/$script has CRLF line endings — generation will fail"
+            echo "[entrypoint] WARNING: Fix the source file on the Windows host: sed -i 's/\\r\$//' <file>"
+        fi
+    done
+}
+
+# ========================================
 # Run All Setup Steps
 # ========================================
 main() {
     echo "[entrypoint] ClaudeBox container starting..."
     echo "[entrypoint] Project: ${PROJECT_NAME:-unknown}"
+
+    # Check for CRLF in public branch scripts early
+    fix_public_branch_scripts
 
     # Clear invalid tokens first (before any git operations)
     clear_invalid_tokens
@@ -378,8 +368,6 @@ main() {
     configure_git_credentials
     configure_gh_cli
     install_or_update_claude_code
-    sync_venv_deps
-    install_playwright_browsers
     start_ollama_proxy
 
     # Test connection (non-blocking)
