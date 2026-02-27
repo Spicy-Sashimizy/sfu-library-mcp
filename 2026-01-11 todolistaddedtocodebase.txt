@@ -26,7 +26,7 @@
   Welcome to Opus 4.5
 
 ❯ using pommel to get an understanding of the code base and                 
-  "C:\Users\gordo\claudebox-projects\sfu-library-mcp\ahh fixing the time    
+  "${USERPROFILE}/claudebox-projects\sfu-library-mcp\ahh fixing the time    
   shit.txt" please intergrate todo lists inside of the code base to bug fix 
   and implement to make sure that the script becomes fully opterational     
   with redundantsy and relyablity features built into the program itself    

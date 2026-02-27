@@ -22,7 +22,7 @@ Key problems this solves:
 | TrueNAS version | 25.04.1 (Linux 6.12) |
 | Docker | v27.5.0 + Compose v2.32.3 |
 | ZFS pool | `MAIN` — 6.3TB total, 2.2TB free |
-| SSH user | `gordoz` (key-based auth, ProxyJump via Windows host) |
+| SSH user | `<SSH_USER>` (key-based auth, ProxyJump via Windows host) |
 | Sudo scope | **Restricted to `/usr/bin/docker` only** — no ZFS, no rm, no bash |
 | SSH path | Container → `gordo@host.docker.internal` (Windows) → `gordoz@192.168.1.142` (TrueNAS) |
 | SSH alias | `ssh truenas` (configured in `~/.ssh/config`) |
@@ -70,7 +70,7 @@ Host windows-host
 
 ### Security Constraints
 
-- `gordoz` can ONLY run `sudo docker *` commands
+- `<SSH_USER>` can ONLY run `sudo docker *` commands
 - ZFS dataset creation, secret file permissions, and other system admin tasks must be done **manually via TrueNAS Web Shell** or by a user with full sudo
 - All deploy scripts must use `sudo docker` (not bare `docker`)
 
@@ -328,7 +328,7 @@ ssh truenas "sudo docker ps --format '{{.Ports}}' | grep -q 8080 && echo 'FAIL: 
 
 ### 5.2 ZFS dataset setup (manual — run from TrueNAS Web Shell)
 
-**The `gordoz` user cannot create ZFS datasets (sudo restricted to docker only).
+**The `<SSH_USER>` user cannot create ZFS datasets (sudo restricted to docker only).
 These commands must be run by an admin user via the TrueNAS Web Shell or SSH as `truenas_admin`.**
 
 ```bash
@@ -373,7 +373,7 @@ chmod 600 /mnt/MAIN/sfu-library-mcp/secrets/*
 - [ ] Secret files exist and are not world-readable: `ls -la /mnt/MAIN/sfu-library-mcp/secrets/`
 - [ ] All 6 secret files contain values (not empty)
 
-### 5.4 Deploy (automated — runs from dev container via `gordoz`)
+### 5.4 Deploy (automated — runs from dev container via `<SSH_USER>`)
 
 ```bash
 # From dev container:
@@ -686,5 +686,5 @@ After full implementation, ALL of these must be true:
 6. All 26 MCP tools are listed and a test search works
 7. Logs visible from dev container via `deploy/logs.sh follow`
 8. `deploy/healthcheck.sh` reports all checks passing
-9. `gordoz` sudo restricted to docker only — no system-level risk
+9. `<SSH_USER>` sudo restricted to docker only — no system-level risk
 10. Dev container MCP server (stdio) still works exactly as before
