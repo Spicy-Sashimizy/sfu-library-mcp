@@ -129,3 +129,12 @@ local_settings.*
 
 !keys/
 !.git-crypt/
+
+# Session logs (contain PII like names/emails)
+202[0-9]-*.txt
+
+# Stale backup files
+*.backup[0-9]*
+*.before-fix
+*.pre-fix-backup
+

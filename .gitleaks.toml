@@ -6,6 +6,30 @@
 
 title = "ClaudeBox Gitleaks Config"
 
+# ============================================
+# Custom Rules — PII & Hardcoded Path Detection
+# ============================================
+
+[[rules]]
+  id = "hardcoded-windows-user-path"
+  description = "Hardcoded Windows user profile path (e.g. C:\\Users\\username\\)"
+  regex = '''[Cc]:[/\\]+Users[/\\]+[A-Za-z0-9._-]+[/\\]'''
+  tags = ["pii", "path", "windows"]
+
+  [rules.allowlist]
+    regexes = [
+      '''<USERPROFILE>''',
+      '''\$\{?USERPROFILE\}?''',
+      '''\$env:USERPROFILE''',
+      '''%USERPROFILE%''',
+    ]
+
+[[rules]]
+  id = "personal-email-blocklist"
+  description = "Known personal email addresses that should not appear in code"
+  regex = '''(gzisboss@gmail\.com|gcchan888999@gmail\.com)'''
+  tags = ["pii", "email"]
+
 [allowlist]
   description = "Global allowlist for ClaudeBox projects"
 
