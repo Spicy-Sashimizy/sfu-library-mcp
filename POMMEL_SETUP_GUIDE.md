@@ -31,7 +31,7 @@ From a working Pommel container, copy the binaries to your project:
 ```bash
 # Set your project name and path
 PROJECT_NAME="your-project-name"
-PROJECT_PATH="C:/Users/gordo/claudebox-projects/$PROJECT_NAME"
+PROJECT_PATH="<USERPROFILE>/claudebox-projects/$PROJECT_NAME"
 
 # Create binaries directory
 mkdir -p "$PROJECT_PATH/.pommel-bin"
@@ -183,7 +183,7 @@ Expected output: `{"daemon":{"pid":1,"running":true},"index":{...}}`
 
 ## Step 6: Update MCP Server Configuration
 
-Edit `C:/Users/gordo/.claudebox/mcp-servers/pommel/host-server-safe.py`:
+Edit `<USERPROFILE>/.claudebox/mcp-servers/pommel/host-server-safe.py`:
 
 Add your project to the `STANDALONE_POMMEL_SERVICES` dictionary:
 
@@ -271,7 +271,7 @@ if [ -z "$PROJECT_NAME" ] || [ -z "$PORT" ]; then
     exit 1
 fi
 
-PROJECT_PATH="C:/Users/gordo/claudebox-projects/$PROJECT_NAME"
+PROJECT_PATH="<USERPROFILE>/claudebox-projects/$PROJECT_NAME"
 
 echo "Setting up Pommel for $PROJECT_NAME on port $PORT..."
 
@@ -289,7 +289,7 @@ echo "Files copied. Now:"
 echo "1. Create docker-compose.pommel.yml in $PROJECT_PATH"
 echo "2. Replace <PROJECT_NAME> with: $PROJECT_NAME"
 echo "3. Replace <YOUR_PORT> with: $PORT"
-echo "4. Update C:/Users/gordo/.claudebox/mcp-servers/pommel/host-server-safe.py"
+echo "4. Update <USERPROFILE>/.claudebox/mcp-servers/pommel/host-server-safe.py"
 echo "5. Run: cd '$PROJECT_PATH' && docker compose -f docker-compose.pommel.yml up -d"
 ```
 

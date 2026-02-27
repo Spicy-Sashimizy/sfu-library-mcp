@@ -179,7 +179,7 @@ WRAPPER_EOF
                 chmod +x /home/vscode/.local/bin/claude-glm
                 chown vscode:vscode /home/vscode/.local/bin/claude-glm
                 if ! grep -q '/.local/bin' /home/vscode/.bashrc 2>/dev/null; then
-                    echo 'export PATH="/c/Users/gordo/.local/bin:/c/Users/gordo/bin:/mingw64/bin:/usr/local/bin:/usr/bin:/bin:/mingw64/bin:/usr/bin:/c/Users/gordo/bin:/c/Program Files/Python314/Scripts:/c/Program Files/Python314:/c/Program Files/Eclipse Adoptium/jre-8.0.472.8-hotspot/bin:/c/WINDOWS/system32:/c/WINDOWS:/c/WINDOWS/System32/Wbem:/c/WINDOWS/System32/WindowsPowerShell/v1.0:/c/WINDOWS/System32/OpenSSH:/cmd:/c/Program Files/Microsoft VS Code/bin:/c/Program Files/NVIDIA Corporation/NVIDIA App/NvDLISR:/c/Program Files (x86)/NVIDIA Corporation/PhysX/Common:/c/Program Files/Sunshine:/c/Program Files/Sunshine/tools:/c/Program Files/Docker/Docker/resources/bin:/c/Users/gordo/AppData/Local/Programs/oh-my-posh/bin:/c/Program Files/Python314/Scripts:/c/Program Files/Python314:/c/Program Files/Eclipse Adoptium/jre-8.0.472.8-hotspot/bin:/c/WINDOWS/system32:/c/WINDOWS:/c/WINDOWS/System32/Wbem:/c/WINDOWS/System32/WindowsPowerShell/v1.0:/c/WINDOWS/System32/OpenSSH:/cmd:/c/Program Files/Microsoft VS Code/bin:/c/Program Files/NVIDIA Corporation/NVIDIA App/NvDLISR:/c/Program Files (x86)/NVIDIA Corporation/PhysX/Common:/c/Program Files/Sunshine:/c/Program Files/Sunshine/tools:/c/Users/gordo/AppData/Local/Microsoft/WindowsApps:/c/Users/gordo/.local/bin:/c/Users/gordo/AppData/Local/Programs/Ollama:/usr/bin/vendor_perl:/usr/bin/core_perl"' >> /home/vscode/.bashrc
+                    echo 'export PATH="$HOME/.local/bin:$PATH"' >> /home/vscode/.bashrc
                 fi
                 echo "  Available models: glm-4.7, glm-4.5, glm-4-flash"
                 echo "  Use: claude --model glm-4.7 OR claude-glm glm (alias for glm-4.7)"
@@ -384,7 +384,7 @@ while [ $RETRY_COUNT -lt $MAX_RETRIES ]; do
         else
             echo "âš  WARNING: Cannot reach host Ollama at $OLLAMA_HOST"
             echo "  Pommel will not work until Ollama is started."
-            echo "  Run on host: C:\\Users\\gordo\\.claudebox\\scripts\\setup-host-ollama.ps1"
+            echo "  Run on host: ~/.claudebox\\scripts\\setup-host-ollama.ps1"
             break
         fi
     fi

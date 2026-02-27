@@ -12,14 +12,14 @@ services:
       - claude-config:/home/vscode/.claude:cached
       - pommel_data:/home/vscode/.pommel-data:cached
       - gh-cli-config:/home/vscode/.config/gh:cached
-      - C:\Users\gordo\.claudebox\mcp-servers\pommel\devcontainer-server.py:/usr/local/bin/pommel-mcp-server.py:ro
-      - C:/Users/gordo/.ssh:/home/vscode/.ssh
+      - ${USERPROFILE}/.claudebox\mcp-servers\pommel\devcontainer-server.py:/usr/local/bin/pommel-mcp-server.py:ro
+      - ${USERPROFILE}/.ssh:/home/vscode/.ssh
       - ./entrypoint.sh:/usr/local/bin/claudebox-entrypoint.sh:ro
-      - C:/Users/gordo/.claudebox/git-credentials/.git-credentials:/mnt/claudebox-git-creds/.git-credentials:ro
+      - ${USERPROFILE}/.claudebox/git-credentials/.git-credentials:/mnt/claudebox-git-creds/.git-credentials:ro
       - claude-local:/home/vscode/.local:cached
-      - C:/Users/gordo/.claudebox/credentials.json:/home/vscode/.claudebox-credentials/credentials.json:ro
-      - C:/Users/gordo/Downloads:/mnt/host-downloads
-      - C:/Users/gordo/AppData/Roaming/Claude/logs:/mnt/claude-desktop-logs:ro
+      - ${USERPROFILE}/.claudebox/credentials.json:/home/vscode/.claudebox-credentials/credentials.json:ro
+      - ${USERPROFILE}/Downloads:/mnt/host-downloads
+      - ${USERPROFILE}/AppData/Roaming/Claude/logs:/mnt/claude-desktop-logs:ro
     entrypoint: ["/bin/bash", "/usr/local/bin/claudebox-entrypoint.sh"]
     command: sleep infinity
     env_file:
