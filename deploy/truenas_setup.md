@@ -6,13 +6,13 @@ One-time setup for deploying the SFU Library MCP server on TrueNAS SCALE 25.04.1
 
 - TrueNAS SCALE 25.04.1 at 192.168.1.142
 - Docker v27.5.0 + Compose v2.32.3
-- SSH user `gordoz` (key-based auth, ProxyJump via Windows host)
-- `gordoz` sudo restricted to `/usr/bin/docker` only
+- SSH user `<SSH_USER>` (key-based auth, ProxyJump via Windows host)
+- `<SSH_USER>` sudo restricted to `/usr/bin/docker` only
 
 ## 1. ZFS Dataset Creation (Admin — TrueNAS Web Shell)
 
 **These commands must be run by an admin user via TrueNAS Web Shell or SSH as `truenas_admin`.
-The `gordoz` user cannot create ZFS datasets.**
+The `<SSH_USER>` user cannot create ZFS datasets.**
 
 ```bash
 zfs create MAIN/sfu-library-mcp

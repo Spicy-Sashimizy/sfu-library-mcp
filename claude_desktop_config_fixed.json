@@ -3,7 +3,7 @@
     "business-plan": {
       "command": "C:\\Program Files\\Python314\\python.exe",
       "args": [
-        "C:\\Users\\gordo\\OneDrive\\Desktop\\random ass scripts\\cataloging the buiness plan\\archived_sites\\fm4actioncoach\\fm4_data_export\\scripts\\business_plan_mcp.py"
+        "${USERPROFILE}/OneDrive\\Desktop\\random ass scripts\\cataloging the buiness plan\\archived_sites\\fm4actioncoach\\fm4_data_export\\scripts\\business_plan_mcp.py"
       ]
     },
     "sfu-library": {
@@ -19,7 +19,7 @@
     "pommel": {
       "command": "C:\\Program Files\\Python314\\python.exe",
       "args": [
-        "C:\\Users\\gordo\\.claudebox\\mcp-servers\\pommel\\host-server.py"
+        "${USERPROFILE}/.claudebox\\mcp-servers\\pommel\\host-server.py"
       ]
     }
   }

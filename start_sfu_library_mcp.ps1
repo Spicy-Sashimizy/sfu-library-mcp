@@ -8,7 +8,7 @@ $ErrorActionPreference = "Stop"
 $CONTAINER_NAME = "claudebox-sfu-library-mcp-app"
 $PYTHON_PATH = "/usr/bin/python3"
 $SCRIPT_PATH = "/workspaces/sfu-library-mcp/src/sfu_library_mcp_server.py"
-$PROJECT_ROOT = "C:\Users\gordo\OneDrive\Desktop\random ass scripts\sfu_library_mcp"
+$PROJECT_ROOT = "$env:USERPROFILE\OneDrive\Desktop\random ass scripts\sfu_library_mcp"
 $COMPOSE_FILE = "$PROJECT_ROOT\.devcontainer\docker-compose.yml"
 
 # Test if Docker is available

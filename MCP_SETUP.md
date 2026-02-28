@@ -23,7 +23,7 @@ A PowerShell wrapper script (`start_sfu_library_mcp.ps1`) that:
 Make sure these files are in the correct location on your Windows machine:
 
 ```
-C:\Users\gordo\OneDrive\Desktop\random ass scripts\sfu_library_mcp\
+<USERPROFILE>/OneDrive\Desktop\random ass scripts\sfu_library_mcp\
 ├── start_sfu_library_mcp.ps1        (NEW - wrapper script)
 ├── start_sfu_library_mcp.bat        (backup batch script)
 └── claude_desktop_config.json       (updated config)
@@ -35,12 +35,12 @@ Copy the contents of `claude_desktop_config.json` to your Claude Desktop config 
 
 **Windows Claude Desktop Config Location:**
 ```
-C:\Users\gordo\AppData\Roaming\Claude\claude_desktop_config.json
+<USERPROFILE>/AppData\Roaming\Claude\claude_desktop_config.json
 ```
 
 Or if you're using Claude AI (web):
 ```
-C:\Users\gordo\AppData\Local\AnthropicClaude\app-1.0.*\resources\app.asar\.vite\build\
+<USERPROFILE>/AppData\Local\AnthropicClaude\app-1.0.*\resources\app.asar\.vite\build\
 ```
 
 ### 3. Allow PowerShell Script Execution (First Time Only)
@@ -53,7 +53,7 @@ Set-ExecutionPolicy -ExecutionPolicy RemoteSigned -Scope CurrentUser
 
 Or you can unblock the specific script:
 ```powershell
-Unblock-File -Path "C:\Users\gordo\OneDrive\Desktop\random ass scripts\sfu_library_mcp\start_sfu_library_mcp.ps1"
+Unblock-File -Path "<USERPROFILE>/OneDrive\Desktop\random ass scripts\sfu_library_mcp\start_sfu_library_mcp.ps1"
 ```
 
 ### 4. Ensure Docker Desktop is Running
@@ -98,7 +98,7 @@ docker exec -it claudebox-sfu-library-mcp-app which python3
 If the automatic startup doesn't work, you can manually start the container:
 
 ```bash
-cd "C:\Users\gordo\OneDrive\Desktop\random ass scripts\sfu_library_mcp\.devcontainer"
+cd "<USERPROFILE>/OneDrive\Desktop\random ass scripts\sfu_library_mcp\.devcontainer"
 docker-compose up -d app
 ```
 

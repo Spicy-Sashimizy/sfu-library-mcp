@@ -8,7 +8,7 @@ REM Configuration
 set CONTAINER_NAME=claudebox-sfu-library-mcp-app
 set PYTHON_PATH=/usr/bin/python3
 set SCRIPT_PATH=/workspaces/sfu-library-mcp/src/sfu_library_mcp_server.py
-set COMPOSE_FILE=C:\Users\gordo\OneDrive\Desktop\random ass scripts\sfu_library_mcp\.devcontainer\docker-compose.yml
+set COMPOSE_FILE=%USERPROFILE%\OneDrive\Desktop\random ass scripts\sfu_library_mcp\.devcontainer\docker-compose.yml
 
 REM Function to check if container is running
 docker ps --format "{{.Names}}" | findstr /c:"%CONTAINER_NAME%" >nul 2>&1

@@ -2,7 +2,7 @@
 2025-12-31T22:19:34.433Z [sfu-library] [info] Using MCP server command: C:\Program Files\Python314\python.exe with args and path: {
   metadata: {
     args: [
-      'C:\\Users\\gordo\\OneDrive\\Desktop\\random ass scripts\\sfu_library_mcp\\sfu_library_mcp_server.py',
+      '${USERPROFILE}/OneDrive\\Desktop\\random ass scripts\\sfu_library_mcp\\sfu_library_mcp_server.py',
       [length]: 1
     ],
     paths: [
@@ -22,10 +22,10 @@
       'C:\\Program Files\\Sunshine',
       'C:\\Program Files\\Sunshine\\tools',
       'C:\\Program Files\\Docker\\Docker\\resources\\bin',
-      'C:\\Users\\gordo\\AppData\\Local\\Programs\\oh-my-posh\\bin\\',
-      'C:\\Users\\gordo\\AppData\\Local\\Microsoft\\WindowsApps',
+      '${USERPROFILE}/AppData\\Local\\Programs\\oh-my-posh\\bin\\',
+      '${USERPROFILE}/AppData\\Local\\Microsoft\\WindowsApps',
       '',
-      'C:\\Users\\gordo\\.local\\bin',
+      '${USERPROFILE}/.local\\bin',
       [length]: 20
     ]
   }
@@ -46,7 +46,7 @@
 2026-01-01T00:15:14.022Z [sfu-library] [info] Using MCP server command: C:\Program Files\Python314\python.exe with args and path: {
   metadata: {
     args: [
-      'C:\\Users\\gordo\\OneDrive\\Desktop\\random ass scripts\\sfu_library_mcp\\sfu_library_mcp_server.py',
+      '${USERPROFILE}/OneDrive\\Desktop\\random ass scripts\\sfu_library_mcp\\sfu_library_mcp_server.py',
       [length]: 1
     ],
     paths: [
@@ -66,10 +66,10 @@
       'C:\\Program Files\\Sunshine',
       'C:\\Program Files\\Sunshine\\tools',
       'C:\\Program Files\\Docker\\Docker\\resources\\bin',
-      'C:\\Users\\gordo\\AppData\\Local\\Programs\\oh-my-posh\\bin\\',
-      'C:\\Users\\gordo\\AppData\\Local\\Microsoft\\WindowsApps',
+      '${USERPROFILE}/AppData\\Local\\Programs\\oh-my-posh\\bin\\',
+      '${USERPROFILE}/AppData\\Local\\Microsoft\\WindowsApps',
       '',
-      'C:\\Users\\gordo\\.local\\bin',
+      '${USERPROFILE}/.local\\bin',
       [length]: 20
     ]
   }
@@ -84,7 +84,7 @@
 2026-01-01T04:03:17.311Z [sfu-library] [info] Using MCP server command: C:\Program Files\Python314\python.exe with args and path: {
   metadata: {
     args: [
-      'C:\\Users\\gordo\\OneDrive\\Desktop\\random ass scripts\\sfu_library_mcp\\sfu_library_mcp_server.py',
+      '${USERPROFILE}/OneDrive\\Desktop\\random ass scripts\\sfu_library_mcp\\sfu_library_mcp_server.py',
       [length]: 1
     ],
     paths: [
@@ -104,16 +104,16 @@
       'C:\\Program Files\\Sunshine',
       'C:\\Program Files\\Sunshine\\tools',
       'C:\\Program Files\\Docker\\Docker\\resources\\bin',
-      'C:\\Users\\gordo\\AppData\\Local\\Programs\\oh-my-posh\\bin\\',
-      'C:\\Users\\gordo\\AppData\\Local\\Microsoft\\WindowsApps',
+      '${USERPROFILE}/AppData\\Local\\Programs\\oh-my-posh\\bin\\',
+      '${USERPROFILE}/AppData\\Local\\Microsoft\\WindowsApps',
       '',
-      'C:\\Users\\gordo\\.local\\bin',
+      '${USERPROFILE}/.local\\bin',
       [length]: 20
     ]
   }
 } %o
 2026-01-01T04:03:17.315Z [sfu-library] [info] Server started and connected successfully { metadata: undefined }
-C:\Program Files\Python314\python.exe: can't open file 'C:\\Users\\gordo\\OneDrive\\Desktop\\random ass scripts\\sfu_library_mcp\\sfu_library_mcp_server.py': [Errno 2] No such file or directory
+C:\Program Files\Python314\python.exe: can't open file '${USERPROFILE}/OneDrive\\Desktop\\random ass scripts\\sfu_library_mcp\\sfu_library_mcp_server.py': [Errno 2] No such file or directory
 2026-01-01T04:03:17.416Z [sfu-library] [info] Server transport closed { metadata: undefined }
 2026-01-01T04:03:17.416Z [sfu-library] [info] Client transport closed { metadata: undefined }
 2026-01-01T04:03:17.416Z [sfu-library] [info] Server transport closed unexpectedly, this is likely due to the process exiting early. If you are developing this MCP server you can add output to stderr (i.e. `console.error('...')` in JavaScript, `print('...', file=sys.stderr)` in python) and it will appear in this log. { metadata: undefined }
@@ -125,7 +125,7 @@ C:\Program Files\Python314\python.exe: can't open file 'C:\\Users\\gordo\\OneDri
 2026-01-01T04:03:25.654Z [sfu-library] [info] Using MCP server command: C:\Program Files\Python314\python.exe with args and path: {
   metadata: {
     args: [
-      'C:\\Users\\gordo\\OneDrive\\Desktop\\random ass scripts\\sfu_library_mcp\\sfu_library_mcp_server.py',
+      '${USERPROFILE}/OneDrive\\Desktop\\random ass scripts\\sfu_library_mcp\\sfu_library_mcp_server.py',
       [length]: 1
     ],
     paths: [
@@ -145,17 +145,17 @@ C:\Program Files\Python314\python.exe: can't open file 'C:\\Users\\gordo\\OneDri
       'C:\\Program Files\\Sunshine',
       'C:\\Program Files\\Sunshine\\tools',
       'C:\\Program Files\\Docker\\Docker\\resources\\bin',
-      'C:\\Users\\gordo\\AppData\\Local\\Programs\\oh-my-posh\\bin\\',
-      'C:\\Users\\gordo\\AppData\\Local\\Microsoft\\WindowsApps',
+      '${USERPROFILE}/AppData\\Local\\Programs\\oh-my-posh\\bin\\',
+      '${USERPROFILE}/AppData\\Local\\Microsoft\\WindowsApps',
       '',
-      'C:\\Users\\gordo\\.local\\bin',
+      '${USERPROFILE}/.local\\bin',
       [length]: 20
     ]
   }
 } %o
 2026-01-01T04:03:25.657Z [sfu-library] [info] Server started and connected successfully { metadata: undefined }
 2026-01-01T04:03:25.658Z [sfu-library] [info] Message from client: {"method":"initialize","params":{"protocolVersion":"2025-06-18","capabilities":{},"clientInfo":{"name":"claude-ai","version":"0.1.0"}},"jsonrpc":"2.0","id":0} { metadata: undefined }
-C:\Program Files\Python314\python.exe: can't open file 'C:\\Users\\gordo\\OneDrive\\Desktop\\random ass scripts\\sfu_library_mcp\\sfu_library_mcp_server.py': [Errno 2] No such file or directory
+C:\Program Files\Python314\python.exe: can't open file '${USERPROFILE}/OneDrive\\Desktop\\random ass scripts\\sfu_library_mcp\\sfu_library_mcp_server.py': [Errno 2] No such file or directory
 2026-01-01T04:03:25.715Z [sfu-library] [info] Server transport closed { metadata: undefined }
 2026-01-01T04:03:25.715Z [sfu-library] [info] Client transport closed { metadata: undefined }
 2026-01-01T04:03:25.715Z [sfu-library] [info] Server transport closed unexpectedly, this is likely due to the process exiting early. If you are developing this MCP server you can add output to stderr (i.e. `console.error('...')` in JavaScript, `print('...', file=sys.stderr)` in python) and it will appear in this log. { metadata: undefined }
@@ -165,7 +165,7 @@ C:\Program Files\Python314\python.exe: can't open file 'C:\\Users\\gordo\\OneDri
 2026-01-01T04:14:34.486Z [sfu-library] [info] Using MCP server command: C:\Program Files\Python314\python.exe with args and path: {
   metadata: {
     args: [
-      'C:\\Users\\gordo\\OneDrive\\Desktop\\random ass scripts\\sfu_library_mcp\\sfu_library_mcp_server.py',
+      '${USERPROFILE}/OneDrive\\Desktop\\random ass scripts\\sfu_library_mcp\\sfu_library_mcp_server.py',
       [length]: 1
     ],
     paths: [
@@ -185,16 +185,16 @@ C:\Program Files\Python314\python.exe: can't open file 'C:\\Users\\gordo\\OneDri
       'C:\\Program Files\\Sunshine',
       'C:\\Program Files\\Sunshine\\tools',
       'C:\\Program Files\\Docker\\Docker\\resources\\bin',
-      'C:\\Users\\gordo\\AppData\\Local\\Programs\\oh-my-posh\\bin\\',
-      'C:\\Users\\gordo\\AppData\\Local\\Microsoft\\WindowsApps',
+      '${USERPROFILE}/AppData\\Local\\Programs\\oh-my-posh\\bin\\',
+      '${USERPROFILE}/AppData\\Local\\Microsoft\\WindowsApps',
       '',
-      'C:\\Users\\gordo\\.local\\bin',
+      '${USERPROFILE}/.local\\bin',
       [length]: 20
     ]
   }
 } %o
 2026-01-01T04:14:34.490Z [sfu-library] [info] Server started and connected successfully { metadata: undefined }
-C:\Program Files\Python314\python.exe: can't open file 'C:\\Users\\gordo\\OneDrive\\Desktop\\random ass scripts\\sfu_library_mcp\\sfu_library_mcp_server.py': [Errno 2] No such file or directory
+C:\Program Files\Python314\python.exe: can't open file '${USERPROFILE}/OneDrive\\Desktop\\random ass scripts\\sfu_library_mcp\\sfu_library_mcp_server.py': [Errno 2] No such file or directory
 2026-01-01T04:14:34.557Z [sfu-library] [info] Server transport closed { metadata: undefined }
 2026-01-01T04:14:34.557Z [sfu-library] [info] Client transport closed { metadata: undefined }
 2026-01-01T04:14:34.558Z [sfu-library] [info] Server transport closed unexpectedly, this is likely due to the process exiting early. If you are developing this MCP server you can add output to stderr (i.e. `console.error('...')` in JavaScript, `print('...', file=sys.stderr)` in python) and it will appear in this log. { metadata: undefined }
@@ -206,7 +206,7 @@ C:\Program Files\Python314\python.exe: can't open file 'C:\\Users\\gordo\\OneDri
 2026-01-01T04:14:36.899Z [sfu-library] [info] Using MCP server command: C:\Program Files\Python314\python.exe with args and path: {
   metadata: {
     args: [
-      'C:\\Users\\gordo\\OneDrive\\Desktop\\random ass scripts\\sfu_library_mcp\\sfu_library_mcp_server.py',
+      '${USERPROFILE}/OneDrive\\Desktop\\random ass scripts\\sfu_library_mcp\\sfu_library_mcp_server.py',
       [length]: 1
     ],
     paths: [
@@ -226,17 +226,17 @@ C:\Program Files\Python314\python.exe: can't open file 'C:\\Users\\gordo\\OneDri
       'C:\\Program Files\\Sunshine',
       'C:\\Program Files\\Sunshine\\tools',
       'C:\\Program Files\\Docker\\Docker\\resources\\bin',
-      'C:\\Users\\gordo\\AppData\\Local\\Programs\\oh-my-posh\\bin\\',
-      'C:\\Users\\gordo\\AppData\\Local\\Microsoft\\WindowsApps',
+      '${USERPROFILE}/AppData\\Local\\Programs\\oh-my-posh\\bin\\',
+      '${USERPROFILE}/AppData\\Local\\Microsoft\\WindowsApps',
       '',
-      'C:\\Users\\gordo\\.local\\bin',
+      '${USERPROFILE}/.local\\bin',
       [length]: 20
     ]
   }
 } %o
 2026-01-01T04:14:36.902Z [sfu-library] [info] Server started and connected successfully { metadata: undefined }
 2026-01-01T04:14:36.907Z [sfu-library] [info] Message from client: {"method":"initialize","params":{"protocolVersion":"2025-06-18","capabilities":{},"clientInfo":{"name":"claude-ai","version":"0.1.0"}},"jsonrpc":"2.0","id":0} { metadata: undefined }
-C:\Program Files\Python314\python.exe: can't open file 'C:\\Users\\gordo\\OneDrive\\Desktop\\random ass scripts\\sfu_library_mcp\\sfu_library_mcp_server.py': [Errno 2] No such file or directory
+C:\Program Files\Python314\python.exe: can't open file '${USERPROFILE}/OneDrive\\Desktop\\random ass scripts\\sfu_library_mcp\\sfu_library_mcp_server.py': [Errno 2] No such file or directory
 2026-01-01T04:14:36.958Z [sfu-library] [info] Server transport closed { metadata: undefined }
 2026-01-01T04:14:36.958Z [sfu-library] [info] Client transport closed { metadata: undefined }
 2026-01-01T04:14:36.958Z [sfu-library] [info] Server transport closed unexpectedly, this is likely due to the process exiting early. If you are developing this MCP server you can add output to stderr (i.e. `console.error('...')` in JavaScript, `print('...', file=sys.stderr)` in python) and it will appear in this log. { metadata: undefined }
@@ -246,7 +246,7 @@ C:\Program Files\Python314\python.exe: can't open file 'C:\\Users\\gordo\\OneDri
 2026-01-01T04:29:25.089Z [sfu-library] [info] Using MCP server command: C:\Program Files\Python314\python.exe with args and path: {
   metadata: {
     args: [
-      'C:\\Users\\gordo\\OneDrive\\Desktop\\random ass scripts\\sfu_library_mcp\\sfu_library_mcp_server.py',
+      '${USERPROFILE}/OneDrive\\Desktop\\random ass scripts\\sfu_library_mcp\\sfu_library_mcp_server.py',
       [length]: 1
     ],
     paths: [
@@ -266,16 +266,16 @@ C:\Program Files\Python314\python.exe: can't open file 'C:\\Users\\gordo\\OneDri
       'C:\\Program Files\\Sunshine',
       'C:\\Program Files\\Sunshine\\tools',
       'C:\\Program Files\\Docker\\Docker\\resources\\bin',
-      'C:\\Users\\gordo\\AppData\\Local\\Programs\\oh-my-posh\\bin\\',
-      'C:\\Users\\gordo\\AppData\\Local\\Microsoft\\WindowsApps',
+      '${USERPROFILE}/AppData\\Local\\Programs\\oh-my-posh\\bin\\',
+      '${USERPROFILE}/AppData\\Local\\Microsoft\\WindowsApps',
       '',
-      'C:\\Users\\gordo\\.local\\bin',
+      '${USERPROFILE}/.local\\bin',
       [length]: 20
     ]
   }
 } %o
 2026-01-01T04:29:25.093Z [sfu-library] [info] Server started and connected successfully { metadata: undefined }
-C:\Program Files\Python314\python.exe: can't open file 'C:\\Users\\gordo\\OneDrive\\Desktop\\random ass scripts\\sfu_library_mcp\\sfu_library_mcp_server.py': [Errno 2] No such file or directory
+C:\Program Files\Python314\python.exe: can't open file '${USERPROFILE}/OneDrive\\Desktop\\random ass scripts\\sfu_library_mcp\\sfu_library_mcp_server.py': [Errno 2] No such file or directory
 2026-01-01T04:29:25.157Z [sfu-library] [info] Server transport closed { metadata: undefined }
 2026-01-01T04:29:25.158Z [sfu-library] [info] Client transport closed { metadata: undefined }
 2026-01-01T04:29:25.158Z [sfu-library] [info] Server transport closed unexpectedly, this is likely due to the process exiting early. If you are developing this MCP server you can add output to stderr (i.e. `console.error('...')` in JavaScript, `print('...', file=sys.stderr)` in python) and it will appear in this log. { metadata: undefined }
@@ -287,7 +287,7 @@ C:\Program Files\Python314\python.exe: can't open file 'C:\\Users\\gordo\\OneDri
 2026-01-01T04:29:30.759Z [sfu-library] [info] Using MCP server command: C:\Program Files\Python314\python.exe with args and path: {
   metadata: {
     args: [
-      'C:\\Users\\gordo\\OneDrive\\Desktop\\random ass scripts\\sfu_library_mcp\\sfu_library_mcp_server.py',
+      '${USERPROFILE}/OneDrive\\Desktop\\random ass scripts\\sfu_library_mcp\\sfu_library_mcp_server.py',
       [length]: 1
     ],
     paths: [
@@ -307,17 +307,17 @@ C:\Program Files\Python314\python.exe: can't open file 'C:\\Users\\gordo\\OneDri
       'C:\\Program Files\\Sunshine',
       'C:\\Program Files\\Sunshine\\tools',
       'C:\\Program Files\\Docker\\Docker\\resources\\bin',
-      'C:\\Users\\gordo\\AppData\\Local\\Programs\\oh-my-posh\\bin\\',
-      'C:\\Users\\gordo\\AppData\\Local\\Microsoft\\WindowsApps',
+      '${USERPROFILE}/AppData\\Local\\Programs\\oh-my-posh\\bin\\',
+      '${USERPROFILE}/AppData\\Local\\Microsoft\\WindowsApps',
       '',
-      'C:\\Users\\gordo\\.local\\bin',
+      '${USERPROFILE}/.local\\bin',
       [length]: 20
     ]
   }
 } %o
 2026-01-01T04:29:30.762Z [sfu-library] [info] Server started and connected successfully { metadata: undefined }
 2026-01-01T04:29:30.766Z [sfu-library] [info] Message from client: {"method":"initialize","params":{"protocolVersion":"2025-06-18","capabilities":{},"clientInfo":{"name":"claude-ai","version":"0.1.0"}},"jsonrpc":"2.0","id":0} { metadata: undefined }
-C:\Program Files\Python314\python.exe: can't open file 'C:\\Users\\gordo\\OneDrive\\Desktop\\random ass scripts\\sfu_library_mcp\\sfu_library_mcp_server.py': [Errno 2] No such file or directory
+C:\Program Files\Python314\python.exe: can't open file '${USERPROFILE}/OneDrive\\Desktop\\random ass scripts\\sfu_library_mcp\\sfu_library_mcp_server.py': [Errno 2] No such file or directory
 2026-01-01T04:29:30.826Z [sfu-library] [info] Server transport closed { metadata: undefined }
 2026-01-01T04:29:30.826Z [sfu-library] [info] Client transport closed { metadata: undefined }
 2026-01-01T04:29:30.826Z [sfu-library] [info] Server transport closed unexpectedly, this is likely due to the process exiting early. If you are developing this MCP server you can add output to stderr (i.e. `console.error('...')` in JavaScript, `print('...', file=sys.stderr)` in python) and it will appear in this log. { metadata: undefined }
@@ -327,7 +327,7 @@ C:\Program Files\Python314\python.exe: can't open file 'C:\\Users\\gordo\\OneDri
 2026-01-01T05:26:02.345Z [sfu-library] [info] Using MCP server command: C:\Program Files\Python314\python.exe with args and path: {
   metadata: {
     args: [
-      'C:\\Users\\gordo\\OneDrive\\Desktop\\random ass scripts\\sfu_library_mcp\\sfu_library_mcp_server.py',
+      '${USERPROFILE}/OneDrive\\Desktop\\random ass scripts\\sfu_library_mcp\\sfu_library_mcp_server.py',
       [length]: 1
     ],
     paths: [
@@ -347,16 +347,16 @@ C:\Program Files\Python314\python.exe: can't open file 'C:\\Users\\gordo\\OneDri
       'C:\\Program Files\\Sunshine',
       'C:\\Program Files\\Sunshine\\tools',
       'C:\\Program Files\\Docker\\Docker\\resources\\bin',
-      'C:\\Users\\gordo\\AppData\\Local\\Programs\\oh-my-posh\\bin\\',
-      'C:\\Users\\gordo\\AppData\\Local\\Microsoft\\WindowsApps',
+      '${USERPROFILE}/AppData\\Local\\Programs\\oh-my-posh\\bin\\',
+      '${USERPROFILE}/AppData\\Local\\Microsoft\\WindowsApps',
       '',
-      'C:\\Users\\gordo\\.local\\bin',
+      '${USERPROFILE}/.local\\bin',
       [length]: 20
     ]
   }
 } %o
 2026-01-01T05:26:02.350Z [sfu-library] [info] Server started and connected successfully { metadata: undefined }
-C:\Program Files\Python314\python.exe: can't open file 'C:\\Users\\gordo\\OneDrive\\Desktop\\random ass scripts\\sfu_library_mcp\\sfu_library_mcp_server.py': [Errno 2] No such file or directory
+C:\Program Files\Python314\python.exe: can't open file '${USERPROFILE}/OneDrive\\Desktop\\random ass scripts\\sfu_library_mcp\\sfu_library_mcp_server.py': [Errno 2] No such file or directory
 2026-01-01T05:26:02.427Z [sfu-library] [info] Server transport closed { metadata: undefined }
 2026-01-01T05:26:02.427Z [sfu-library] [info] Client transport closed { metadata: undefined }
 2026-01-01T05:26:02.427Z [sfu-library] [info] Server transport closed unexpectedly, this is likely due to the process exiting early. If you are developing this MCP server you can add output to stderr (i.e. `console.error('...')` in JavaScript, `print('...', file=sys.stderr)` in python) and it will appear in this log. { metadata: undefined }
@@ -368,7 +368,7 @@ C:\Program Files\Python314\python.exe: can't open file 'C:\\Users\\gordo\\OneDri
 2026-01-01T07:41:58.209Z [sfu-library] [info] Using MCP server command: C:\Program Files\Python314\python.exe with args and path: {
   metadata: {
     args: [
-      'C:\\Users\\gordo\\OneDrive\\Desktop\\random ass scripts\\sfu_library_mcp\\sfu_library_mcp_server.py',
+      '${USERPROFILE}/OneDrive\\Desktop\\random ass scripts\\sfu_library_mcp\\sfu_library_mcp_server.py',
       [length]: 1
     ],
     paths: [
@@ -388,17 +388,17 @@ C:\Program Files\Python314\python.exe: can't open file 'C:\\Users\\gordo\\OneDri
       'C:\\Program Files\\Sunshine',
       'C:\\Program Files\\Sunshine\\tools',
       'C:\\Program Files\\Docker\\Docker\\resources\\bin',
-      'C:\\Users\\gordo\\AppData\\Local\\Programs\\oh-my-posh\\bin\\',
-      'C:\\Users\\gordo\\AppData\\Local\\Microsoft\\WindowsApps',
+      '${USERPROFILE}/AppData\\Local\\Programs\\oh-my-posh\\bin\\',
+      '${USERPROFILE}/AppData\\Local\\Microsoft\\WindowsApps',
       '',
-      'C:\\Users\\gordo\\.local\\bin',
+      '${USERPROFILE}/.local\\bin',
       [length]: 20
     ]
   }
 } %o
 2026-01-01T07:41:58.211Z [sfu-library] [info] Server started and connected successfully { metadata: undefined }
 2026-01-01T07:41:58.250Z [sfu-library] [info] Message from client: {"method":"initialize","params":{"protocolVersion":"2025-06-18","capabilities":{},"clientInfo":{"name":"claude-ai","version":"0.1.0"}},"jsonrpc":"2.0","id":0} { metadata: undefined }
-C:\Program Files\Python314\python.exe: can't open file 'C:\\Users\\gordo\\OneDrive\\Desktop\\random ass scripts\\sfu_library_mcp\\sfu_library_mcp_server.py': [Errno 2] No such file or directory
+C:\Program Files\Python314\python.exe: can't open file '${USERPROFILE}/OneDrive\\Desktop\\random ass scripts\\sfu_library_mcp\\sfu_library_mcp_server.py': [Errno 2] No such file or directory
 2026-01-01T07:41:58.281Z [sfu-library] [info] Server transport closed { metadata: undefined }
 2026-01-01T07:41:58.282Z [sfu-library] [info] Client transport closed { metadata: undefined }
 2026-01-01T07:41:58.282Z [sfu-library] [info] Server transport closed unexpectedly, this is likely due to the process exiting early. If you are developing this MCP server you can add output to stderr (i.e. `console.error('...')` in JavaScript, `print('...', file=sys.stderr)` in python) and it will appear in this log. { metadata: undefined }
@@ -430,10 +430,10 @@ C:\Program Files\Python314\python.exe: can't open file 'C:\\Users\\gordo\\OneDri
       'C:\\Program Files\\Sunshine',
       'C:\\Program Files\\Sunshine\\tools',
       'C:\\Program Files\\Docker\\Docker\\resources\\bin',
-      'C:\\Users\\gordo\\AppData\\Local\\Programs\\oh-my-posh\\bin\\',
-      'C:\\Users\\gordo\\AppData\\Local\\Microsoft\\WindowsApps',
+      '${USERPROFILE}/AppData\\Local\\Programs\\oh-my-posh\\bin\\',
+      '${USERPROFILE}/AppData\\Local\\Microsoft\\WindowsApps',
       '',
-      'C:\\Users\\gordo\\.local\\bin',
+      '${USERPROFILE}/.local\\bin',
       [length]: 20
     ]
   }
@@ -473,10 +473,10 @@ C:\Program Files\Python314\python.exe: can't open file 'C:\\Users\\gordo\\OneDri
       'C:\\Program Files\\Sunshine',
       'C:\\Program Files\\Sunshine\\tools',
       'C:\\Program Files\\Docker\\Docker\\resources\\bin',
-      'C:\\Users\\gordo\\AppData\\Local\\Programs\\oh-my-posh\\bin\\',
-      'C:\\Users\\gordo\\AppData\\Local\\Microsoft\\WindowsApps',
+      '${USERPROFILE}/AppData\\Local\\Programs\\oh-my-posh\\bin\\',
+      '${USERPROFILE}/AppData\\Local\\Microsoft\\WindowsApps',
       '',
-      'C:\\Users\\gordo\\.local\\bin',
+      '${USERPROFILE}/.local\\bin',
       [length]: 20
     ]
   }
@@ -517,10 +517,10 @@ C:\Program Files\Python314\python.exe: can't open file 'C:\\Users\\gordo\\OneDri
       'C:\\Program Files\\Sunshine',
       'C:\\Program Files\\Sunshine\\tools',
       'C:\\Program Files\\Docker\\Docker\\resources\\bin',
-      'C:\\Users\\gordo\\AppData\\Local\\Programs\\oh-my-posh\\bin\\',
-      'C:\\Users\\gordo\\AppData\\Local\\Microsoft\\WindowsApps',
+      '${USERPROFILE}/AppData\\Local\\Programs\\oh-my-posh\\bin\\',
+      '${USERPROFILE}/AppData\\Local\\Microsoft\\WindowsApps',
       '',
-      'C:\\Users\\gordo\\.local\\bin',
+      '${USERPROFILE}/.local\\bin',
       [length]: 20
     ]
   }
@@ -559,10 +559,10 @@ C:\Program Files\Python314\python.exe: can't open file 'C:\\Users\\gordo\\OneDri
       'C:\\Program Files\\Sunshine',
       'C:\\Program Files\\Sunshine\\tools',
       'C:\\Program Files\\Docker\\Docker\\resources\\bin',
-      'C:\\Users\\gordo\\AppData\\Local\\Programs\\oh-my-posh\\bin\\',
-      'C:\\Users\\gordo\\AppData\\Local\\Microsoft\\WindowsApps',
+      '${USERPROFILE}/AppData\\Local\\Programs\\oh-my-posh\\bin\\',
+      '${USERPROFILE}/AppData\\Local\\Microsoft\\WindowsApps',
       '',
-      'C:\\Users\\gordo\\.local\\bin',
+      '${USERPROFILE}/.local\\bin',
       [length]: 20
     ]
   }
@@ -604,10 +604,10 @@ Error response from daemon: container 15620738287ced4737275aca025803298a8efa58f0
       'C:\\Program Files\\Sunshine',
       'C:\\Program Files\\Sunshine\\tools',
       'C:\\Program Files\\Docker\\Docker\\resources\\bin',
-      'C:\\Users\\gordo\\AppData\\Local\\Programs\\oh-my-posh\\bin\\',
-      'C:\\Users\\gordo\\AppData\\Local\\Microsoft\\WindowsApps',
+      '${USERPROFILE}/AppData\\Local\\Programs\\oh-my-posh\\bin\\',
+      '${USERPROFILE}/AppData\\Local\\Microsoft\\WindowsApps',
       '',
-      'C:\\Users\\gordo\\.local\\bin',
+      '${USERPROFILE}/.local\\bin',
       [length]: 20
     ]
   }
@@ -648,10 +648,10 @@ Error response from daemon: container 15620738287ced4737275aca025803298a8efa58f0
       'C:\\Program Files\\Sunshine',
       'C:\\Program Files\\Sunshine\\tools',
       'C:\\Program Files\\Docker\\Docker\\resources\\bin',
-      'C:\\Users\\gordo\\AppData\\Local\\Programs\\oh-my-posh\\bin\\',
-      'C:\\Users\\gordo\\AppData\\Local\\Microsoft\\WindowsApps',
+      '${USERPROFILE}/AppData\\Local\\Programs\\oh-my-posh\\bin\\',
+      '${USERPROFILE}/AppData\\Local\\Microsoft\\WindowsApps',
       '',
-      'C:\\Users\\gordo\\.local\\bin',
+      '${USERPROFILE}/.local\\bin',
       [length]: 20
     ]
   }
@@ -690,10 +690,10 @@ Error response from daemon: container 15620738287ced4737275aca025803298a8efa58f0
       'C:\\Program Files\\Sunshine',
       'C:\\Program Files\\Sunshine\\tools',
       'C:\\Program Files\\Docker\\Docker\\resources\\bin',
-      'C:\\Users\\gordo\\AppData\\Local\\Programs\\oh-my-posh\\bin\\',
-      'C:\\Users\\gordo\\AppData\\Local\\Microsoft\\WindowsApps',
+      '${USERPROFILE}/AppData\\Local\\Programs\\oh-my-posh\\bin\\',
+      '${USERPROFILE}/AppData\\Local\\Microsoft\\WindowsApps',
       '',
-      'C:\\Users\\gordo\\.local\\bin',
+      '${USERPROFILE}/.local\\bin',
       [length]: 20
     ]
   }
@@ -735,10 +735,10 @@ Error response from daemon: container 15620738287ced4737275aca025803298a8efa58f0
       'C:\\Program Files\\Sunshine',
       'C:\\Program Files\\Sunshine\\tools',
       'C:\\Program Files\\Docker\\Docker\\resources\\bin',
-      'C:\\Users\\gordo\\AppData\\Local\\Programs\\oh-my-posh\\bin\\',
-      'C:\\Users\\gordo\\AppData\\Local\\Microsoft\\WindowsApps',
+      '${USERPROFILE}/AppData\\Local\\Programs\\oh-my-posh\\bin\\',
+      '${USERPROFILE}/AppData\\Local\\Microsoft\\WindowsApps',
       '',
-      'C:\\Users\\gordo\\.local\\bin',
+      '${USERPROFILE}/.local\\bin',
       [length]: 20
     ]
   }
@@ -779,10 +779,10 @@ Error response from daemon: container 15620738287ced4737275aca025803298a8efa58f0
       'C:\\Program Files\\Sunshine',
       'C:\\Program Files\\Sunshine\\tools',
       'C:\\Program Files\\Docker\\Docker\\resources\\bin',
-      'C:\\Users\\gordo\\AppData\\Local\\Programs\\oh-my-posh\\bin\\',
-      'C:\\Users\\gordo\\AppData\\Local\\Microsoft\\WindowsApps',
+      '${USERPROFILE}/AppData\\Local\\Programs\\oh-my-posh\\bin\\',
+      '${USERPROFILE}/AppData\\Local\\Microsoft\\WindowsApps',
       '',
-      'C:\\Users\\gordo\\.local\\bin',
+      '${USERPROFILE}/.local\\bin',
       [length]: 20
     ]
   }
@@ -821,11 +821,11 @@ Error response from daemon: container 15620738287ced4737275aca025803298a8efa58f0
       'C:\\Program Files\\Sunshine',
       'C:\\Program Files\\Sunshine\\tools',
       'C:\\Program Files\\Docker\\Docker\\resources\\bin',
-      'C:\\Users\\gordo\\AppData\\Local\\Programs\\oh-my-posh\\bin\\',
-      'C:\\Users\\gordo\\AppData\\Local\\Microsoft\\WindowsApps',
+      '${USERPROFILE}/AppData\\Local\\Programs\\oh-my-posh\\bin\\',
+      '${USERPROFILE}/AppData\\Local\\Microsoft\\WindowsApps',
       '',
-      'C:\\Users\\gordo\\.local\\bin',
-      'C:\\Users\\gordo\\AppData\\Local\\Programs\\Ollama',
+      '${USERPROFILE}/.local\\bin',
+      '${USERPROFILE}/AppData\\Local\\Programs\\Ollama',
       [length]: 21
     ]
   }
@@ -869,11 +869,11 @@ Error response from daemon: container 15620738287ced4737275aca025803298a8efa58f0
       'C:\\Program Files\\Sunshine',
       'C:\\Program Files\\Sunshine\\tools',
       'C:\\Program Files\\Docker\\Docker\\resources\\bin',
-      'C:\\Users\\gordo\\AppData\\Local\\Programs\\oh-my-posh\\bin\\',
-      'C:\\Users\\gordo\\AppData\\Local\\Microsoft\\WindowsApps',
+      '${USERPROFILE}/AppData\\Local\\Programs\\oh-my-posh\\bin\\',
+      '${USERPROFILE}/AppData\\Local\\Microsoft\\WindowsApps',
       '',
-      'C:\\Users\\gordo\\.local\\bin',
-      'C:\\Users\\gordo\\AppData\\Local\\Programs\\Ollama',
+      '${USERPROFILE}/.local\\bin',
+      '${USERPROFILE}/AppData\\Local\\Programs\\Ollama',
       [length]: 21
     ]
   }
@@ -884,10 +884,10 @@ Error response from daemon: container 15620738287ced4737275aca025803298a8efa58f0
     context: 'connection',
     stack: `SyntaxError: Unexpected token 'O', "OCI runtim"... is not valid JSON\n` +
       '    at JSON.parse (<anonymous>)\n' +
-      '    at _Oe (C:\\Users\\gordo\\AppData\\Local\\AnthropicClaude\\app-1.0.2339\\resources\\app.asar\\.vite\\build\\index.js:196:207)\n' +
-      '    at bOe.readMessage (C:\\Users\\gordo\\AppData\\Local\\AnthropicClaude\\app-1.0.2339\\resources\\app.asar\\.vite\\build\\index.js:196:133)\n' +
-      '    at xOe.processReadBuffer (C:\\Users\\gordo\\AppData\\Local\\AnthropicClaude\\app-1.0.2339\\resources\\app.asar\\.vite\\build\\index.js:197:2203)\n' +
-      '    at Socket.<anonymous> (C:\\Users\\gordo\\AppData\\Local\\AnthropicClaude\\app-1.0.2339\\resources\\app.asar\\.vite\\build\\index.js:197:1653)\n' +
+      '    at _Oe (${USERPROFILE}/AppData\\Local\\AnthropicClaude\\app-1.0.2339\\resources\\app.asar\\.vite\\build\\index.js:196:207)\n' +
+      '    at bOe.readMessage (${USERPROFILE}/AppData\\Local\\AnthropicClaude\\app-1.0.2339\\resources\\app.asar\\.vite\\build\\index.js:196:133)\n' +
+      '    at xOe.processReadBuffer (${USERPROFILE}/AppData\\Local\\AnthropicClaude\\app-1.0.2339\\resources\\app.asar\\.vite\\build\\index.js:197:2203)\n' +
+      '    at Socket.<anonymous> (${USERPROFILE}/AppData\\Local\\AnthropicClaude\\app-1.0.2339\\resources\\app.asar\\.vite\\build\\index.js:197:1653)\n' +
       '    at Socket.emit (node:events:519:28)\n' +
       '    at addChunk (node:internal/streams/readable:561:12)\n' +
       '    at readableAddChunkPushByteMode (node:internal/streams/readable:512:3)\n' +
@@ -930,11 +930,11 @@ Error response from daemon: container 15620738287ced4737275aca025803298a8efa58f0
       'C:\\Program Files\\Sunshine',
       'C:\\Program Files\\Sunshine\\tools',
       'C:\\Program Files\\Docker\\Docker\\resources\\bin',
-      'C:\\Users\\gordo\\AppData\\Local\\Programs\\oh-my-posh\\bin\\',
-      'C:\\Users\\gordo\\AppData\\Local\\Microsoft\\WindowsApps',
+      '${USERPROFILE}/AppData\\Local\\Programs\\oh-my-posh\\bin\\',
+      '${USERPROFILE}/AppData\\Local\\Microsoft\\WindowsApps',
       '',
-      'C:\\Users\\gordo\\.local\\bin',
-      'C:\\Users\\gordo\\AppData\\Local\\Programs\\Ollama',
+      '${USERPROFILE}/.local\\bin',
+      '${USERPROFILE}/AppData\\Local\\Programs\\Ollama',
       [length]: 21
     ]
   }
@@ -946,10 +946,10 @@ Error response from daemon: container 15620738287ced4737275aca025803298a8efa58f0
     context: 'connection',
     stack: `SyntaxError: Unexpected token 'O', "OCI runtim"... is not valid JSON\n` +
       '    at JSON.parse (<anonymous>)\n' +
-      '    at _Oe (C:\\Users\\gordo\\AppData\\Local\\AnthropicClaude\\app-1.0.2339\\resources\\app.asar\\.vite\\build\\index.js:196:207)\n' +
-      '    at bOe.readMessage (C:\\Users\\gordo\\AppData\\Local\\AnthropicClaude\\app-1.0.2339\\resources\\app.asar\\.vite\\build\\index.js:196:133)\n' +
-      '    at xOe.processReadBuffer (C:\\Users\\gordo\\AppData\\Local\\AnthropicClaude\\app-1.0.2339\\resources\\app.asar\\.vite\\build\\index.js:197:2203)\n' +
-      '    at Socket.<anonymous> (C:\\Users\\gordo\\AppData\\Local\\AnthropicClaude\\app-1.0.2339\\resources\\app.asar\\.vite\\build\\index.js:197:1653)\n' +
+      '    at _Oe (${USERPROFILE}/AppData\\Local\\AnthropicClaude\\app-1.0.2339\\resources\\app.asar\\.vite\\build\\index.js:196:207)\n' +
+      '    at bOe.readMessage (${USERPROFILE}/AppData\\Local\\AnthropicClaude\\app-1.0.2339\\resources\\app.asar\\.vite\\build\\index.js:196:133)\n' +
+      '    at xOe.processReadBuffer (${USERPROFILE}/AppData\\Local\\AnthropicClaude\\app-1.0.2339\\resources\\app.asar\\.vite\\build\\index.js:197:2203)\n' +
+      '    at Socket.<anonymous> (${USERPROFILE}/AppData\\Local\\AnthropicClaude\\app-1.0.2339\\resources\\app.asar\\.vite\\build\\index.js:197:1653)\n' +
       '    at Socket.emit (node:events:519:28)\n' +
       '    at addChunk (node:internal/streams/readable:561:12)\n' +
       '    at readableAddChunkPushByteMode (node:internal/streams/readable:512:3)\n' +
@@ -990,11 +990,11 @@ Error response from daemon: container 15620738287ced4737275aca025803298a8efa58f0
       'C:\\Program Files\\Sunshine',
       'C:\\Program Files\\Sunshine\\tools',
       'C:\\Program Files\\Docker\\Docker\\resources\\bin',
-      'C:\\Users\\gordo\\AppData\\Local\\Programs\\oh-my-posh\\bin\\',
-      'C:\\Users\\gordo\\AppData\\Local\\Microsoft\\WindowsApps',
+      '${USERPROFILE}/AppData\\Local\\Programs\\oh-my-posh\\bin\\',
+      '${USERPROFILE}/AppData\\Local\\Microsoft\\WindowsApps',
       '',
-      'C:\\Users\\gordo\\.local\\bin',
-      'C:\\Users\\gordo\\AppData\\Local\\Programs\\Ollama',
+      '${USERPROFILE}/.local\\bin',
+      '${USERPROFILE}/AppData\\Local\\Programs\\Ollama',
       [length]: 21
     ]
   }
@@ -1005,10 +1005,10 @@ Error response from daemon: container 15620738287ced4737275aca025803298a8efa58f0
     context: 'connection',
     stack: `SyntaxError: Unexpected token 'O', "OCI runtim"... is not valid JSON\n` +
       '    at JSON.parse (<anonymous>)\n' +
-      '    at _Oe (C:\\Users\\gordo\\AppData\\Local\\AnthropicClaude\\app-1.0.2339\\resources\\app.asar\\.vite\\build\\index.js:196:207)\n' +
-      '    at bOe.readMessage (C:\\Users\\gordo\\AppData\\Local\\AnthropicClaude\\app-1.0.2339\\resources\\app.asar\\.vite\\build\\index.js:196:133)\n' +
-      '    at xOe.processReadBuffer (C:\\Users\\gordo\\AppData\\Local\\AnthropicClaude\\app-1.0.2339\\resources\\app.asar\\.vite\\build\\index.js:197:2203)\n' +
-      '    at Socket.<anonymous> (C:\\Users\\gordo\\AppData\\Local\\AnthropicClaude\\app-1.0.2339\\resources\\app.asar\\.vite\\build\\index.js:197:1653)\n' +
+      '    at _Oe (${USERPROFILE}/AppData\\Local\\AnthropicClaude\\app-1.0.2339\\resources\\app.asar\\.vite\\build\\index.js:196:207)\n' +
+      '    at bOe.readMessage (${USERPROFILE}/AppData\\Local\\AnthropicClaude\\app-1.0.2339\\resources\\app.asar\\.vite\\build\\index.js:196:133)\n' +
+      '    at xOe.processReadBuffer (${USERPROFILE}/AppData\\Local\\AnthropicClaude\\app-1.0.2339\\resources\\app.asar\\.vite\\build\\index.js:197:2203)\n' +
+      '    at Socket.<anonymous> (${USERPROFILE}/AppData\\Local\\AnthropicClaude\\app-1.0.2339\\resources\\app.asar\\.vite\\build\\index.js:197:1653)\n' +
       '    at Socket.emit (node:events:519:28)\n' +
       '    at addChunk (node:internal/streams/readable:561:12)\n' +
       '    at readableAddChunkPushByteMode (node:internal/streams/readable:512:3)\n' +
@@ -1051,11 +1051,11 @@ Error response from daemon: container 15620738287ced4737275aca025803298a8efa58f0
       'C:\\Program Files\\Sunshine',
       'C:\\Program Files\\Sunshine\\tools',
       'C:\\Program Files\\Docker\\Docker\\resources\\bin',
-      'C:\\Users\\gordo\\AppData\\Local\\Programs\\oh-my-posh\\bin\\',
-      'C:\\Users\\gordo\\AppData\\Local\\Microsoft\\WindowsApps',
+      '${USERPROFILE}/AppData\\Local\\Programs\\oh-my-posh\\bin\\',
+      '${USERPROFILE}/AppData\\Local\\Microsoft\\WindowsApps',
       '',
-      'C:\\Users\\gordo\\.local\\bin',
-      'C:\\Users\\gordo\\AppData\\Local\\Programs\\Ollama',
+      '${USERPROFILE}/.local\\bin',
+      '${USERPROFILE}/AppData\\Local\\Programs\\Ollama',
       [length]: 21
     ]
   }
@@ -1067,10 +1067,10 @@ Error response from daemon: container 15620738287ced4737275aca025803298a8efa58f0
     context: 'connection',
     stack: `SyntaxError: Unexpected token 'O', "OCI runtim"... is not valid JSON\n` +
       '    at JSON.parse (<anonymous>)\n' +
-      '    at _Oe (C:\\Users\\gordo\\AppData\\Local\\AnthropicClaude\\app-1.0.2339\\resources\\app.asar\\.vite\\build\\index.js:196:207)\n' +
-      '    at bOe.readMessage (C:\\Users\\gordo\\AppData\\Local\\AnthropicClaude\\app-1.0.2339\\resources\\app.asar\\.vite\\build\\index.js:196:133)\n' +
-      '    at xOe.processReadBuffer (C:\\Users\\gordo\\AppData\\Local\\AnthropicClaude\\app-1.0.2339\\resources\\app.asar\\.vite\\build\\index.js:197:2203)\n' +
-      '    at Socket.<anonymous> (C:\\Users\\gordo\\AppData\\Local\\AnthropicClaude\\app-1.0.2339\\resources\\app.asar\\.vite\\build\\index.js:197:1653)\n' +
+      '    at _Oe (${USERPROFILE}/AppData\\Local\\AnthropicClaude\\app-1.0.2339\\resources\\app.asar\\.vite\\build\\index.js:196:207)\n' +
+      '    at bOe.readMessage (${USERPROFILE}/AppData\\Local\\AnthropicClaude\\app-1.0.2339\\resources\\app.asar\\.vite\\build\\index.js:196:133)\n' +
+      '    at xOe.processReadBuffer (${USERPROFILE}/AppData\\Local\\AnthropicClaude\\app-1.0.2339\\resources\\app.asar\\.vite\\build\\index.js:197:2203)\n' +
+      '    at Socket.<anonymous> (${USERPROFILE}/AppData\\Local\\AnthropicClaude\\app-1.0.2339\\resources\\app.asar\\.vite\\build\\index.js:197:1653)\n' +
       '    at Socket.emit (node:events:519:28)\n' +
       '    at addChunk (node:internal/streams/readable:561:12)\n' +
       '    at readableAddChunkPushByteMode (node:internal/streams/readable:512:3)\n' +
@@ -1111,11 +1111,11 @@ Error response from daemon: container 15620738287ced4737275aca025803298a8efa58f0
       'C:\\Program Files\\Sunshine',
       'C:\\Program Files\\Sunshine\\tools',
       'C:\\Program Files\\Docker\\Docker\\resources\\bin',
-      'C:\\Users\\gordo\\AppData\\Local\\Programs\\oh-my-posh\\bin\\',
-      'C:\\Users\\gordo\\AppData\\Local\\Microsoft\\WindowsApps',
+      '${USERPROFILE}/AppData\\Local\\Programs\\oh-my-posh\\bin\\',
+      '${USERPROFILE}/AppData\\Local\\Microsoft\\WindowsApps',
       '',
-      'C:\\Users\\gordo\\.local\\bin',
-      'C:\\Users\\gordo\\AppData\\Local\\Programs\\Ollama',
+      '${USERPROFILE}/.local\\bin',
+      '${USERPROFILE}/AppData\\Local\\Programs\\Ollama',
       [length]: 21
     ]
   }
@@ -1126,10 +1126,10 @@ Error response from daemon: container 15620738287ced4737275aca025803298a8efa58f0
     context: 'connection',
     stack: `SyntaxError: Unexpected token 'O', "OCI runtim"... is not valid JSON\n` +
       '    at JSON.parse (<anonymous>)\n' +
-      '    at FDe (C:\\Users\\gordo\\AppData\\Local\\AnthropicClaude\\app-1.0.2768\\resources\\app.asar\\.vite\\build\\index.js:196:207)\n' +
-      '    at LDe.readMessage (C:\\Users\\gordo\\AppData\\Local\\AnthropicClaude\\app-1.0.2768\\resources\\app.asar\\.vite\\build\\index.js:196:133)\n' +
-      '    at qDe.processReadBuffer (C:\\Users\\gordo\\AppData\\Local\\AnthropicClaude\\app-1.0.2768\\resources\\app.asar\\.vite\\build\\index.js:197:2203)\n' +
-      '    at Socket.<anonymous> (C:\\Users\\gordo\\AppData\\Local\\AnthropicClaude\\app-1.0.2768\\resources\\app.asar\\.vite\\build\\index.js:197:1653)\n' +
+      '    at FDe (${USERPROFILE}/AppData\\Local\\AnthropicClaude\\app-1.0.2768\\resources\\app.asar\\.vite\\build\\index.js:196:207)\n' +
+      '    at LDe.readMessage (${USERPROFILE}/AppData\\Local\\AnthropicClaude\\app-1.0.2768\\resources\\app.asar\\.vite\\build\\index.js:196:133)\n' +
+      '    at qDe.processReadBuffer (${USERPROFILE}/AppData\\Local\\AnthropicClaude\\app-1.0.2768\\resources\\app.asar\\.vite\\build\\index.js:197:2203)\n' +
+      '    at Socket.<anonymous> (${USERPROFILE}/AppData\\Local\\AnthropicClaude\\app-1.0.2768\\resources\\app.asar\\.vite\\build\\index.js:197:1653)\n' +
       '    at Socket.emit (node:events:519:28)\n' +
       '    at addChunk (node:internal/streams/readable:561:12)\n' +
       '    at readableAddChunkPushByteMode (node:internal/streams/readable:512:3)\n' +
@@ -1172,11 +1172,11 @@ Error response from daemon: container 15620738287ced4737275aca025803298a8efa58f0
       'C:\\Program Files\\Sunshine',
       'C:\\Program Files\\Sunshine\\tools',
       'C:\\Program Files\\Docker\\Docker\\resources\\bin',
-      'C:\\Users\\gordo\\AppData\\Local\\Programs\\oh-my-posh\\bin\\',
-      'C:\\Users\\gordo\\AppData\\Local\\Microsoft\\WindowsApps',
+      '${USERPROFILE}/AppData\\Local\\Programs\\oh-my-posh\\bin\\',
+      '${USERPROFILE}/AppData\\Local\\Microsoft\\WindowsApps',
       '',
-      'C:\\Users\\gordo\\.local\\bin',
-      'C:\\Users\\gordo\\AppData\\Local\\Programs\\Ollama',
+      '${USERPROFILE}/.local\\bin',
+      '${USERPROFILE}/AppData\\Local\\Programs\\Ollama',
       [length]: 21
     ]
   }
@@ -1188,10 +1188,10 @@ Error response from daemon: container 15620738287ced4737275aca025803298a8efa58f0
     context: 'connection',
     stack: `SyntaxError: Unexpected token 'O', "OCI runtim"... is not valid JSON\n` +
       '    at JSON.parse (<anonymous>)\n' +
-      '    at FDe (C:\\Users\\gordo\\AppData\\Local\\AnthropicClaude\\app-1.0.2768\\resources\\app.asar\\.vite\\build\\index.js:196:207)\n' +
-      '    at LDe.readMessage (C:\\Users\\gordo\\AppData\\Local\\AnthropicClaude\\app-1.0.2768\\resources\\app.asar\\.vite\\build\\index.js:196:133)\n' +
-      '    at qDe.processReadBuffer (C:\\Users\\gordo\\AppData\\Local\\AnthropicClaude\\app-1.0.2768\\resources\\app.asar\\.vite\\build\\index.js:197:2203)\n' +
-      '    at Socket.<anonymous> (C:\\Users\\gordo\\AppData\\Local\\AnthropicClaude\\app-1.0.2768\\resources\\app.asar\\.vite\\build\\index.js:197:1653)\n' +
+      '    at FDe (${USERPROFILE}/AppData\\Local\\AnthropicClaude\\app-1.0.2768\\resources\\app.asar\\.vite\\build\\index.js:196:207)\n' +
+      '    at LDe.readMessage (${USERPROFILE}/AppData\\Local\\AnthropicClaude\\app-1.0.2768\\resources\\app.asar\\.vite\\build\\index.js:196:133)\n' +
+      '    at qDe.processReadBuffer (${USERPROFILE}/AppData\\Local\\AnthropicClaude\\app-1.0.2768\\resources\\app.asar\\.vite\\build\\index.js:197:2203)\n' +
+      '    at Socket.<anonymous> (${USERPROFILE}/AppData\\Local\\AnthropicClaude\\app-1.0.2768\\resources\\app.asar\\.vite\\build\\index.js:197:1653)\n' +
       '    at Socket.emit (node:events:519:28)\n' +
       '    at addChunk (node:internal/streams/readable:561:12)\n' +
       '    at readableAddChunkPushByteMode (node:internal/streams/readable:512:3)\n' +
@@ -1232,11 +1232,11 @@ Error response from daemon: container 15620738287ced4737275aca025803298a8efa58f0
       'C:\\Program Files\\Sunshine',
       'C:\\Program Files\\Sunshine\\tools',
       'C:\\Program Files\\Docker\\Docker\\resources\\bin',
-      'C:\\Users\\gordo\\AppData\\Local\\Programs\\oh-my-posh\\bin\\',
-      'C:\\Users\\gordo\\AppData\\Local\\Microsoft\\WindowsApps',
+      '${USERPROFILE}/AppData\\Local\\Programs\\oh-my-posh\\bin\\',
+      '${USERPROFILE}/AppData\\Local\\Microsoft\\WindowsApps',
       '',
-      'C:\\Users\\gordo\\.local\\bin',
-      'C:\\Users\\gordo\\AppData\\Local\\Programs\\Ollama',
+      '${USERPROFILE}/.local\\bin',
+      '${USERPROFILE}/AppData\\Local\\Programs\\Ollama',
       [length]: 21
     ]
   }
@@ -1247,10 +1247,10 @@ Error response from daemon: container 15620738287ced4737275aca025803298a8efa58f0
     context: 'connection',
     stack: `SyntaxError: Unexpected token 'O', "OCI runtim"... is not valid JSON\n` +
       '    at JSON.parse (<anonymous>)\n' +
-      '    at FDe (C:\\Users\\gordo\\AppData\\Local\\AnthropicClaude\\app-1.0.2768\\resources\\app.asar\\.vite\\build\\index.js:196:207)\n' +
-      '    at LDe.readMessage (C:\\Users\\gordo\\AppData\\Local\\AnthropicClaude\\app-1.0.2768\\resources\\app.asar\\.vite\\build\\index.js:196:133)\n' +
-      '    at qDe.processReadBuffer (C:\\Users\\gordo\\AppData\\Local\\AnthropicClaude\\app-1.0.2768\\resources\\app.asar\\.vite\\build\\index.js:197:2203)\n' +
-      '    at Socket.<anonymous> (C:\\Users\\gordo\\AppData\\Local\\AnthropicClaude\\app-1.0.2768\\resources\\app.asar\\.vite\\build\\index.js:197:1653)\n' +
+      '    at FDe (${USERPROFILE}/AppData\\Local\\AnthropicClaude\\app-1.0.2768\\resources\\app.asar\\.vite\\build\\index.js:196:207)\n' +
+      '    at LDe.readMessage (${USERPROFILE}/AppData\\Local\\AnthropicClaude\\app-1.0.2768\\resources\\app.asar\\.vite\\build\\index.js:196:133)\n' +
+      '    at qDe.processReadBuffer (${USERPROFILE}/AppData\\Local\\AnthropicClaude\\app-1.0.2768\\resources\\app.asar\\.vite\\build\\index.js:197:2203)\n' +
+      '    at Socket.<anonymous> (${USERPROFILE}/AppData\\Local\\AnthropicClaude\\app-1.0.2768\\resources\\app.asar\\.vite\\build\\index.js:197:1653)\n' +
       '    at Socket.emit (node:events:519:28)\n' +
       '    at addChunk (node:internal/streams/readable:561:12)\n' +
       '    at readableAddChunkPushByteMode (node:internal/streams/readable:512:3)\n' +
@@ -1293,11 +1293,11 @@ Error response from daemon: container 15620738287ced4737275aca025803298a8efa58f0
       'C:\\Program Files\\Sunshine',
       'C:\\Program Files\\Sunshine\\tools',
       'C:\\Program Files\\Docker\\Docker\\resources\\bin',
-      'C:\\Users\\gordo\\AppData\\Local\\Programs\\oh-my-posh\\bin\\',
-      'C:\\Users\\gordo\\AppData\\Local\\Microsoft\\WindowsApps',
+      '${USERPROFILE}/AppData\\Local\\Programs\\oh-my-posh\\bin\\',
+      '${USERPROFILE}/AppData\\Local\\Microsoft\\WindowsApps',
       '',
-      'C:\\Users\\gordo\\.local\\bin',
-      'C:\\Users\\gordo\\AppData\\Local\\Programs\\Ollama',
+      '${USERPROFILE}/.local\\bin',
+      '${USERPROFILE}/AppData\\Local\\Programs\\Ollama',
       [length]: 21
     ]
   }
@@ -1309,10 +1309,10 @@ Error response from daemon: container 15620738287ced4737275aca025803298a8efa58f0
     context: 'connection',
     stack: `SyntaxError: Unexpected token 'O', "OCI runtim"... is not valid JSON\n` +
       '    at JSON.parse (<anonymous>)\n' +
-      '    at FDe (C:\\Users\\gordo\\AppData\\Local\\AnthropicClaude\\app-1.0.2768\\resources\\app.asar\\.vite\\build\\index.js:196:207)\n' +
-      '    at LDe.readMessage (C:\\Users\\gordo\\AppData\\Local\\AnthropicClaude\\app-1.0.2768\\resources\\app.asar\\.vite\\build\\index.js:196:133)\n' +
-      '    at qDe.processReadBuffer (C:\\Users\\gordo\\AppData\\Local\\AnthropicClaude\\app-1.0.2768\\resources\\app.asar\\.vite\\build\\index.js:197:2203)\n' +
-      '    at Socket.<anonymous> (C:\\Users\\gordo\\AppData\\Local\\AnthropicClaude\\app-1.0.2768\\resources\\app.asar\\.vite\\build\\index.js:197:1653)\n' +
+      '    at FDe (${USERPROFILE}/AppData\\Local\\AnthropicClaude\\app-1.0.2768\\resources\\app.asar\\.vite\\build\\index.js:196:207)\n' +
+      '    at LDe.readMessage (${USERPROFILE}/AppData\\Local\\AnthropicClaude\\app-1.0.2768\\resources\\app.asar\\.vite\\build\\index.js:196:133)\n' +
+      '    at qDe.processReadBuffer (${USERPROFILE}/AppData\\Local\\AnthropicClaude\\app-1.0.2768\\resources\\app.asar\\.vite\\build\\index.js:197:2203)\n' +
+      '    at Socket.<anonymous> (${USERPROFILE}/AppData\\Local\\AnthropicClaude\\app-1.0.2768\\resources\\app.asar\\.vite\\build\\index.js:197:1653)\n' +
       '    at Socket.emit (node:events:519:28)\n' +
       '    at addChunk (node:internal/streams/readable:561:12)\n' +
       '    at readableAddChunkPushByteMode (node:internal/streams/readable:512:3)\n' +
@@ -1353,11 +1353,11 @@ Error response from daemon: container 15620738287ced4737275aca025803298a8efa58f0
       'C:\\Program Files\\Sunshine',
       'C:\\Program Files\\Sunshine\\tools',
       'C:\\Program Files\\Docker\\Docker\\resources\\bin',
-      'C:\\Users\\gordo\\AppData\\Local\\Programs\\oh-my-posh\\bin\\',
-      'C:\\Users\\gordo\\AppData\\Local\\Microsoft\\WindowsApps',
+      '${USERPROFILE}/AppData\\Local\\Programs\\oh-my-posh\\bin\\',
+      '${USERPROFILE}/AppData\\Local\\Microsoft\\WindowsApps',
       '',
-      'C:\\Users\\gordo\\.local\\bin',
-      'C:\\Users\\gordo\\AppData\\Local\\Programs\\Ollama',
+      '${USERPROFILE}/.local\\bin',
+      '${USERPROFILE}/AppData\\Local\\Programs\\Ollama',
       [length]: 21
     ]
   }
@@ -1369,10 +1369,10 @@ Error response from daemon: container 15620738287ced4737275aca025803298a8efa58f0
     context: 'connection',
     stack: `SyntaxError: Unexpected token 'O', "OCI runtim"... is not valid JSON\n` +
       '    at JSON.parse (<anonymous>)\n' +
-      '    at FDe (C:\\Users\\gordo\\AppData\\Local\\AnthropicClaude\\app-1.0.2768\\resources\\app.asar\\.vite\\build\\index.js:196:207)\n' +
-      '    at LDe.readMessage (C:\\Users\\gordo\\AppData\\Local\\AnthropicClaude\\app-1.0.2768\\resources\\app.asar\\.vite\\build\\index.js:196:133)\n' +
-      '    at qDe.processReadBuffer (C:\\Users\\gordo\\AppData\\Local\\AnthropicClaude\\app-1.0.2768\\resources\\app.asar\\.vite\\build\\index.js:197:2203)\n' +
-      '    at Socket.<anonymous> (C:\\Users\\gordo\\AppData\\Local\\AnthropicClaude\\app-1.0.2768\\resources\\app.asar\\.vite\\build\\index.js:197:1653)\n' +
+      '    at FDe (${USERPROFILE}/AppData\\Local\\AnthropicClaude\\app-1.0.2768\\resources\\app.asar\\.vite\\build\\index.js:196:207)\n' +
+      '    at LDe.readMessage (${USERPROFILE}/AppData\\Local\\AnthropicClaude\\app-1.0.2768\\resources\\app.asar\\.vite\\build\\index.js:196:133)\n' +
+      '    at qDe.processReadBuffer (${USERPROFILE}/AppData\\Local\\AnthropicClaude\\app-1.0.2768\\resources\\app.asar\\.vite\\build\\index.js:197:2203)\n' +
+      '    at Socket.<anonymous> (${USERPROFILE}/AppData\\Local\\AnthropicClaude\\app-1.0.2768\\resources\\app.asar\\.vite\\build\\index.js:197:1653)\n' +
       '    at Socket.emit (node:events:519:28)\n' +
       '    at addChunk (node:internal/streams/readable:561:12)\n' +
       '    at readableAddChunkPushByteMode (node:internal/streams/readable:512:3)\n' +
@@ -1415,11 +1415,11 @@ Error response from daemon: container 15620738287ced4737275aca025803298a8efa58f0
       'C:\\Program Files\\Sunshine',
       'C:\\Program Files\\Sunshine\\tools',
       'C:\\Program Files\\Docker\\Docker\\resources\\bin',
-      'C:\\Users\\gordo\\AppData\\Local\\Programs\\oh-my-posh\\bin\\',
-      'C:\\Users\\gordo\\AppData\\Local\\Microsoft\\WindowsApps',
+      '${USERPROFILE}/AppData\\Local\\Programs\\oh-my-posh\\bin\\',
+      '${USERPROFILE}/AppData\\Local\\Microsoft\\WindowsApps',
       '',
-      'C:\\Users\\gordo\\.local\\bin',
-      'C:\\Users\\gordo\\AppData\\Local\\Programs\\Ollama',
+      '${USERPROFILE}/.local\\bin',
+      '${USERPROFILE}/AppData\\Local\\Programs\\Ollama',
       [length]: 21
     ]
   }
@@ -1430,10 +1430,10 @@ Error response from daemon: container 15620738287ced4737275aca025803298a8efa58f0
     context: 'connection',
     stack: `SyntaxError: Unexpected token 'O', "OCI runtim"... is not valid JSON\n` +
       '    at JSON.parse (<anonymous>)\n' +
-      '    at FDe (C:\\Users\\gordo\\AppData\\Local\\AnthropicClaude\\app-1.0.2768\\resources\\app.asar\\.vite\\build\\index.js:196:207)\n' +
-      '    at LDe.readMessage (C:\\Users\\gordo\\AppData\\Local\\AnthropicClaude\\app-1.0.2768\\resources\\app.asar\\.vite\\build\\index.js:196:133)\n' +
-      '    at qDe.processReadBuffer (C:\\Users\\gordo\\AppData\\Local\\AnthropicClaude\\app-1.0.2768\\resources\\app.asar\\.vite\\build\\index.js:197:2203)\n' +
-      '    at Socket.<anonymous> (C:\\Users\\gordo\\AppData\\Local\\AnthropicClaude\\app-1.0.2768\\resources\\app.asar\\.vite\\build\\index.js:197:1653)\n' +
+      '    at FDe (${USERPROFILE}/AppData\\Local\\AnthropicClaude\\app-1.0.2768\\resources\\app.asar\\.vite\\build\\index.js:196:207)\n' +
+      '    at LDe.readMessage (${USERPROFILE}/AppData\\Local\\AnthropicClaude\\app-1.0.2768\\resources\\app.asar\\.vite\\build\\index.js:196:133)\n' +
+      '    at qDe.processReadBuffer (${USERPROFILE}/AppData\\Local\\AnthropicClaude\\app-1.0.2768\\resources\\app.asar\\.vite\\build\\index.js:197:2203)\n' +
+      '    at Socket.<anonymous> (${USERPROFILE}/AppData\\Local\\AnthropicClaude\\app-1.0.2768\\resources\\app.asar\\.vite\\build\\index.js:197:1653)\n' +
       '    at Socket.emit (node:events:519:28)\n' +
       '    at addChunk (node:internal/streams/readable:561:12)\n' +
       '    at readableAddChunkPushByteMode (node:internal/streams/readable:512:3)\n' +
@@ -1476,11 +1476,11 @@ Error response from daemon: container 15620738287ced4737275aca025803298a8efa58f0
       'C:\\Program Files\\Sunshine',
       'C:\\Program Files\\Sunshine\\tools',
       'C:\\Program Files\\Docker\\Docker\\resources\\bin',
-      'C:\\Users\\gordo\\AppData\\Local\\Programs\\oh-my-posh\\bin\\',
-      'C:\\Users\\gordo\\AppData\\Local\\Microsoft\\WindowsApps',
+      '${USERPROFILE}/AppData\\Local\\Programs\\oh-my-posh\\bin\\',
+      '${USERPROFILE}/AppData\\Local\\Microsoft\\WindowsApps',
       '',
-      'C:\\Users\\gordo\\.local\\bin',
-      'C:\\Users\\gordo\\AppData\\Local\\Programs\\Ollama',
+      '${USERPROFILE}/.local\\bin',
+      '${USERPROFILE}/AppData\\Local\\Programs\\Ollama',
       [length]: 21
     ]
   }
@@ -1492,10 +1492,10 @@ Error response from daemon: container 15620738287ced4737275aca025803298a8efa58f0
     context: 'connection',
     stack: `SyntaxError: Unexpected token 'O', "OCI runtim"... is not valid JSON\n` +
       '    at JSON.parse (<anonymous>)\n' +
-      '    at FDe (C:\\Users\\gordo\\AppData\\Local\\AnthropicClaude\\app-1.0.2768\\resources\\app.asar\\.vite\\build\\index.js:196:207)\n' +
-      '    at LDe.readMessage (C:\\Users\\gordo\\AppData\\Local\\AnthropicClaude\\app-1.0.2768\\resources\\app.asar\\.vite\\build\\index.js:196:133)\n' +
-      '    at qDe.processReadBuffer (C:\\Users\\gordo\\AppData\\Local\\AnthropicClaude\\app-1.0.2768\\resources\\app.asar\\.vite\\build\\index.js:197:2203)\n' +
-      '    at Socket.<anonymous> (C:\\Users\\gordo\\AppData\\Local\\AnthropicClaude\\app-1.0.2768\\resources\\app.asar\\.vite\\build\\index.js:197:1653)\n' +
+      '    at FDe (${USERPROFILE}/AppData\\Local\\AnthropicClaude\\app-1.0.2768\\resources\\app.asar\\.vite\\build\\index.js:196:207)\n' +
+      '    at LDe.readMessage (${USERPROFILE}/AppData\\Local\\AnthropicClaude\\app-1.0.2768\\resources\\app.asar\\.vite\\build\\index.js:196:133)\n' +
+      '    at qDe.processReadBuffer (${USERPROFILE}/AppData\\Local\\AnthropicClaude\\app-1.0.2768\\resources\\app.asar\\.vite\\build\\index.js:197:2203)\n' +
+      '    at Socket.<anonymous> (${USERPROFILE}/AppData\\Local\\AnthropicClaude\\app-1.0.2768\\resources\\app.asar\\.vite\\build\\index.js:197:1653)\n' +
       '    at Socket.emit (node:events:519:28)\n' +
       '    at addChunk (node:internal/streams/readable:561:12)\n' +
       '    at readableAddChunkPushByteMode (node:internal/streams/readable:512:3)\n' +
@@ -1538,11 +1538,11 @@ Error response from daemon: container 15620738287ced4737275aca025803298a8efa58f0
       'C:\\Program Files\\Sunshine',
       'C:\\Program Files\\Sunshine\\tools',
       'C:\\Program Files\\Docker\\Docker\\resources\\bin',
-      'C:\\Users\\gordo\\AppData\\Local\\Programs\\oh-my-posh\\bin\\',
-      'C:\\Users\\gordo\\AppData\\Local\\Microsoft\\WindowsApps',
+      '${USERPROFILE}/AppData\\Local\\Programs\\oh-my-posh\\bin\\',
+      '${USERPROFILE}/AppData\\Local\\Microsoft\\WindowsApps',
       '',
-      'C:\\Users\\gordo\\.local\\bin',
-      'C:\\Users\\gordo\\AppData\\Local\\Programs\\Ollama',
+      '${USERPROFILE}/.local\\bin',
+      '${USERPROFILE}/AppData\\Local\\Programs\\Ollama',
       [length]: 21
     ]
   }
@@ -1554,10 +1554,10 @@ Error response from daemon: container 15620738287ced4737275aca025803298a8efa58f0
     context: 'connection',
     stack: `SyntaxError: Unexpected token 'O', "OCI runtim"... is not valid JSON\n` +
       '    at JSON.parse (<anonymous>)\n' +
-      '    at FDe (C:\\Users\\gordo\\AppData\\Local\\AnthropicClaude\\app-1.0.2768\\resources\\app.asar\\.vite\\build\\index.js:196:207)\n' +
-      '    at LDe.readMessage (C:\\Users\\gordo\\AppData\\Local\\AnthropicClaude\\app-1.0.2768\\resources\\app.asar\\.vite\\build\\index.js:196:133)\n' +
-      '    at qDe.processReadBuffer (C:\\Users\\gordo\\AppData\\Local\\AnthropicClaude\\app-1.0.2768\\resources\\app.asar\\.vite\\build\\index.js:197:2203)\n' +
-      '    at Socket.<anonymous> (C:\\Users\\gordo\\AppData\\Local\\AnthropicClaude\\app-1.0.2768\\resources\\app.asar\\.vite\\build\\index.js:197:1653)\n' +
+      '    at FDe (${USERPROFILE}/AppData\\Local\\AnthropicClaude\\app-1.0.2768\\resources\\app.asar\\.vite\\build\\index.js:196:207)\n' +
+      '    at LDe.readMessage (${USERPROFILE}/AppData\\Local\\AnthropicClaude\\app-1.0.2768\\resources\\app.asar\\.vite\\build\\index.js:196:133)\n' +
+      '    at qDe.processReadBuffer (${USERPROFILE}/AppData\\Local\\AnthropicClaude\\app-1.0.2768\\resources\\app.asar\\.vite\\build\\index.js:197:2203)\n' +
+      '    at Socket.<anonymous> (${USERPROFILE}/AppData\\Local\\AnthropicClaude\\app-1.0.2768\\resources\\app.asar\\.vite\\build\\index.js:197:1653)\n' +
       '    at Socket.emit (node:events:519:28)\n' +
       '    at addChunk (node:internal/streams/readable:561:12)\n' +
       '    at readableAddChunkPushByteMode (node:internal/streams/readable:512:3)\n' +
@@ -1598,11 +1598,11 @@ Error response from daemon: container 15620738287ced4737275aca025803298a8efa58f0
       'C:\\Program Files\\Sunshine',
       'C:\\Program Files\\Sunshine\\tools',
       'C:\\Program Files\\Docker\\Docker\\resources\\bin',
-      'C:\\Users\\gordo\\AppData\\Local\\Programs\\oh-my-posh\\bin\\',
-      'C:\\Users\\gordo\\AppData\\Local\\Microsoft\\WindowsApps',
+      '${USERPROFILE}/AppData\\Local\\Programs\\oh-my-posh\\bin\\',
+      '${USERPROFILE}/AppData\\Local\\Microsoft\\WindowsApps',
       '',
-      'C:\\Users\\gordo\\.local\\bin',
-      'C:\\Users\\gordo\\AppData\\Local\\Programs\\Ollama',
+      '${USERPROFILE}/.local\\bin',
+      '${USERPROFILE}/AppData\\Local\\Programs\\Ollama',
       [length]: 21
     ]
   }
@@ -1644,11 +1644,11 @@ failed to connect to the docker API at npipe:////./pipe/dockerDesktopLinuxEngine
       'C:\\Program Files\\Sunshine',
       'C:\\Program Files\\Sunshine\\tools',
       'C:\\Program Files\\Docker\\Docker\\resources\\bin',
-      'C:\\Users\\gordo\\AppData\\Local\\Programs\\oh-my-posh\\bin\\',
-      'C:\\Users\\gordo\\AppData\\Local\\Microsoft\\WindowsApps',
+      '${USERPROFILE}/AppData\\Local\\Programs\\oh-my-posh\\bin\\',
+      '${USERPROFILE}/AppData\\Local\\Microsoft\\WindowsApps',
       '',
-      'C:\\Users\\gordo\\.local\\bin',
-      'C:\\Users\\gordo\\AppData\\Local\\Programs\\Ollama',
+      '${USERPROFILE}/.local\\bin',
+      '${USERPROFILE}/AppData\\Local\\Programs\\Ollama',
       [length]: 21
     ]
   }
@@ -1660,10 +1660,10 @@ failed to connect to the docker API at npipe:////./pipe/dockerDesktopLinuxEngine
     context: 'connection',
     stack: `SyntaxError: Unexpected token 'O', "OCI runtim"... is not valid JSON\n` +
       '    at JSON.parse (<anonymous>)\n' +
-      '    at FDe (C:\\Users\\gordo\\AppData\\Local\\AnthropicClaude\\app-1.0.2768\\resources\\app.asar\\.vite\\build\\index.js:196:207)\n' +
-      '    at LDe.readMessage (C:\\Users\\gordo\\AppData\\Local\\AnthropicClaude\\app-1.0.2768\\resources\\app.asar\\.vite\\build\\index.js:196:133)\n' +
-      '    at qDe.processReadBuffer (C:\\Users\\gordo\\AppData\\Local\\AnthropicClaude\\app-1.0.2768\\resources\\app.asar\\.vite\\build\\index.js:197:2203)\n' +
-      '    at Socket.<anonymous> (C:\\Users\\gordo\\AppData\\Local\\AnthropicClaude\\app-1.0.2768\\resources\\app.asar\\.vite\\build\\index.js:197:1653)\n' +
+      '    at FDe (${USERPROFILE}/AppData\\Local\\AnthropicClaude\\app-1.0.2768\\resources\\app.asar\\.vite\\build\\index.js:196:207)\n' +
+      '    at LDe.readMessage (${USERPROFILE}/AppData\\Local\\AnthropicClaude\\app-1.0.2768\\resources\\app.asar\\.vite\\build\\index.js:196:133)\n' +
+      '    at qDe.processReadBuffer (${USERPROFILE}/AppData\\Local\\AnthropicClaude\\app-1.0.2768\\resources\\app.asar\\.vite\\build\\index.js:197:2203)\n' +
+      '    at Socket.<anonymous> (${USERPROFILE}/AppData\\Local\\AnthropicClaude\\app-1.0.2768\\resources\\app.asar\\.vite\\build\\index.js:197:1653)\n' +
       '    at Socket.emit (node:events:519:28)\n' +
       '    at addChunk (node:internal/streams/readable:561:12)\n' +
       '    at readableAddChunkPushByteMode (node:internal/streams/readable:512:3)\n' +
@@ -1704,11 +1704,11 @@ failed to connect to the docker API at npipe:////./pipe/dockerDesktopLinuxEngine
       'C:\\Program Files\\Sunshine',
       'C:\\Program Files\\Sunshine\\tools',
       'C:\\Program Files\\Docker\\Docker\\resources\\bin',
-      'C:\\Users\\gordo\\AppData\\Local\\Programs\\oh-my-posh\\bin\\',
-      'C:\\Users\\gordo\\AppData\\Local\\Microsoft\\WindowsApps',
+      '${USERPROFILE}/AppData\\Local\\Programs\\oh-my-posh\\bin\\',
+      '${USERPROFILE}/AppData\\Local\\Microsoft\\WindowsApps',
       '',
-      'C:\\Users\\gordo\\.local\\bin',
-      'C:\\Users\\gordo\\AppData\\Local\\Programs\\Ollama',
+      '${USERPROFILE}/.local\\bin',
+      '${USERPROFILE}/AppData\\Local\\Programs\\Ollama',
       [length]: 21
     ]
   }
@@ -1719,10 +1719,10 @@ failed to connect to the docker API at npipe:////./pipe/dockerDesktopLinuxEngine
     context: 'connection',
     stack: `SyntaxError: Unexpected token 'O', "OCI runtim"... is not valid JSON\n` +
       '    at JSON.parse (<anonymous>)\n' +
-      '    at FDe (C:\\Users\\gordo\\AppData\\Local\\AnthropicClaude\\app-1.0.2768\\resources\\app.asar\\.vite\\build\\index.js:196:207)\n' +
-      '    at LDe.readMessage (C:\\Users\\gordo\\AppData\\Local\\AnthropicClaude\\app-1.0.2768\\resources\\app.asar\\.vite\\build\\index.js:196:133)\n' +
-      '    at qDe.processReadBuffer (C:\\Users\\gordo\\AppData\\Local\\AnthropicClaude\\app-1.0.2768\\resources\\app.asar\\.vite\\build\\index.js:197:2203)\n' +
-      '    at Socket.<anonymous> (C:\\Users\\gordo\\AppData\\Local\\AnthropicClaude\\app-1.0.2768\\resources\\app.asar\\.vite\\build\\index.js:197:1653)\n' +
+      '    at FDe (${USERPROFILE}/AppData\\Local\\AnthropicClaude\\app-1.0.2768\\resources\\app.asar\\.vite\\build\\index.js:196:207)\n' +
+      '    at LDe.readMessage (${USERPROFILE}/AppData\\Local\\AnthropicClaude\\app-1.0.2768\\resources\\app.asar\\.vite\\build\\index.js:196:133)\n' +
+      '    at qDe.processReadBuffer (${USERPROFILE}/AppData\\Local\\AnthropicClaude\\app-1.0.2768\\resources\\app.asar\\.vite\\build\\index.js:197:2203)\n' +
+      '    at Socket.<anonymous> (${USERPROFILE}/AppData\\Local\\AnthropicClaude\\app-1.0.2768\\resources\\app.asar\\.vite\\build\\index.js:197:1653)\n' +
       '    at Socket.emit (node:events:519:28)\n' +
       '    at addChunk (node:internal/streams/readable:561:12)\n' +
       '    at readableAddChunkPushByteMode (node:internal/streams/readable:512:3)\n' +
@@ -1765,11 +1765,11 @@ failed to connect to the docker API at npipe:////./pipe/dockerDesktopLinuxEngine
       'C:\\Program Files\\Sunshine',
       'C:\\Program Files\\Sunshine\\tools',
       'C:\\Program Files\\Docker\\Docker\\resources\\bin',
-      'C:\\Users\\gordo\\AppData\\Local\\Programs\\oh-my-posh\\bin\\',
-      'C:\\Users\\gordo\\AppData\\Local\\Microsoft\\WindowsApps',
+      '${USERPROFILE}/AppData\\Local\\Programs\\oh-my-posh\\bin\\',
+      '${USERPROFILE}/AppData\\Local\\Microsoft\\WindowsApps',
       '',
-      'C:\\Users\\gordo\\.local\\bin',
-      'C:\\Users\\gordo\\AppData\\Local\\Programs\\Ollama',
+      '${USERPROFILE}/.local\\bin',
+      '${USERPROFILE}/AppData\\Local\\Programs\\Ollama',
       [length]: 21
     ]
   }
@@ -1781,10 +1781,10 @@ failed to connect to the docker API at npipe:////./pipe/dockerDesktopLinuxEngine
     context: 'connection',
     stack: `SyntaxError: Unexpected token 'O', "OCI runtim"... is not valid JSON\n` +
       '    at JSON.parse (<anonymous>)\n' +
-      '    at FDe (C:\\Users\\gordo\\AppData\\Local\\AnthropicClaude\\app-1.0.2768\\resources\\app.asar\\.vite\\build\\index.js:196:207)\n' +
-      '    at LDe.readMessage (C:\\Users\\gordo\\AppData\\Local\\AnthropicClaude\\app-1.0.2768\\resources\\app.asar\\.vite\\build\\index.js:196:133)\n' +
-      '    at qDe.processReadBuffer (C:\\Users\\gordo\\AppData\\Local\\AnthropicClaude\\app-1.0.2768\\resources\\app.asar\\.vite\\build\\index.js:197:2203)\n' +
-      '    at Socket.<anonymous> (C:\\Users\\gordo\\AppData\\Local\\AnthropicClaude\\app-1.0.2768\\resources\\app.asar\\.vite\\build\\index.js:197:1653)\n' +
+      '    at FDe (${USERPROFILE}/AppData\\Local\\AnthropicClaude\\app-1.0.2768\\resources\\app.asar\\.vite\\build\\index.js:196:207)\n' +
+      '    at LDe.readMessage (${USERPROFILE}/AppData\\Local\\AnthropicClaude\\app-1.0.2768\\resources\\app.asar\\.vite\\build\\index.js:196:133)\n' +
+      '    at qDe.processReadBuffer (${USERPROFILE}/AppData\\Local\\AnthropicClaude\\app-1.0.2768\\resources\\app.asar\\.vite\\build\\index.js:197:2203)\n' +
+      '    at Socket.<anonymous> (${USERPROFILE}/AppData\\Local\\AnthropicClaude\\app-1.0.2768\\resources\\app.asar\\.vite\\build\\index.js:197:1653)\n' +
       '    at Socket.emit (node:events:519:28)\n' +
       '    at addChunk (node:internal/streams/readable:561:12)\n' +
       '    at readableAddChunkPushByteMode (node:internal/streams/readable:512:3)\n' +
@@ -1825,11 +1825,11 @@ failed to connect to the docker API at npipe:////./pipe/dockerDesktopLinuxEngine
       'C:\\Program Files\\Sunshine',
       'C:\\Program Files\\Sunshine\\tools',
       'C:\\Program Files\\Docker\\Docker\\resources\\bin',
-      'C:\\Users\\gordo\\AppData\\Local\\Programs\\oh-my-posh\\bin\\',
-      'C:\\Users\\gordo\\AppData\\Local\\Microsoft\\WindowsApps',
+      '${USERPROFILE}/AppData\\Local\\Programs\\oh-my-posh\\bin\\',
+      '${USERPROFILE}/AppData\\Local\\Microsoft\\WindowsApps',
       '',
-      'C:\\Users\\gordo\\.local\\bin',
-      'C:\\Users\\gordo\\AppData\\Local\\Programs\\Ollama',
+      '${USERPROFILE}/.local\\bin',
+      '${USERPROFILE}/AppData\\Local\\Programs\\Ollama',
       [length]: 21
     ]
   }
@@ -1840,10 +1840,10 @@ failed to connect to the docker API at npipe:////./pipe/dockerDesktopLinuxEngine
     context: 'connection',
     stack: `SyntaxError: Unexpected token 'O', "OCI runtim"... is not valid JSON\n` +
       '    at JSON.parse (<anonymous>)\n' +
-      '    at FDe (C:\\Users\\gordo\\AppData\\Local\\AnthropicClaude\\app-1.0.2768\\resources\\app.asar\\.vite\\build\\index.js:196:207)\n' +
-      '    at LDe.readMessage (C:\\Users\\gordo\\AppData\\Local\\AnthropicClaude\\app-1.0.2768\\resources\\app.asar\\.vite\\build\\index.js:196:133)\n' +
-      '    at qDe.processReadBuffer (C:\\Users\\gordo\\AppData\\Local\\AnthropicClaude\\app-1.0.2768\\resources\\app.asar\\.vite\\build\\index.js:197:2203)\n' +
-      '    at Socket.<anonymous> (C:\\Users\\gordo\\AppData\\Local\\AnthropicClaude\\app-1.0.2768\\resources\\app.asar\\.vite\\build\\index.js:197:1653)\n' +
+      '    at FDe (${USERPROFILE}/AppData\\Local\\AnthropicClaude\\app-1.0.2768\\resources\\app.asar\\.vite\\build\\index.js:196:207)\n' +
+      '    at LDe.readMessage (${USERPROFILE}/AppData\\Local\\AnthropicClaude\\app-1.0.2768\\resources\\app.asar\\.vite\\build\\index.js:196:133)\n' +
+      '    at qDe.processReadBuffer (${USERPROFILE}/AppData\\Local\\AnthropicClaude\\app-1.0.2768\\resources\\app.asar\\.vite\\build\\index.js:197:2203)\n' +
+      '    at Socket.<anonymous> (${USERPROFILE}/AppData\\Local\\AnthropicClaude\\app-1.0.2768\\resources\\app.asar\\.vite\\build\\index.js:197:1653)\n' +
       '    at Socket.emit (node:events:519:28)\n' +
       '    at addChunk (node:internal/streams/readable:561:12)\n' +
       '    at readableAddChunkPushByteMode (node:internal/streams/readable:512:3)\n' +
@@ -1886,11 +1886,11 @@ failed to connect to the docker API at npipe:////./pipe/dockerDesktopLinuxEngine
       'C:\\Program Files\\Sunshine',
       'C:\\Program Files\\Sunshine\\tools',
       'C:\\Program Files\\Docker\\Docker\\resources\\bin',
-      'C:\\Users\\gordo\\AppData\\Local\\Programs\\oh-my-posh\\bin\\',
-      'C:\\Users\\gordo\\AppData\\Local\\Microsoft\\WindowsApps',
+      '${USERPROFILE}/AppData\\Local\\Programs\\oh-my-posh\\bin\\',
+      '${USERPROFILE}/AppData\\Local\\Microsoft\\WindowsApps',
       '',
-      'C:\\Users\\gordo\\.local\\bin',
-      'C:\\Users\\gordo\\AppData\\Local\\Programs\\Ollama',
+      '${USERPROFILE}/.local\\bin',
+      '${USERPROFILE}/AppData\\Local\\Programs\\Ollama',
       [length]: 21
     ]
   }
@@ -1902,10 +1902,10 @@ failed to connect to the docker API at npipe:////./pipe/dockerDesktopLinuxEngine
     context: 'connection',
     stack: `SyntaxError: Unexpected token 'O', "OCI runtim"... is not valid JSON\n` +
       '    at JSON.parse (<anonymous>)\n' +
-      '    at FDe (C:\\Users\\gordo\\AppData\\Local\\AnthropicClaude\\app-1.0.2768\\resources\\app.asar\\.vite\\build\\index.js:196:207)\n' +
-      '    at LDe.readMessage (C:\\Users\\gordo\\AppData\\Local\\AnthropicClaude\\app-1.0.2768\\resources\\app.asar\\.vite\\build\\index.js:196:133)\n' +
-      '    at qDe.processReadBuffer (C:\\Users\\gordo\\AppData\\Local\\AnthropicClaude\\app-1.0.2768\\resources\\app.asar\\.vite\\build\\index.js:197:2203)\n' +
-      '    at Socket.<anonymous> (C:\\Users\\gordo\\AppData\\Local\\AnthropicClaude\\app-1.0.2768\\resources\\app.asar\\.vite\\build\\index.js:197:1653)\n' +
+      '    at FDe (${USERPROFILE}/AppData\\Local\\AnthropicClaude\\app-1.0.2768\\resources\\app.asar\\.vite\\build\\index.js:196:207)\n' +
+      '    at LDe.readMessage (${USERPROFILE}/AppData\\Local\\AnthropicClaude\\app-1.0.2768\\resources\\app.asar\\.vite\\build\\index.js:196:133)\n' +
+      '    at qDe.processReadBuffer (${USERPROFILE}/AppData\\Local\\AnthropicClaude\\app-1.0.2768\\resources\\app.asar\\.vite\\build\\index.js:197:2203)\n' +
+      '    at Socket.<anonymous> (${USERPROFILE}/AppData\\Local\\AnthropicClaude\\app-1.0.2768\\resources\\app.asar\\.vite\\build\\index.js:197:1653)\n' +
       '    at Socket.emit (node:events:519:28)\n' +
       '    at addChunk (node:internal/streams/readable:561:12)\n' +
       '    at readableAddChunkPushByteMode (node:internal/streams/readable:512:3)\n' +
@@ -1946,11 +1946,11 @@ failed to connect to the docker API at npipe:////./pipe/dockerDesktopLinuxEngine
       'C:\\Program Files\\Sunshine',
       'C:\\Program Files\\Sunshine\\tools',
       'C:\\Program Files\\Docker\\Docker\\resources\\bin',
-      'C:\\Users\\gordo\\AppData\\Local\\Programs\\oh-my-posh\\bin\\',
-      'C:\\Users\\gordo\\AppData\\Local\\Microsoft\\WindowsApps',
+      '${USERPROFILE}/AppData\\Local\\Programs\\oh-my-posh\\bin\\',
+      '${USERPROFILE}/AppData\\Local\\Microsoft\\WindowsApps',
       '',
-      'C:\\Users\\gordo\\.local\\bin',
-      'C:\\Users\\gordo\\AppData\\Local\\Programs\\Ollama',
+      '${USERPROFILE}/.local\\bin',
+      '${USERPROFILE}/AppData\\Local\\Programs\\Ollama',
       [length]: 21
     ]
   }
@@ -1996,11 +1996,11 @@ ModuleNotFoundError: No module named 'requests'
       'C:\\Program Files\\Sunshine',
       'C:\\Program Files\\Sunshine\\tools',
       'C:\\Program Files\\Docker\\Docker\\resources\\bin',
-      'C:\\Users\\gordo\\AppData\\Local\\Programs\\oh-my-posh\\bin\\',
-      'C:\\Users\\gordo\\AppData\\Local\\Microsoft\\WindowsApps',
+      '${USERPROFILE}/AppData\\Local\\Programs\\oh-my-posh\\bin\\',
+      '${USERPROFILE}/AppData\\Local\\Microsoft\\WindowsApps',
       '',
-      'C:\\Users\\gordo\\.local\\bin',
-      'C:\\Users\\gordo\\AppData\\Local\\Programs\\Ollama',
+      '${USERPROFILE}/.local\\bin',
+      '${USERPROFILE}/AppData\\Local\\Programs\\Ollama',
       [length]: 21
     ]
   }
@@ -2044,17 +2044,17 @@ ModuleNotFoundError: No module named 'requests'
       'C:\\Program Files\\Sunshine',
       'C:\\Program Files\\Sunshine\\tools',
       'C:\\Program Files\\Docker\\Docker\\resources\\bin',
-      'C:\\Users\\gordo\\AppData\\Local\\Programs\\oh-my-posh\\bin\\',
-      'C:\\Users\\gordo\\AppData\\Local\\Microsoft\\WindowsApps',
+      '${USERPROFILE}/AppData\\Local\\Programs\\oh-my-posh\\bin\\',
+      '${USERPROFILE}/AppData\\Local\\Microsoft\\WindowsApps',
       '',
-      'C:\\Users\\gordo\\.local\\bin',
-      'C:\\Users\\gordo\\AppData\\Local\\Programs\\Ollama',
+      '${USERPROFILE}/.local\\bin',
+      '${USERPROFILE}/AppData\\Local\\Programs\\Ollama',
       [length]: 21
     ]
   }
 } %o
 2026-01-11T22:42:23.063Z [sfu-library] [info] Server started and connected successfully { metadata: undefined }
-C:\Program Files\Python314\python.exe: can't open file 'C:\\Users\\gordo\\AppData\\Local\\AnthropicClaude\\app-1.0.2768\\exec': [Errno 2] No such file or directory
+C:\Program Files\Python314\python.exe: can't open file '${USERPROFILE}/AppData\\Local\\AnthropicClaude\\app-1.0.2768\\exec': [Errno 2] No such file or directory
 2026-01-11T22:42:23.134Z [sfu-library] [info] Server transport closed { metadata: undefined }
 2026-01-11T22:42:23.135Z [sfu-library] [info] Client transport closed { metadata: undefined }
 2026-01-11T22:42:23.135Z [sfu-library] [info] Server transport closed unexpectedly, this is likely due to the process exiting early. If you are developing this MCP server you can add output to stderr (i.e. `console.error('...')` in JavaScript, `print('...', file=sys.stderr)` in python) and it will appear in this log. { metadata: undefined }
@@ -2090,18 +2090,18 @@ C:\Program Files\Python314\python.exe: can't open file 'C:\\Users\\gordo\\AppDat
       'C:\\Program Files\\Sunshine',
       'C:\\Program Files\\Sunshine\\tools',
       'C:\\Program Files\\Docker\\Docker\\resources\\bin',
-      'C:\\Users\\gordo\\AppData\\Local\\Programs\\oh-my-posh\\bin\\',
-      'C:\\Users\\gordo\\AppData\\Local\\Microsoft\\WindowsApps',
+      '${USERPROFILE}/AppData\\Local\\Programs\\oh-my-posh\\bin\\',
+      '${USERPROFILE}/AppData\\Local\\Microsoft\\WindowsApps',
       '',
-      'C:\\Users\\gordo\\.local\\bin',
-      'C:\\Users\\gordo\\AppData\\Local\\Programs\\Ollama',
+      '${USERPROFILE}/.local\\bin',
+      '${USERPROFILE}/AppData\\Local\\Programs\\Ollama',
       [length]: 21
     ]
   }
 } %o
 2026-01-11T22:42:37.438Z [sfu-library] [info] Server started and connected successfully { metadata: undefined }
 2026-01-11T22:42:37.456Z [sfu-library] [info] Message from client: {"method":"initialize","params":{"protocolVersion":"2025-06-18","capabilities":{},"clientInfo":{"name":"claude-ai","version":"0.1.0"}},"jsonrpc":"2.0","id":0} { metadata: undefined }
-C:\Program Files\Python314\python.exe: can't open file 'C:\\Users\\gordo\\AppData\\Local\\AnthropicClaude\\app-1.0.2768\\exec': [Errno 2] No such file or directory
+C:\Program Files\Python314\python.exe: can't open file '${USERPROFILE}/AppData\\Local\\AnthropicClaude\\app-1.0.2768\\exec': [Errno 2] No such file or directory
 2026-01-11T22:42:37.498Z [sfu-library] [info] Server transport closed { metadata: undefined }
 2026-01-11T22:42:37.498Z [sfu-library] [info] Client transport closed { metadata: undefined }
 2026-01-11T22:42:37.499Z [sfu-library] [info] Server transport closed unexpectedly, this is likely due to the process exiting early. If you are developing this MCP server you can add output to stderr (i.e. `console.error('...')` in JavaScript, `print('...', file=sys.stderr)` in python) and it will appear in this log. { metadata: undefined }
@@ -2135,17 +2135,17 @@ C:\Program Files\Python314\python.exe: can't open file 'C:\\Users\\gordo\\AppDat
       'C:\\Program Files\\Sunshine',
       'C:\\Program Files\\Sunshine\\tools',
       'C:\\Program Files\\Docker\\Docker\\resources\\bin',
-      'C:\\Users\\gordo\\AppData\\Local\\Programs\\oh-my-posh\\bin\\',
-      'C:\\Users\\gordo\\AppData\\Local\\Microsoft\\WindowsApps',
+      '${USERPROFILE}/AppData\\Local\\Programs\\oh-my-posh\\bin\\',
+      '${USERPROFILE}/AppData\\Local\\Microsoft\\WindowsApps',
       '',
-      'C:\\Users\\gordo\\.local\\bin',
-      'C:\\Users\\gordo\\AppData\\Local\\Programs\\Ollama',
+      '${USERPROFILE}/.local\\bin',
+      '${USERPROFILE}/AppData\\Local\\Programs\\Ollama',
       [length]: 21
     ]
   }
 } %o
 2026-01-11T23:40:06.682Z [sfu-library] [info] Server started and connected successfully { metadata: undefined }
-C:\Program Files\Python314\python.exe: can't open file 'C:\\Users\\gordo\\AppData\\Local\\AnthropicClaude\\app-1.0.2768\\exec': [Errno 2] No such file or directory
+C:\Program Files\Python314\python.exe: can't open file '${USERPROFILE}/AppData\\Local\\AnthropicClaude\\app-1.0.2768\\exec': [Errno 2] No such file or directory
 2026-01-11T23:40:06.755Z [sfu-library] [info] Server transport closed { metadata: undefined }
 2026-01-11T23:40:06.756Z [sfu-library] [info] Client transport closed { metadata: undefined }
 2026-01-11T23:40:06.756Z [sfu-library] [info] Server transport closed unexpectedly, this is likely due to the process exiting early. If you are developing this MCP server you can add output to stderr (i.e. `console.error('...')` in JavaScript, `print('...', file=sys.stderr)` in python) and it will appear in this log. { metadata: undefined }
@@ -2181,18 +2181,18 @@ C:\Program Files\Python314\python.exe: can't open file 'C:\\Users\\gordo\\AppDat
       'C:\\Program Files\\Sunshine',
       'C:\\Program Files\\Sunshine\\tools',
       'C:\\Program Files\\Docker\\Docker\\resources\\bin',
-      'C:\\Users\\gordo\\AppData\\Local\\Programs\\oh-my-posh\\bin\\',
-      'C:\\Users\\gordo\\AppData\\Local\\Microsoft\\WindowsApps',
+      '${USERPROFILE}/AppData\\Local\\Programs\\oh-my-posh\\bin\\',
+      '${USERPROFILE}/AppData\\Local\\Microsoft\\WindowsApps',
       '',
-      'C:\\Users\\gordo\\.local\\bin',
-      'C:\\Users\\gordo\\AppData\\Local\\Programs\\Ollama',
+      '${USERPROFILE}/.local\\bin',
+      '${USERPROFILE}/AppData\\Local\\Programs\\Ollama',
       [length]: 21
     ]
   }
 } %o
 2026-01-12T00:01:26.124Z [sfu-library] [info] Server started and connected successfully { metadata: undefined }
 2026-01-12T00:01:26.147Z [sfu-library] [info] Message from client: {"method":"initialize","params":{"protocolVersion":"2025-06-18","capabilities":{},"clientInfo":{"name":"claude-ai","version":"0.1.0"}},"jsonrpc":"2.0","id":0} { metadata: undefined }
-C:\Program Files\Python314\python.exe: can't open file 'C:\\Users\\gordo\\AppData\\Local\\AnthropicClaude\\app-1.0.2768\\exec': [Errno 2] No such file or directory
+C:\Program Files\Python314\python.exe: can't open file '${USERPROFILE}/AppData\\Local\\AnthropicClaude\\app-1.0.2768\\exec': [Errno 2] No such file or directory
 2026-01-12T00:01:26.185Z [sfu-library] [info] Server transport closed { metadata: undefined }
 2026-01-12T00:01:26.185Z [sfu-library] [info] Client transport closed { metadata: undefined }
 2026-01-12T00:01:26.186Z [sfu-library] [info] Server transport closed unexpectedly, this is likely due to the process exiting early. If you are developing this MCP server you can add output to stderr (i.e. `console.error('...')` in JavaScript, `print('...', file=sys.stderr)` in python) and it will appear in this log. { metadata: undefined }
@@ -2228,18 +2228,18 @@ C:\Program Files\Python314\python.exe: can't open file 'C:\\Users\\gordo\\AppDat
       'C:\\Program Files\\Sunshine',
       'C:\\Program Files\\Sunshine\\tools',
       'C:\\Program Files\\Docker\\Docker\\resources\\bin',
-      'C:\\Users\\gordo\\AppData\\Local\\Programs\\oh-my-posh\\bin\\',
-      'C:\\Users\\gordo\\AppData\\Local\\Microsoft\\WindowsApps',
+      '${USERPROFILE}/AppData\\Local\\Programs\\oh-my-posh\\bin\\',
+      '${USERPROFILE}/AppData\\Local\\Microsoft\\WindowsApps',
       '',
-      'C:\\Users\\gordo\\.local\\bin',
-      'C:\\Users\\gordo\\AppData\\Local\\Programs\\Ollama',
+      '${USERPROFILE}/.local\\bin',
+      '${USERPROFILE}/AppData\\Local\\Programs\\Ollama',
       [length]: 21
     ]
   }
 } %o
 2026-01-12T00:22:58.265Z [sfu-library] [info] Server started and connected successfully { metadata: undefined }
 2026-01-12T00:22:58.289Z [sfu-library] [info] Message from client: {"method":"initialize","params":{"protocolVersion":"2025-06-18","capabilities":{},"clientInfo":{"name":"claude-ai","version":"0.1.0"}},"jsonrpc":"2.0","id":0} { metadata: undefined }
-C:\Program Files\Python314\python.exe: can't open file 'C:\\Users\\gordo\\AppData\\Local\\AnthropicClaude\\app-1.0.2768\\exec': [Errno 2] No such file or directory
+C:\Program Files\Python314\python.exe: can't open file '${USERPROFILE}/AppData\\Local\\AnthropicClaude\\app-1.0.2768\\exec': [Errno 2] No such file or directory
 2026-01-12T00:22:58.352Z [sfu-library] [info] Server transport closed { metadata: undefined }
 2026-01-12T00:22:58.352Z [sfu-library] [info] Client transport closed { metadata: undefined }
 2026-01-12T00:22:58.352Z [sfu-library] [info] Server transport closed unexpectedly, this is likely due to the process exiting early. If you are developing this MCP server you can add output to stderr (i.e. `console.error('...')` in JavaScript, `print('...', file=sys.stderr)` in python) and it will appear in this log. { metadata: undefined }
@@ -2275,18 +2275,18 @@ C:\Program Files\Python314\python.exe: can't open file 'C:\\Users\\gordo\\AppDat
       'C:\\Program Files\\Sunshine',
       'C:\\Program Files\\Sunshine\\tools',
       'C:\\Program Files\\Docker\\Docker\\resources\\bin',
-      'C:\\Users\\gordo\\AppData\\Local\\Programs\\oh-my-posh\\bin\\',
-      'C:\\Users\\gordo\\AppData\\Local\\Microsoft\\WindowsApps',
+      '${USERPROFILE}/AppData\\Local\\Programs\\oh-my-posh\\bin\\',
+      '${USERPROFILE}/AppData\\Local\\Microsoft\\WindowsApps',
       '',
-      'C:\\Users\\gordo\\.local\\bin',
-      'C:\\Users\\gordo\\AppData\\Local\\Programs\\Ollama',
+      '${USERPROFILE}/.local\\bin',
+      '${USERPROFILE}/AppData\\Local\\Programs\\Ollama',
       [length]: 21
     ]
   }
 } %o
 2026-01-12T04:58:49.226Z [sfu-library] [info] Server started and connected successfully { metadata: undefined }
 2026-01-12T04:58:49.312Z [sfu-library] [info] Message from client: {"method":"initialize","params":{"protocolVersion":"2025-06-18","capabilities":{},"clientInfo":{"name":"claude-ai","version":"0.1.0"}},"jsonrpc":"2.0","id":0} { metadata: undefined }
-C:\Program Files\Python314\python.exe: can't open file 'C:\\Users\\gordo\\AppData\\Local\\AnthropicClaude\\app-1.0.2768\\exec': [Errno 2] No such file or directory
+C:\Program Files\Python314\python.exe: can't open file '${USERPROFILE}/AppData\\Local\\AnthropicClaude\\app-1.0.2768\\exec': [Errno 2] No such file or directory
 2026-01-12T04:58:49.321Z [sfu-library] [info] Server transport closed { metadata: undefined }
 2026-01-12T04:58:49.321Z [sfu-library] [info] Client transport closed { metadata: undefined }
 2026-01-12T04:58:49.322Z [sfu-library] [info] Server transport closed unexpectedly, this is likely due to the process exiting early. If you are developing this MCP server you can add output to stderr (i.e. `console.error('...')` in JavaScript, `print('...', file=sys.stderr)` in python) and it will appear in this log. { metadata: undefined }
@@ -2320,11 +2320,11 @@ C:\Program Files\Python314\python.exe: can't open file 'C:\\Users\\gordo\\AppDat
       'C:\\Program Files\\Sunshine',
       'C:\\Program Files\\Sunshine\\tools',
       'C:\\Program Files\\Docker\\Docker\\resources\\bin',
-      'C:\\Users\\gordo\\AppData\\Local\\Programs\\oh-my-posh\\bin\\',
-      'C:\\Users\\gordo\\AppData\\Local\\Microsoft\\WindowsApps',
+      '${USERPROFILE}/AppData\\Local\\Programs\\oh-my-posh\\bin\\',
+      '${USERPROFILE}/AppData\\Local\\Microsoft\\WindowsApps',
       '',
-      'C:\\Users\\gordo\\.local\\bin',
-      'C:\\Users\\gordo\\AppData\\Local\\Programs\\Ollama',
+      '${USERPROFILE}/.local\\bin',
+      '${USERPROFILE}/AppData\\Local\\Programs\\Ollama',
       [length]: 21
     ]
   }
@@ -2370,11 +2370,11 @@ C:\Program Files\Python314\python.exe: can't open file 'C:\\Users\\gordo\\AppDat
       'C:\\Program Files\\Sunshine',
       'C:\\Program Files\\Sunshine\\tools',
       'C:\\Program Files\\Docker\\Docker\\resources\\bin',
-      'C:\\Users\\gordo\\AppData\\Local\\Programs\\oh-my-posh\\bin\\',
-      'C:\\Users\\gordo\\AppData\\Local\\Microsoft\\WindowsApps',
+      '${USERPROFILE}/AppData\\Local\\Programs\\oh-my-posh\\bin\\',
+      '${USERPROFILE}/AppData\\Local\\Microsoft\\WindowsApps',
       '',
-      'C:\\Users\\gordo\\.local\\bin',
-      'C:\\Users\\gordo\\AppData\\Local\\Programs\\Ollama',
+      '${USERPROFILE}/.local\\bin',
+      '${USERPROFILE}/AppData\\Local\\Programs\\Ollama',
       [length]: 21
     ]
   }
@@ -2418,11 +2418,11 @@ C:\Program Files\Python314\python.exe: can't open file 'C:\\Users\\gordo\\AppDat
       'C:\\Program Files\\Sunshine',
       'C:\\Program Files\\Sunshine\\tools',
       'C:\\Program Files\\Docker\\Docker\\resources\\bin',
-      'C:\\Users\\gordo\\AppData\\Local\\Programs\\oh-my-posh\\bin\\',
-      'C:\\Users\\gordo\\AppData\\Local\\Microsoft\\WindowsApps',
+      '${USERPROFILE}/AppData\\Local\\Programs\\oh-my-posh\\bin\\',
+      '${USERPROFILE}/AppData\\Local\\Microsoft\\WindowsApps',
       '',
-      'C:\\Users\\gordo\\.local\\bin',
-      'C:\\Users\\gordo\\AppData\\Local\\Programs\\Ollama',
+      '${USERPROFILE}/.local\\bin',
+      '${USERPROFILE}/AppData\\Local\\Programs\\Ollama',
       [length]: 21
     ]
   }
@@ -2470,11 +2470,11 @@ C:\Program Files\Python314\python.exe: can't open file 'C:\\Users\\gordo\\AppDat
       'C:\\Program Files\\Sunshine',
       'C:\\Program Files\\Sunshine\\tools',
       'C:\\Program Files\\Docker\\Docker\\resources\\bin',
-      'C:\\Users\\gordo\\AppData\\Local\\Programs\\oh-my-posh\\bin\\',
-      'C:\\Users\\gordo\\AppData\\Local\\Microsoft\\WindowsApps',
+      '${USERPROFILE}/AppData\\Local\\Programs\\oh-my-posh\\bin\\',
+      '${USERPROFILE}/AppData\\Local\\Microsoft\\WindowsApps',
       '',
-      'C:\\Users\\gordo\\.local\\bin',
-      'C:\\Users\\gordo\\AppData\\Local\\Programs\\Ollama',
+      '${USERPROFILE}/.local\\bin',
+      '${USERPROFILE}/AppData\\Local\\Programs\\Ollama',
       [length]: 21
     ]
   }
@@ -2522,11 +2522,11 @@ C:\Program Files\Python314\python.exe: can't open file 'C:\\Users\\gordo\\AppDat
       'C:\\Program Files\\Sunshine',
       'C:\\Program Files\\Sunshine\\tools',
       'C:\\Program Files\\Docker\\Docker\\resources\\bin',
-      'C:\\Users\\gordo\\AppData\\Local\\Programs\\oh-my-posh\\bin\\',
-      'C:\\Users\\gordo\\AppData\\Local\\Microsoft\\WindowsApps',
+      '${USERPROFILE}/AppData\\Local\\Programs\\oh-my-posh\\bin\\',
+      '${USERPROFILE}/AppData\\Local\\Microsoft\\WindowsApps',
       '',
-      'C:\\Users\\gordo\\.local\\bin',
-      'C:\\Users\\gordo\\AppData\\Local\\Programs\\Ollama',
+      '${USERPROFILE}/.local\\bin',
+      '${USERPROFILE}/AppData\\Local\\Programs\\Ollama',
       [length]: 21
     ]
   }
@@ -2634,11 +2634,11 @@ C:\Program Files\Python314\python.exe: can't open file 'C:\\Users\\gordo\\AppDat
       'C:\\Program Files\\Sunshine',
       'C:\\Program Files\\Sunshine\\tools',
       'C:\\Program Files\\Docker\\Docker\\resources\\bin',
-      'C:\\Users\\gordo\\AppData\\Local\\Programs\\oh-my-posh\\bin\\',
-      'C:\\Users\\gordo\\AppData\\Local\\Microsoft\\WindowsApps',
+      '${USERPROFILE}/AppData\\Local\\Programs\\oh-my-posh\\bin\\',
+      '${USERPROFILE}/AppData\\Local\\Microsoft\\WindowsApps',
       '',
-      'C:\\Users\\gordo\\.local\\bin',
-      'C:\\Users\\gordo\\AppData\\Local\\Programs\\Ollama',
+      '${USERPROFILE}/.local\\bin',
+      '${USERPROFILE}/AppData\\Local\\Programs\\Ollama',
       [length]: 21
     ]
   }
@@ -2677,11 +2677,11 @@ C:\Program Files\Python314\python.exe: can't open file 'C:\\Users\\gordo\\AppDat
       'C:\\Program Files\\Sunshine',
       'C:\\Program Files\\Sunshine\\tools',
       'C:\\Program Files\\Docker\\Docker\\resources\\bin',
-      'C:\\Users\\gordo\\AppData\\Local\\Programs\\oh-my-posh\\bin\\',
-      'C:\\Users\\gordo\\AppData\\Local\\Microsoft\\WindowsApps',
+      '${USERPROFILE}/AppData\\Local\\Programs\\oh-my-posh\\bin\\',
+      '${USERPROFILE}/AppData\\Local\\Microsoft\\WindowsApps',
       '',
-      'C:\\Users\\gordo\\.local\\bin',
-      'C:\\Users\\gordo\\AppData\\Local\\Programs\\Ollama',
+      '${USERPROFILE}/.local\\bin',
+      '${USERPROFILE}/AppData\\Local\\Programs\\Ollama',
       [length]: 21
     ]
   }
@@ -2720,11 +2720,11 @@ C:\Program Files\Python314\python.exe: can't open file 'C:\\Users\\gordo\\AppDat
       'C:\\Program Files\\Sunshine',
       'C:\\Program Files\\Sunshine\\tools',
       'C:\\Program Files\\Docker\\Docker\\resources\\bin',
-      'C:\\Users\\gordo\\AppData\\Local\\Programs\\oh-my-posh\\bin\\',
-      'C:\\Users\\gordo\\AppData\\Local\\Microsoft\\WindowsApps',
+      '${USERPROFILE}/AppData\\Local\\Programs\\oh-my-posh\\bin\\',
+      '${USERPROFILE}/AppData\\Local\\Microsoft\\WindowsApps',
       '',
-      'C:\\Users\\gordo\\.local\\bin',
-      'C:\\Users\\gordo\\AppData\\Local\\Programs\\Ollama',
+      '${USERPROFILE}/.local\\bin',
+      '${USERPROFILE}/AppData\\Local\\Programs\\Ollama',
       [length]: 21
     ]
   }
@@ -2763,11 +2763,11 @@ C:\Program Files\Python314\python.exe: can't open file 'C:\\Users\\gordo\\AppDat
       'C:\\Program Files\\Sunshine',
       'C:\\Program Files\\Sunshine\\tools',
       'C:\\Program Files\\Docker\\Docker\\resources\\bin',
-      'C:\\Users\\gordo\\AppData\\Local\\Programs\\oh-my-posh\\bin\\',
-      'C:\\Users\\gordo\\AppData\\Local\\Microsoft\\WindowsApps',
+      '${USERPROFILE}/AppData\\Local\\Programs\\oh-my-posh\\bin\\',
+      '${USERPROFILE}/AppData\\Local\\Microsoft\\WindowsApps',
       '',
-      'C:\\Users\\gordo\\.local\\bin',
-      'C:\\Users\\gordo\\AppData\\Local\\Programs\\Ollama',
+      '${USERPROFILE}/.local\\bin',
+      '${USERPROFILE}/AppData\\Local\\Programs\\Ollama',
       [length]: 21
     ]
   }
@@ -2815,11 +2815,11 @@ C:\Program Files\Python314\python.exe: can't open file 'C:\\Users\\gordo\\AppDat
       'C:\\Program Files\\Sunshine',
       'C:\\Program Files\\Sunshine\\tools',
       'C:\\Program Files\\Docker\\Docker\\resources\\bin',
-      'C:\\Users\\gordo\\AppData\\Local\\Programs\\oh-my-posh\\bin\\',
-      'C:\\Users\\gordo\\AppData\\Local\\Microsoft\\WindowsApps',
+      '${USERPROFILE}/AppData\\Local\\Programs\\oh-my-posh\\bin\\',
+      '${USERPROFILE}/AppData\\Local\\Microsoft\\WindowsApps',
       '',
-      'C:\\Users\\gordo\\.local\\bin',
-      'C:\\Users\\gordo\\AppData\\Local\\Programs\\Ollama',
+      '${USERPROFILE}/.local\\bin',
+      '${USERPROFILE}/AppData\\Local\\Programs\\Ollama',
       [length]: 21
     ]
   }
@@ -2863,11 +2863,11 @@ C:\Program Files\Python314\python.exe: can't open file 'C:\\Users\\gordo\\AppDat
       'C:\\Program Files\\Sunshine',
       'C:\\Program Files\\Sunshine\\tools',
       'C:\\Program Files\\Docker\\Docker\\resources\\bin',
-      'C:\\Users\\gordo\\AppData\\Local\\Programs\\oh-my-posh\\bin\\',
-      'C:\\Users\\gordo\\AppData\\Local\\Microsoft\\WindowsApps',
+      '${USERPROFILE}/AppData\\Local\\Programs\\oh-my-posh\\bin\\',
+      '${USERPROFILE}/AppData\\Local\\Microsoft\\WindowsApps',
       '',
-      'C:\\Users\\gordo\\.local\\bin',
-      'C:\\Users\\gordo\\AppData\\Local\\Programs\\Ollama',
+      '${USERPROFILE}/.local\\bin',
+      '${USERPROFILE}/AppData\\Local\\Programs\\Ollama',
       [length]: 21
     ]
   }
@@ -2907,11 +2907,11 @@ failed to connect to the docker API at npipe:////./pipe/dockerDesktopLinuxEngine
       'C:\\Program Files\\Sunshine',
       'C:\\Program Files\\Sunshine\\tools',
       'C:\\Program Files\\Docker\\Docker\\resources\\bin',
-      'C:\\Users\\gordo\\AppData\\Local\\Programs\\oh-my-posh\\bin\\',
-      'C:\\Users\\gordo\\AppData\\Local\\Microsoft\\WindowsApps',
+      '${USERPROFILE}/AppData\\Local\\Programs\\oh-my-posh\\bin\\',
+      '${USERPROFILE}/AppData\\Local\\Microsoft\\WindowsApps',
       '',
-      'C:\\Users\\gordo\\.local\\bin',
-      'C:\\Users\\gordo\\AppData\\Local\\Programs\\Ollama',
+      '${USERPROFILE}/.local\\bin',
+      '${USERPROFILE}/AppData\\Local\\Programs\\Ollama',
       [length]: 21
     ]
   }
@@ -2953,11 +2953,11 @@ failed to connect to the docker API at npipe:////./pipe/dockerDesktopLinuxEngine
       'C:\\Program Files\\Sunshine',
       'C:\\Program Files\\Sunshine\\tools',
       'C:\\Program Files\\Docker\\Docker\\resources\\bin',
-      'C:\\Users\\gordo\\AppData\\Local\\Programs\\oh-my-posh\\bin\\',
-      'C:\\Users\\gordo\\AppData\\Local\\Microsoft\\WindowsApps',
+      '${USERPROFILE}/AppData\\Local\\Programs\\oh-my-posh\\bin\\',
+      '${USERPROFILE}/AppData\\Local\\Microsoft\\WindowsApps',
       '',
-      'C:\\Users\\gordo\\.local\\bin',
-      'C:\\Users\\gordo\\AppData\\Local\\Programs\\Ollama',
+      '${USERPROFILE}/.local\\bin',
+      '${USERPROFILE}/AppData\\Local\\Programs\\Ollama',
       [length]: 21
     ]
   }
@@ -2996,11 +2996,11 @@ failed to connect to the docker API at npipe:////./pipe/dockerDesktopLinuxEngine
       'C:\\Program Files\\Sunshine',
       'C:\\Program Files\\Sunshine\\tools',
       'C:\\Program Files\\Docker\\Docker\\resources\\bin',
-      'C:\\Users\\gordo\\AppData\\Local\\Programs\\oh-my-posh\\bin\\',
-      'C:\\Users\\gordo\\AppData\\Local\\Microsoft\\WindowsApps',
+      '${USERPROFILE}/AppData\\Local\\Programs\\oh-my-posh\\bin\\',
+      '${USERPROFILE}/AppData\\Local\\Microsoft\\WindowsApps',
       '',
-      'C:\\Users\\gordo\\.local\\bin',
-      'C:\\Users\\gordo\\AppData\\Local\\Programs\\Ollama',
+      '${USERPROFILE}/.local\\bin',
+      '${USERPROFILE}/AppData\\Local\\Programs\\Ollama',
       [length]: 21
     ]
   }
@@ -3048,11 +3048,11 @@ failed to connect to the docker API at npipe:////./pipe/dockerDesktopLinuxEngine
       'C:\\Program Files\\Sunshine',
       'C:\\Program Files\\Sunshine\\tools',
       'C:\\Program Files\\Docker\\Docker\\resources\\bin',
-      'C:\\Users\\gordo\\AppData\\Local\\Programs\\oh-my-posh\\bin\\',
-      'C:\\Users\\gordo\\AppData\\Local\\Microsoft\\WindowsApps',
+      '${USERPROFILE}/AppData\\Local\\Programs\\oh-my-posh\\bin\\',
+      '${USERPROFILE}/AppData\\Local\\Microsoft\\WindowsApps',
       '',
-      'C:\\Users\\gordo\\.local\\bin',
-      'C:\\Users\\gordo\\AppData\\Local\\Programs\\Ollama',
+      '${USERPROFILE}/.local\\bin',
+      '${USERPROFILE}/AppData\\Local\\Programs\\Ollama',
       [length]: 21
     ]
   }
@@ -3100,11 +3100,11 @@ failed to connect to the docker API at npipe:////./pipe/dockerDesktopLinuxEngine
       'C:\\Program Files\\Sunshine',
       'C:\\Program Files\\Sunshine\\tools',
       'C:\\Program Files\\Docker\\Docker\\resources\\bin',
-      'C:\\Users\\gordo\\AppData\\Local\\Programs\\oh-my-posh\\bin\\',
-      'C:\\Users\\gordo\\AppData\\Local\\Microsoft\\WindowsApps',
+      '${USERPROFILE}/AppData\\Local\\Programs\\oh-my-posh\\bin\\',
+      '${USERPROFILE}/AppData\\Local\\Microsoft\\WindowsApps',
       '',
-      'C:\\Users\\gordo\\.local\\bin',
-      'C:\\Users\\gordo\\AppData\\Local\\Programs\\Ollama',
+      '${USERPROFILE}/.local\\bin',
+      '${USERPROFILE}/AppData\\Local\\Programs\\Ollama',
       [length]: 21
     ]
   }
@@ -3192,11 +3192,11 @@ failed to connect to the docker API at npipe:////./pipe/dockerDesktopLinuxEngine
       'C:\\Program Files\\Sunshine',
       'C:\\Program Files\\Sunshine\\tools',
       'C:\\Program Files\\Docker\\Docker\\resources\\bin',
-      'C:\\Users\\gordo\\AppData\\Local\\Programs\\oh-my-posh\\bin\\',
-      'C:\\Users\\gordo\\AppData\\Local\\Microsoft\\WindowsApps',
+      '${USERPROFILE}/AppData\\Local\\Programs\\oh-my-posh\\bin\\',
+      '${USERPROFILE}/AppData\\Local\\Microsoft\\WindowsApps',
       '',
-      'C:\\Users\\gordo\\.local\\bin',
-      'C:\\Users\\gordo\\AppData\\Local\\Programs\\Ollama',
+      '${USERPROFILE}/.local\\bin',
+      '${USERPROFILE}/AppData\\Local\\Programs\\Ollama',
       [length]: 21
     ]
   }
@@ -3244,11 +3244,11 @@ failed to connect to the docker API at npipe:////./pipe/dockerDesktopLinuxEngine
       'C:\\Program Files\\Sunshine',
       'C:\\Program Files\\Sunshine\\tools',
       'C:\\Program Files\\Docker\\Docker\\resources\\bin',
-      'C:\\Users\\gordo\\AppData\\Local\\Programs\\oh-my-posh\\bin\\',
-      'C:\\Users\\gordo\\AppData\\Local\\Microsoft\\WindowsApps',
+      '${USERPROFILE}/AppData\\Local\\Programs\\oh-my-posh\\bin\\',
+      '${USERPROFILE}/AppData\\Local\\Microsoft\\WindowsApps',
       '',
-      'C:\\Users\\gordo\\.local\\bin',
-      'C:\\Users\\gordo\\AppData\\Local\\Programs\\Ollama',
+      '${USERPROFILE}/.local\\bin',
+      '${USERPROFILE}/AppData\\Local\\Programs\\Ollama',
       [length]: 21
     ]
   }
@@ -3287,11 +3287,11 @@ failed to connect to the docker API at npipe:////./pipe/dockerDesktopLinuxEngine
       'C:\\Program Files\\Sunshine',
       'C:\\Program Files\\Sunshine\\tools',
       'C:\\Program Files\\Docker\\Docker\\resources\\bin',
-      'C:\\Users\\gordo\\AppData\\Local\\Programs\\oh-my-posh\\bin\\',
-      'C:\\Users\\gordo\\AppData\\Local\\Microsoft\\WindowsApps',
+      '${USERPROFILE}/AppData\\Local\\Programs\\oh-my-posh\\bin\\',
+      '${USERPROFILE}/AppData\\Local\\Microsoft\\WindowsApps',
       '',
-      'C:\\Users\\gordo\\.local\\bin',
-      'C:\\Users\\gordo\\AppData\\Local\\Programs\\Ollama',
+      '${USERPROFILE}/.local\\bin',
+      '${USERPROFILE}/AppData\\Local\\Programs\\Ollama',
       [length]: 21
     ]
   }
@@ -3333,11 +3333,11 @@ failed to connect to the docker API at npipe:////./pipe/dockerDesktopLinuxEngine
       'C:\\Program Files\\Sunshine',
       'C:\\Program Files\\Sunshine\\tools',
       'C:\\Program Files\\Docker\\Docker\\resources\\bin',
-      'C:\\Users\\gordo\\AppData\\Local\\Programs\\oh-my-posh\\bin\\',
-      'C:\\Users\\gordo\\AppData\\Local\\Microsoft\\WindowsApps',
+      '${USERPROFILE}/AppData\\Local\\Programs\\oh-my-posh\\bin\\',
+      '${USERPROFILE}/AppData\\Local\\Microsoft\\WindowsApps',
       '',
-      'C:\\Users\\gordo\\.local\\bin',
-      'C:\\Users\\gordo\\AppData\\Local\\Programs\\Ollama',
+      '${USERPROFILE}/.local\\bin',
+      '${USERPROFILE}/AppData\\Local\\Programs\\Ollama',
       [length]: 21
     ]
   }
@@ -3385,11 +3385,11 @@ failed to connect to the docker API at npipe:////./pipe/dockerDesktopLinuxEngine
       'C:\\Program Files\\Sunshine',
       'C:\\Program Files\\Sunshine\\tools',
       'C:\\Program Files\\Docker\\Docker\\resources\\bin',
-      'C:\\Users\\gordo\\AppData\\Local\\Programs\\oh-my-posh\\bin\\',
-      'C:\\Users\\gordo\\AppData\\Local\\Microsoft\\WindowsApps',
+      '${USERPROFILE}/AppData\\Local\\Programs\\oh-my-posh\\bin\\',
+      '${USERPROFILE}/AppData\\Local\\Microsoft\\WindowsApps',
       '',
-      'C:\\Users\\gordo\\.local\\bin',
-      'C:\\Users\\gordo\\AppData\\Local\\Programs\\Ollama',
+      '${USERPROFILE}/.local\\bin',
+      '${USERPROFILE}/AppData\\Local\\Programs\\Ollama',
       [length]: 21
     ]
   }
@@ -3433,11 +3433,11 @@ failed to connect to the docker API at npipe:////./pipe/dockerDesktopLinuxEngine
       'C:\\Program Files\\Sunshine',
       'C:\\Program Files\\Sunshine\\tools',
       'C:\\Program Files\\Docker\\Docker\\resources\\bin',
-      'C:\\Users\\gordo\\AppData\\Local\\Programs\\oh-my-posh\\bin\\',
-      'C:\\Users\\gordo\\AppData\\Local\\Microsoft\\WindowsApps',
+      '${USERPROFILE}/AppData\\Local\\Programs\\oh-my-posh\\bin\\',
+      '${USERPROFILE}/AppData\\Local\\Microsoft\\WindowsApps',
       '',
-      'C:\\Users\\gordo\\.local\\bin',
-      'C:\\Users\\gordo\\AppData\\Local\\Programs\\Ollama',
+      '${USERPROFILE}/.local\\bin',
+      '${USERPROFILE}/AppData\\Local\\Programs\\Ollama',
       [length]: 21
     ]
   }
@@ -3479,11 +3479,11 @@ failed to connect to the docker API at npipe:////./pipe/dockerDesktopLinuxEngine
       'C:\\Program Files\\Sunshine',
       'C:\\Program Files\\Sunshine\\tools',
       'C:\\Program Files\\Docker\\Docker\\resources\\bin',
-      'C:\\Users\\gordo\\AppData\\Local\\Programs\\oh-my-posh\\bin\\',
-      'C:\\Users\\gordo\\AppData\\Local\\Microsoft\\WindowsApps',
+      '${USERPROFILE}/AppData\\Local\\Programs\\oh-my-posh\\bin\\',
+      '${USERPROFILE}/AppData\\Local\\Microsoft\\WindowsApps',
       '',
-      'C:\\Users\\gordo\\.local\\bin',
-      'C:\\Users\\gordo\\AppData\\Local\\Programs\\Ollama',
+      '${USERPROFILE}/.local\\bin',
+      '${USERPROFILE}/AppData\\Local\\Programs\\Ollama',
       [length]: 21
     ]
   }
@@ -3531,11 +3531,11 @@ failed to connect to the docker API at npipe:////./pipe/dockerDesktopLinuxEngine
       'C:\\Program Files\\Sunshine',
       'C:\\Program Files\\Sunshine\\tools',
       'C:\\Program Files\\Docker\\Docker\\resources\\bin',
-      'C:\\Users\\gordo\\AppData\\Local\\Programs\\oh-my-posh\\bin\\',
-      'C:\\Users\\gordo\\AppData\\Local\\Microsoft\\WindowsApps',
+      '${USERPROFILE}/AppData\\Local\\Programs\\oh-my-posh\\bin\\',
+      '${USERPROFILE}/AppData\\Local\\Microsoft\\WindowsApps',
       '',
-      'C:\\Users\\gordo\\.local\\bin',
-      'C:\\Users\\gordo\\AppData\\Local\\Programs\\Ollama',
+      '${USERPROFILE}/.local\\bin',
+      '${USERPROFILE}/AppData\\Local\\Programs\\Ollama',
       [length]: 21
     ]
   }
@@ -3583,11 +3583,11 @@ failed to connect to the docker API at npipe:////./pipe/dockerDesktopLinuxEngine
       'C:\\Program Files\\Sunshine',
       'C:\\Program Files\\Sunshine\\tools',
       'C:\\Program Files\\Docker\\Docker\\resources\\bin',
-      'C:\\Users\\gordo\\AppData\\Local\\Programs\\oh-my-posh\\bin\\',
-      'C:\\Users\\gordo\\AppData\\Local\\Microsoft\\WindowsApps',
+      '${USERPROFILE}/AppData\\Local\\Programs\\oh-my-posh\\bin\\',
+      '${USERPROFILE}/AppData\\Local\\Microsoft\\WindowsApps',
       '',
-      'C:\\Users\\gordo\\.local\\bin',
-      'C:\\Users\\gordo\\AppData\\Local\\Programs\\Ollama',
+      '${USERPROFILE}/.local\\bin',
+      '${USERPROFILE}/AppData\\Local\\Programs\\Ollama',
       [length]: 21
     ]
   }
@@ -4037,11 +4037,11 @@ failed to connect to the docker API at npipe:////./pipe/dockerDesktopLinuxEngine
       'C:\\Program Files\\Sunshine',
       'C:\\Program Files\\Sunshine\\tools',
       'C:\\Program Files\\Docker\\Docker\\resources\\bin',
-      'C:\\Users\\gordo\\AppData\\Local\\Programs\\oh-my-posh\\bin\\',
-      'C:\\Users\\gordo\\AppData\\Local\\Microsoft\\WindowsApps',
+      '${USERPROFILE}/AppData\\Local\\Programs\\oh-my-posh\\bin\\',
+      '${USERPROFILE}/AppData\\Local\\Microsoft\\WindowsApps',
       '',
-      'C:\\Users\\gordo\\.local\\bin',
-      'C:\\Users\\gordo\\AppData\\Local\\Programs\\Ollama',
+      '${USERPROFILE}/.local\\bin',
+      '${USERPROFILE}/AppData\\Local\\Programs\\Ollama',
       [length]: 21
     ]
   }
@@ -4089,11 +4089,11 @@ failed to connect to the docker API at npipe:////./pipe/dockerDesktopLinuxEngine
       'C:\\Program Files\\Sunshine',
       'C:\\Program Files\\Sunshine\\tools',
       'C:\\Program Files\\Docker\\Docker\\resources\\bin',
-      'C:\\Users\\gordo\\AppData\\Local\\Programs\\oh-my-posh\\bin\\',
-      'C:\\Users\\gordo\\AppData\\Local\\Microsoft\\WindowsApps',
+      '${USERPROFILE}/AppData\\Local\\Programs\\oh-my-posh\\bin\\',
+      '${USERPROFILE}/AppData\\Local\\Microsoft\\WindowsApps',
       '',
-      'C:\\Users\\gordo\\.local\\bin',
-      'C:\\Users\\gordo\\AppData\\Local\\Programs\\Ollama',
+      '${USERPROFILE}/.local\\bin',
+      '${USERPROFILE}/AppData\\Local\\Programs\\Ollama',
       [length]: 21
     ]
   }
@@ -4137,11 +4137,11 @@ failed to connect to the docker API at npipe:////./pipe/dockerDesktopLinuxEngine
       'C:\\Program Files\\Sunshine',
       'C:\\Program Files\\Sunshine\\tools',
       'C:\\Program Files\\Docker\\Docker\\resources\\bin',
-      'C:\\Users\\gordo\\AppData\\Local\\Programs\\oh-my-posh\\bin\\',
-      'C:\\Users\\gordo\\AppData\\Local\\Microsoft\\WindowsApps',
+      '${USERPROFILE}/AppData\\Local\\Programs\\oh-my-posh\\bin\\',
+      '${USERPROFILE}/AppData\\Local\\Microsoft\\WindowsApps',
       '',
-      'C:\\Users\\gordo\\.local\\bin',
-      'C:\\Users\\gordo\\AppData\\Local\\Programs\\Ollama',
+      '${USERPROFILE}/.local\\bin',
+      '${USERPROFILE}/AppData\\Local\\Programs\\Ollama',
       [length]: 21
     ]
   }
@@ -4184,11 +4184,11 @@ Error response from daemon: container 0a5f9c008ced9c4558eff0eecb9908a7d9b679bea4
       'C:\\Program Files\\Sunshine',
       'C:\\Program Files\\Sunshine\\tools',
       'C:\\Program Files\\Docker\\Docker\\resources\\bin',
-      'C:\\Users\\gordo\\AppData\\Local\\Programs\\oh-my-posh\\bin\\',
-      'C:\\Users\\gordo\\AppData\\Local\\Microsoft\\WindowsApps',
+      '${USERPROFILE}/AppData\\Local\\Programs\\oh-my-posh\\bin\\',
+      '${USERPROFILE}/AppData\\Local\\Microsoft\\WindowsApps',
       '',
-      'C:\\Users\\gordo\\.local\\bin',
-      'C:\\Users\\gordo\\AppData\\Local\\Programs\\Ollama',
+      '${USERPROFILE}/.local\\bin',
+      '${USERPROFILE}/AppData\\Local\\Programs\\Ollama',
       [length]: 21
     ]
   }
@@ -4233,11 +4233,11 @@ Error response from daemon: container 0a5f9c008ced9c4558eff0eecb9908a7d9b679bea4
       'C:\\Program Files\\Sunshine\\tools',
       'C:\\Program Files\\Docker\\Docker\\resources\\bin',
       'C:\\Program Files\\GitHub CLI\\',
-      'C:\\Users\\gordo\\AppData\\Local\\Programs\\oh-my-posh\\bin\\',
-      'C:\\Users\\gordo\\AppData\\Local\\Microsoft\\WindowsApps',
+      '${USERPROFILE}/AppData\\Local\\Programs\\oh-my-posh\\bin\\',
+      '${USERPROFILE}/AppData\\Local\\Microsoft\\WindowsApps',
       '',
-      'C:\\Users\\gordo\\.local\\bin',
-      'C:\\Users\\gordo\\AppData\\Local\\Programs\\Ollama',
+      '${USERPROFILE}/.local\\bin',
+      '${USERPROFILE}/AppData\\Local\\Programs\\Ollama',
       [length]: 22
     ]
   }
@@ -4282,11 +4282,11 @@ Error response from daemon: container 0a5f9c008ced9c4558eff0eecb9908a7d9b679bea4
       'C:\\Program Files\\Sunshine\\tools',
       'C:\\Program Files\\Docker\\Docker\\resources\\bin',
       'C:\\Program Files\\GitHub CLI\\',
-      'C:\\Users\\gordo\\AppData\\Local\\Programs\\oh-my-posh\\bin\\',
-      'C:\\Users\\gordo\\AppData\\Local\\Microsoft\\WindowsApps',
+      '${USERPROFILE}/AppData\\Local\\Programs\\oh-my-posh\\bin\\',
+      '${USERPROFILE}/AppData\\Local\\Microsoft\\WindowsApps',
       '',
-      'C:\\Users\\gordo\\.local\\bin',
-      'C:\\Users\\gordo\\AppData\\Local\\Programs\\Ollama',
+      '${USERPROFILE}/.local\\bin',
+      '${USERPROFILE}/AppData\\Local\\Programs\\Ollama',
       [length]: 22
     ]
   }
@@ -4330,11 +4330,11 @@ Error response from daemon: No such container: claudebox-sfu-library-mcp-app
       'C:\\Program Files\\Sunshine\\tools',
       'C:\\Program Files\\Docker\\Docker\\resources\\bin',
       'C:\\Program Files\\GitHub CLI\\',
-      'C:\\Users\\gordo\\AppData\\Local\\Programs\\oh-my-posh\\bin\\',
-      'C:\\Users\\gordo\\AppData\\Local\\Microsoft\\WindowsApps',
+      '${USERPROFILE}/AppData\\Local\\Programs\\oh-my-posh\\bin\\',
+      '${USERPROFILE}/AppData\\Local\\Microsoft\\WindowsApps',
       '',
-      'C:\\Users\\gordo\\.local\\bin',
-      'C:\\Users\\gordo\\AppData\\Local\\Programs\\Ollama',
+      '${USERPROFILE}/.local\\bin',
+      '${USERPROFILE}/AppData\\Local\\Programs\\Ollama',
       [length]: 22
     ]
   }
@@ -4376,11 +4376,11 @@ Error response from daemon: No such container: claudebox-sfu-library-mcp-app
       'C:\\Program Files\\Sunshine\\tools',
       'C:\\Program Files\\Docker\\Docker\\resources\\bin',
       'C:\\Program Files\\GitHub CLI\\',
-      'C:\\Users\\gordo\\AppData\\Local\\Programs\\oh-my-posh\\bin\\',
-      'C:\\Users\\gordo\\AppData\\Local\\Microsoft\\WindowsApps',
+      '${USERPROFILE}/AppData\\Local\\Programs\\oh-my-posh\\bin\\',
+      '${USERPROFILE}/AppData\\Local\\Microsoft\\WindowsApps',
       '',
-      'C:\\Users\\gordo\\.local\\bin',
-      'C:\\Users\\gordo\\AppData\\Local\\Programs\\Ollama',
+      '${USERPROFILE}/.local\\bin',
+      '${USERPROFILE}/AppData\\Local\\Programs\\Ollama',
       [length]: 22
     ]
   }
@@ -4427,11 +4427,11 @@ Error response from daemon: No such container: claudebox-sfu-library-mcp-app
       'C:\\Program Files\\Sunshine\\tools',
       'C:\\Program Files\\Docker\\Docker\\resources\\bin',
       'C:\\Program Files\\GitHub CLI\\',
-      'C:\\Users\\gordo\\AppData\\Local\\Programs\\oh-my-posh\\bin\\',
-      'C:\\Users\\gordo\\AppData\\Local\\Microsoft\\WindowsApps',
+      '${USERPROFILE}/AppData\\Local\\Programs\\oh-my-posh\\bin\\',
+      '${USERPROFILE}/AppData\\Local\\Microsoft\\WindowsApps',
       '',
-      'C:\\Users\\gordo\\.local\\bin',
-      'C:\\Users\\gordo\\AppData\\Local\\Programs\\Ollama',
+      '${USERPROFILE}/.local\\bin',
+      '${USERPROFILE}/AppData\\Local\\Programs\\Ollama',
       [length]: 22
     ]
   }
@@ -4474,11 +4474,11 @@ Error response from daemon: No such container: claudebox-sfu-library-mcp-app
       'C:\\Program Files\\Sunshine\\tools',
       'C:\\Program Files\\Docker\\Docker\\resources\\bin',
       'C:\\Program Files\\GitHub CLI\\',
-      'C:\\Users\\gordo\\AppData\\Local\\Programs\\oh-my-posh\\bin\\',
-      'C:\\Users\\gordo\\AppData\\Local\\Microsoft\\WindowsApps',
+      '${USERPROFILE}/AppData\\Local\\Programs\\oh-my-posh\\bin\\',
+      '${USERPROFILE}/AppData\\Local\\Microsoft\\WindowsApps',
       '',
-      'C:\\Users\\gordo\\.local\\bin',
-      'C:\\Users\\gordo\\AppData\\Local\\Programs\\Ollama',
+      '${USERPROFILE}/.local\\bin',
+      '${USERPROFILE}/AppData\\Local\\Programs\\Ollama',
       [length]: 22
     ]
   }
@@ -4526,11 +4526,11 @@ Error response from daemon: No such container: claudebox-sfu-library-mcp-app
       'C:\\Program Files\\Sunshine\\tools',
       'C:\\Program Files\\Docker\\Docker\\resources\\bin',
       'C:\\Program Files\\GitHub CLI\\',
-      'C:\\Users\\gordo\\AppData\\Local\\Programs\\oh-my-posh\\bin\\',
-      'C:\\Users\\gordo\\AppData\\Local\\Microsoft\\WindowsApps',
+      '${USERPROFILE}/AppData\\Local\\Programs\\oh-my-posh\\bin\\',
+      '${USERPROFILE}/AppData\\Local\\Microsoft\\WindowsApps',
       '',
-      'C:\\Users\\gordo\\.local\\bin',
-      'C:\\Users\\gordo\\AppData\\Local\\Programs\\Ollama',
+      '${USERPROFILE}/.local\\bin',
+      '${USERPROFILE}/AppData\\Local\\Programs\\Ollama',
       [length]: 22
     ]
   }
@@ -4578,11 +4578,11 @@ Error response from daemon: No such container: claudebox-sfu-library-mcp-app
       'C:\\Program Files\\Sunshine\\tools',
       'C:\\Program Files\\Docker\\Docker\\resources\\bin',
       'C:\\Program Files\\GitHub CLI\\',
-      'C:\\Users\\gordo\\AppData\\Local\\Programs\\oh-my-posh\\bin\\',
-      'C:\\Users\\gordo\\AppData\\Local\\Microsoft\\WindowsApps',
+      '${USERPROFILE}/AppData\\Local\\Programs\\oh-my-posh\\bin\\',
+      '${USERPROFILE}/AppData\\Local\\Microsoft\\WindowsApps',
       '',
-      'C:\\Users\\gordo\\.local\\bin',
-      'C:\\Users\\gordo\\AppData\\Local\\Programs\\Ollama',
+      '${USERPROFILE}/.local\\bin',
+      '${USERPROFILE}/AppData\\Local\\Programs\\Ollama',
       [length]: 22
     ]
   }
@@ -4665,11 +4665,11 @@ Error response from daemon: No such container: claudebox-sfu-library-mcp-app
       'C:\\Program Files\\Sunshine\\tools',
       'C:\\Program Files\\Docker\\Docker\\resources\\bin',
       'C:\\Program Files\\GitHub CLI\\',
-      'C:\\Users\\gordo\\AppData\\Local\\Programs\\oh-my-posh\\bin\\',
-      'C:\\Users\\gordo\\AppData\\Local\\Microsoft\\WindowsApps',
+      '${USERPROFILE}/AppData\\Local\\Programs\\oh-my-posh\\bin\\',
+      '${USERPROFILE}/AppData\\Local\\Microsoft\\WindowsApps',
       '',
-      'C:\\Users\\gordo\\.local\\bin',
-      'C:\\Users\\gordo\\AppData\\Local\\Programs\\Ollama',
+      '${USERPROFILE}/.local\\bin',
+      '${USERPROFILE}/AppData\\Local\\Programs\\Ollama',
       [length]: 22
     ]
   }
@@ -4724,11 +4724,11 @@ Error response from daemon: No such container: claudebox-sfu-library-mcp-app
       'C:\\Program Files\\Sunshine\\tools',
       'C:\\Program Files\\Docker\\Docker\\resources\\bin',
       'C:\\Program Files\\GitHub CLI\\',
-      'C:\\Users\\gordo\\AppData\\Local\\Programs\\oh-my-posh\\bin\\',
-      'C:\\Users\\gordo\\AppData\\Local\\Microsoft\\WindowsApps',
+      '${USERPROFILE}/AppData\\Local\\Programs\\oh-my-posh\\bin\\',
+      '${USERPROFILE}/AppData\\Local\\Microsoft\\WindowsApps',
       '',
-      'C:\\Users\\gordo\\.local\\bin',
-      'C:\\Users\\gordo\\AppData\\Local\\Programs\\Ollama',
+      '${USERPROFILE}/.local\\bin',
+      '${USERPROFILE}/AppData\\Local\\Programs\\Ollama',
       [length]: 22
     ]
   }
@@ -4768,11 +4768,11 @@ Error response from daemon: No such container: claudebox-sfu-library-mcp-app
       'C:\\Program Files\\Sunshine\\tools',
       'C:\\Program Files\\Docker\\Docker\\resources\\bin',
       'C:\\Program Files\\GitHub CLI\\',
-      'C:\\Users\\gordo\\AppData\\Local\\Programs\\oh-my-posh\\bin\\',
-      'C:\\Users\\gordo\\AppData\\Local\\Microsoft\\WindowsApps',
+      '${USERPROFILE}/AppData\\Local\\Programs\\oh-my-posh\\bin\\',
+      '${USERPROFILE}/AppData\\Local\\Microsoft\\WindowsApps',
       '',
-      'C:\\Users\\gordo\\.local\\bin',
-      'C:\\Users\\gordo\\AppData\\Local\\Programs\\Ollama',
+      '${USERPROFILE}/.local\\bin',
+      '${USERPROFILE}/AppData\\Local\\Programs\\Ollama',
       [length]: 22
     ]
   }
@@ -4844,11 +4844,11 @@ Error response from daemon: No such container: claudebox-sfu-library-mcp-app
       'C:\\Program Files\\Sunshine\\tools',
       'C:\\Program Files\\Docker\\Docker\\resources\\bin',
       'C:\\Program Files\\GitHub CLI\\',
-      'C:\\Users\\gordo\\AppData\\Local\\Programs\\oh-my-posh\\bin\\',
-      'C:\\Users\\gordo\\AppData\\Local\\Microsoft\\WindowsApps',
+      '${USERPROFILE}/AppData\\Local\\Programs\\oh-my-posh\\bin\\',
+      '${USERPROFILE}/AppData\\Local\\Microsoft\\WindowsApps',
       '',
-      'C:\\Users\\gordo\\.local\\bin',
-      'C:\\Users\\gordo\\AppData\\Local\\Programs\\Ollama',
+      '${USERPROFILE}/.local\\bin',
+      '${USERPROFILE}/AppData\\Local\\Programs\\Ollama',
       [length]: 22
     ]
   }
@@ -4891,11 +4891,11 @@ failed to connect to the docker API at npipe:////./pipe/dockerDesktopLinuxEngine
       'C:\\Program Files\\Sunshine\\tools',
       'C:\\Program Files\\Docker\\Docker\\resources\\bin',
       'C:\\Program Files\\GitHub CLI\\',
-      'C:\\Users\\gordo\\AppData\\Local\\Programs\\oh-my-posh\\bin\\',
-      'C:\\Users\\gordo\\AppData\\Local\\Microsoft\\WindowsApps',
+      '${USERPROFILE}/AppData\\Local\\Programs\\oh-my-posh\\bin\\',
+      '${USERPROFILE}/AppData\\Local\\Microsoft\\WindowsApps',
       '',
-      'C:\\Users\\gordo\\.local\\bin',
-      'C:\\Users\\gordo\\AppData\\Local\\Programs\\Ollama',
+      '${USERPROFILE}/.local\\bin',
+      '${USERPROFILE}/AppData\\Local\\Programs\\Ollama',
       [length]: 22
     ]
   }
@@ -4935,11 +4935,11 @@ failed to connect to the docker API at npipe:////./pipe/dockerDesktopLinuxEngine
       'C:\\Program Files\\Sunshine\\tools',
       'C:\\Program Files\\Docker\\Docker\\resources\\bin',
       'C:\\Program Files\\GitHub CLI\\',
-      'C:\\Users\\gordo\\AppData\\Local\\Programs\\oh-my-posh\\bin\\',
-      'C:\\Users\\gordo\\AppData\\Local\\Microsoft\\WindowsApps',
+      '${USERPROFILE}/AppData\\Local\\Programs\\oh-my-posh\\bin\\',
+      '${USERPROFILE}/AppData\\Local\\Microsoft\\WindowsApps',
       '',
-      'C:\\Users\\gordo\\.local\\bin',
-      'C:\\Users\\gordo\\AppData\\Local\\Programs\\Ollama',
+      '${USERPROFILE}/.local\\bin',
+      '${USERPROFILE}/AppData\\Local\\Programs\\Ollama',
       [length]: 22
     ]
   }
@@ -4982,11 +4982,11 @@ failed to connect to the docker API at npipe:////./pipe/dockerDesktopLinuxEngine
       'C:\\Program Files\\Sunshine\\tools',
       'C:\\Program Files\\Docker\\Docker\\resources\\bin',
       'C:\\Program Files\\GitHub CLI\\',
-      'C:\\Users\\gordo\\AppData\\Local\\Programs\\oh-my-posh\\bin\\',
-      'C:\\Users\\gordo\\AppData\\Local\\Microsoft\\WindowsApps',
+      '${USERPROFILE}/AppData\\Local\\Programs\\oh-my-posh\\bin\\',
+      '${USERPROFILE}/AppData\\Local\\Microsoft\\WindowsApps',
       '',
-      'C:\\Users\\gordo\\.local\\bin',
-      'C:\\Users\\gordo\\AppData\\Local\\Programs\\Ollama',
+      '${USERPROFILE}/.local\\bin',
+      '${USERPROFILE}/AppData\\Local\\Programs\\Ollama',
       [length]: 22
     ]
   }
@@ -5035,11 +5035,11 @@ failed to connect to the docker API at npipe:////./pipe/dockerDesktopLinuxEngine
       'C:\\Program Files\\Sunshine\\tools',
       'C:\\Program Files\\Docker\\Docker\\resources\\bin',
       'C:\\Program Files\\GitHub CLI\\',
-      'C:\\Users\\gordo\\AppData\\Local\\Programs\\oh-my-posh\\bin\\',
-      'C:\\Users\\gordo\\AppData\\Local\\Microsoft\\WindowsApps',
+      '${USERPROFILE}/AppData\\Local\\Programs\\oh-my-posh\\bin\\',
+      '${USERPROFILE}/AppData\\Local\\Microsoft\\WindowsApps',
       '',
-      'C:\\Users\\gordo\\.local\\bin',
-      'C:\\Users\\gordo\\AppData\\Local\\Programs\\Ollama',
+      '${USERPROFILE}/.local\\bin',
+      '${USERPROFILE}/AppData\\Local\\Programs\\Ollama',
       [length]: 22
     ]
   }
@@ -5088,11 +5088,11 @@ failed to connect to the docker API at npipe:////./pipe/dockerDesktopLinuxEngine
       'C:\\Program Files\\Sunshine\\tools',
       'C:\\Program Files\\Docker\\Docker\\resources\\bin',
       'C:\\Program Files\\GitHub CLI\\',
-      'C:\\Users\\gordo\\AppData\\Local\\Programs\\oh-my-posh\\bin\\',
-      'C:\\Users\\gordo\\AppData\\Local\\Microsoft\\WindowsApps',
+      '${USERPROFILE}/AppData\\Local\\Programs\\oh-my-posh\\bin\\',
+      '${USERPROFILE}/AppData\\Local\\Microsoft\\WindowsApps',
       '',
-      'C:\\Users\\gordo\\.local\\bin',
-      'C:\\Users\\gordo\\AppData\\Local\\Programs\\Ollama',
+      '${USERPROFILE}/.local\\bin',
+      '${USERPROFILE}/AppData\\Local\\Programs\\Ollama',
       [length]: 22
     ]
   }
@@ -5137,11 +5137,11 @@ failed to connect to the docker API at npipe:////./pipe/dockerDesktopLinuxEngine
       'C:\\Program Files\\Sunshine\\tools',
       'C:\\Program Files\\Docker\\Docker\\resources\\bin',
       'C:\\Program Files\\GitHub CLI\\',
-      'C:\\Users\\gordo\\AppData\\Local\\Programs\\oh-my-posh\\bin\\',
-      'C:\\Users\\gordo\\AppData\\Local\\Microsoft\\WindowsApps',
+      '${USERPROFILE}/AppData\\Local\\Programs\\oh-my-posh\\bin\\',
+      '${USERPROFILE}/AppData\\Local\\Microsoft\\WindowsApps',
       '',
-      'C:\\Users\\gordo\\.local\\bin',
-      'C:\\Users\\gordo\\AppData\\Local\\Programs\\Ollama',
+      '${USERPROFILE}/.local\\bin',
+      '${USERPROFILE}/AppData\\Local\\Programs\\Ollama',
       [length]: 22
     ]
   }
@@ -5188,11 +5188,11 @@ failed to connect to the docker API at npipe:////./pipe/dockerDesktopLinuxEngine
       'C:\\Program Files\\Sunshine\\tools',
       'C:\\Program Files\\Docker\\Docker\\resources\\bin',
       'C:\\Program Files\\GitHub CLI\\',
-      'C:\\Users\\gordo\\AppData\\Local\\Programs\\oh-my-posh\\bin\\',
-      'C:\\Users\\gordo\\AppData\\Local\\Microsoft\\WindowsApps',
+      '${USERPROFILE}/AppData\\Local\\Programs\\oh-my-posh\\bin\\',
+      '${USERPROFILE}/AppData\\Local\\Microsoft\\WindowsApps',
       '',
-      'C:\\Users\\gordo\\.local\\bin',
-      'C:\\Users\\gordo\\AppData\\Local\\Programs\\Ollama',
+      '${USERPROFILE}/.local\\bin',
+      '${USERPROFILE}/AppData\\Local\\Programs\\Ollama',
       [length]: 22
     ]
   }
@@ -5241,11 +5241,11 @@ failed to connect to the docker API at npipe:////./pipe/dockerDesktopLinuxEngine
       'C:\\Program Files\\Sunshine\\tools',
       'C:\\Program Files\\Docker\\Docker\\resources\\bin',
       'C:\\Program Files\\GitHub CLI\\',
-      'C:\\Users\\gordo\\AppData\\Local\\Programs\\oh-my-posh\\bin\\',
-      'C:\\Users\\gordo\\AppData\\Local\\Microsoft\\WindowsApps',
+      '${USERPROFILE}/AppData\\Local\\Programs\\oh-my-posh\\bin\\',
+      '${USERPROFILE}/AppData\\Local\\Microsoft\\WindowsApps',
       '',
-      'C:\\Users\\gordo\\.local\\bin',
-      'C:\\Users\\gordo\\AppData\\Local\\Programs\\Ollama',
+      '${USERPROFILE}/.local\\bin',
+      '${USERPROFILE}/AppData\\Local\\Programs\\Ollama',
       [length]: 22
     ]
   }
@@ -5294,11 +5294,11 @@ failed to connect to the docker API at npipe:////./pipe/dockerDesktopLinuxEngine
       'C:\\Program Files\\Sunshine\\tools',
       'C:\\Program Files\\Docker\\Docker\\resources\\bin',
       'C:\\Program Files\\GitHub CLI\\',
-      'C:\\Users\\gordo\\AppData\\Local\\Programs\\oh-my-posh\\bin\\',
-      'C:\\Users\\gordo\\AppData\\Local\\Microsoft\\WindowsApps',
+      '${USERPROFILE}/AppData\\Local\\Programs\\oh-my-posh\\bin\\',
+      '${USERPROFILE}/AppData\\Local\\Microsoft\\WindowsApps',
       '',
-      'C:\\Users\\gordo\\.local\\bin',
-      'C:\\Users\\gordo\\AppData\\Local\\Programs\\Ollama',
+      '${USERPROFILE}/.local\\bin',
+      '${USERPROFILE}/AppData\\Local\\Programs\\Ollama',
       [length]: 22
     ]
   }
@@ -5347,11 +5347,11 @@ failed to connect to the docker API at npipe:////./pipe/dockerDesktopLinuxEngine
       'C:\\Program Files\\Sunshine\\tools',
       'C:\\Program Files\\Docker\\Docker\\resources\\bin',
       'C:\\Program Files\\GitHub CLI\\',
-      'C:\\Users\\gordo\\AppData\\Local\\Programs\\oh-my-posh\\bin\\',
-      'C:\\Users\\gordo\\AppData\\Local\\Microsoft\\WindowsApps',
+      '${USERPROFILE}/AppData\\Local\\Programs\\oh-my-posh\\bin\\',
+      '${USERPROFILE}/AppData\\Local\\Microsoft\\WindowsApps',
       '',
-      'C:\\Users\\gordo\\.local\\bin',
-      'C:\\Users\\gordo\\AppData\\Local\\Programs\\Ollama',
+      '${USERPROFILE}/.local\\bin',
+      '${USERPROFILE}/AppData\\Local\\Programs\\Ollama',
       [length]: 22
     ]
   }
@@ -5396,11 +5396,11 @@ failed to connect to the docker API at npipe:////./pipe/dockerDesktopLinuxEngine
       'C:\\Program Files\\Sunshine\\tools',
       'C:\\Program Files\\Docker\\Docker\\resources\\bin',
       'C:\\Program Files\\GitHub CLI\\',
-      'C:\\Users\\gordo\\AppData\\Local\\Programs\\oh-my-posh\\bin\\',
-      'C:\\Users\\gordo\\AppData\\Local\\Microsoft\\WindowsApps',
+      '${USERPROFILE}/AppData\\Local\\Programs\\oh-my-posh\\bin\\',
+      '${USERPROFILE}/AppData\\Local\\Microsoft\\WindowsApps',
       '',
-      'C:\\Users\\gordo\\.local\\bin',
-      'C:\\Users\\gordo\\AppData\\Local\\Programs\\Ollama',
+      '${USERPROFILE}/.local\\bin',
+      '${USERPROFILE}/AppData\\Local\\Programs\\Ollama',
       [length]: 22
     ]
   }
@@ -5443,11 +5443,11 @@ failed to connect to the docker API at npipe:////./pipe/dockerDesktopLinuxEngine
       'C:\\Program Files\\Sunshine\\tools',
       'C:\\Program Files\\Docker\\Docker\\resources\\bin',
       'C:\\Program Files\\GitHub CLI\\',
-      'C:\\Users\\gordo\\AppData\\Local\\Programs\\oh-my-posh\\bin\\',
-      'C:\\Users\\gordo\\AppData\\Local\\Microsoft\\WindowsApps',
+      '${USERPROFILE}/AppData\\Local\\Programs\\oh-my-posh\\bin\\',
+      '${USERPROFILE}/AppData\\Local\\Microsoft\\WindowsApps',
       '',
-      'C:\\Users\\gordo\\.local\\bin',
-      'C:\\Users\\gordo\\AppData\\Local\\Programs\\Ollama',
+      '${USERPROFILE}/.local\\bin',
+      '${USERPROFILE}/AppData\\Local\\Programs\\Ollama',
       [length]: 22
     ]
   }
@@ -5489,11 +5489,11 @@ Error response from daemon: container c4e11d6b92155031b579cfaba133c66bce76110957
       'C:\\Program Files\\Sunshine\\tools',
       'C:\\Program Files\\Docker\\Docker\\resources\\bin',
       'C:\\Program Files\\GitHub CLI\\',
-      'C:\\Users\\gordo\\AppData\\Local\\Programs\\oh-my-posh\\bin\\',
-      'C:\\Users\\gordo\\AppData\\Local\\Microsoft\\WindowsApps',
+      '${USERPROFILE}/AppData\\Local\\Programs\\oh-my-posh\\bin\\',
+      '${USERPROFILE}/AppData\\Local\\Microsoft\\WindowsApps',
       '',
-      'C:\\Users\\gordo\\.local\\bin',
-      'C:\\Users\\gordo\\AppData\\Local\\Programs\\Ollama',
+      '${USERPROFILE}/.local\\bin',
+      '${USERPROFILE}/AppData\\Local\\Programs\\Ollama',
       [length]: 22
     ]
   }
@@ -5538,11 +5538,11 @@ Error response from daemon: container c4e11d6b92155031b579cfaba133c66bce76110957
       'C:\\Program Files\\Sunshine\\tools',
       'C:\\Program Files\\Docker\\Docker\\resources\\bin',
       'C:\\Program Files\\GitHub CLI\\',
-      'C:\\Users\\gordo\\AppData\\Local\\Programs\\oh-my-posh\\bin\\',
-      'C:\\Users\\gordo\\AppData\\Local\\Microsoft\\WindowsApps',
+      '${USERPROFILE}/AppData\\Local\\Programs\\oh-my-posh\\bin\\',
+      '${USERPROFILE}/AppData\\Local\\Microsoft\\WindowsApps',
       '',
-      'C:\\Users\\gordo\\.local\\bin',
-      'C:\\Users\\gordo\\AppData\\Local\\Programs\\Ollama',
+      '${USERPROFILE}/.local\\bin',
+      '${USERPROFILE}/AppData\\Local\\Programs\\Ollama',
       [length]: 22
     ]
   }
@@ -5584,11 +5584,11 @@ Error response from daemon: container 012a0e669f8be88c1e9b28ca23044f0773349c9210
       'C:\\Program Files\\Sunshine\\tools',
       'C:\\Program Files\\Docker\\Docker\\resources\\bin',
       'C:\\Program Files\\GitHub CLI\\',
-      'C:\\Users\\gordo\\AppData\\Local\\Programs\\oh-my-posh\\bin\\',
-      'C:\\Users\\gordo\\AppData\\Local\\Microsoft\\WindowsApps',
+      '${USERPROFILE}/AppData\\Local\\Programs\\oh-my-posh\\bin\\',
+      '${USERPROFILE}/AppData\\Local\\Microsoft\\WindowsApps',
       '',
-      'C:\\Users\\gordo\\.local\\bin',
-      'C:\\Users\\gordo\\AppData\\Local\\Programs\\Ollama',
+      '${USERPROFILE}/.local\\bin',
+      '${USERPROFILE}/AppData\\Local\\Programs\\Ollama',
       [length]: 22
     ]
   }
@@ -5632,11 +5632,11 @@ Error response from daemon: container ec88880cb87b6cb79217eaf6d8f5532fd08fa9ad58
       'C:\\Program Files\\Sunshine\\tools',
       'C:\\Program Files\\Docker\\Docker\\resources\\bin',
       'C:\\Program Files\\GitHub CLI\\',
-      'C:\\Users\\gordo\\AppData\\Local\\Programs\\oh-my-posh\\bin\\',
-      'C:\\Users\\gordo\\AppData\\Local\\Microsoft\\WindowsApps',
+      '${USERPROFILE}/AppData\\Local\\Programs\\oh-my-posh\\bin\\',
+      '${USERPROFILE}/AppData\\Local\\Microsoft\\WindowsApps',
       '',
-      'C:\\Users\\gordo\\.local\\bin',
-      'C:\\Users\\gordo\\AppData\\Local\\Programs\\Ollama',
+      '${USERPROFILE}/.local\\bin',
+      '${USERPROFILE}/AppData\\Local\\Programs\\Ollama',
       [length]: 22
     ]
   }
@@ -5685,11 +5685,11 @@ Error response from daemon: container ec88880cb87b6cb79217eaf6d8f5532fd08fa9ad58
       'C:\\Program Files\\Sunshine\\tools',
       'C:\\Program Files\\Docker\\Docker\\resources\\bin',
       'C:\\Program Files\\GitHub CLI\\',
-      'C:\\Users\\gordo\\AppData\\Local\\Programs\\oh-my-posh\\bin\\',
-      'C:\\Users\\gordo\\AppData\\Local\\Microsoft\\WindowsApps',
+      '${USERPROFILE}/AppData\\Local\\Programs\\oh-my-posh\\bin\\',
+      '${USERPROFILE}/AppData\\Local\\Microsoft\\WindowsApps',
       '',
-      'C:\\Users\\gordo\\.local\\bin',
-      'C:\\Users\\gordo\\AppData\\Local\\Programs\\Ollama',
+      '${USERPROFILE}/.local\\bin',
+      '${USERPROFILE}/AppData\\Local\\Programs\\Ollama',
       [length]: 22
     ]
   }
@@ -5738,11 +5738,11 @@ Error response from daemon: container ec88880cb87b6cb79217eaf6d8f5532fd08fa9ad58
       'C:\\Program Files\\Sunshine\\tools',
       'C:\\Program Files\\Docker\\Docker\\resources\\bin',
       'C:\\Program Files\\GitHub CLI\\',
-      'C:\\Users\\gordo\\AppData\\Local\\Programs\\oh-my-posh\\bin\\',
-      'C:\\Users\\gordo\\AppData\\Local\\Microsoft\\WindowsApps',
+      '${USERPROFILE}/AppData\\Local\\Programs\\oh-my-posh\\bin\\',
+      '${USERPROFILE}/AppData\\Local\\Microsoft\\WindowsApps',
       '',
-      'C:\\Users\\gordo\\.local\\bin',
-      'C:\\Users\\gordo\\AppData\\Local\\Programs\\Ollama',
+      '${USERPROFILE}/.local\\bin',
+      '${USERPROFILE}/AppData\\Local\\Programs\\Ollama',
       [length]: 22
     ]
   }
@@ -5791,11 +5791,11 @@ Error response from daemon: container ec88880cb87b6cb79217eaf6d8f5532fd08fa9ad58
       'C:\\Program Files\\Sunshine\\tools',
       'C:\\Program Files\\Docker\\Docker\\resources\\bin',
       'C:\\Program Files\\GitHub CLI\\',
-      'C:\\Users\\gordo\\AppData\\Local\\Programs\\oh-my-posh\\bin\\',
-      'C:\\Users\\gordo\\AppData\\Local\\Microsoft\\WindowsApps',
+      '${USERPROFILE}/AppData\\Local\\Programs\\oh-my-posh\\bin\\',
+      '${USERPROFILE}/AppData\\Local\\Microsoft\\WindowsApps',
       '',
-      'C:\\Users\\gordo\\.local\\bin',
-      'C:\\Users\\gordo\\AppData\\Local\\Programs\\Ollama',
+      '${USERPROFILE}/.local\\bin',
+      '${USERPROFILE}/AppData\\Local\\Programs\\Ollama',
       [length]: 22
     ]
   }
@@ -5844,11 +5844,11 @@ Error response from daemon: container ec88880cb87b6cb79217eaf6d8f5532fd08fa9ad58
       'C:\\Program Files\\Sunshine\\tools',
       'C:\\Program Files\\Docker\\Docker\\resources\\bin',
       'C:\\Program Files\\GitHub CLI\\',
-      'C:\\Users\\gordo\\AppData\\Local\\Programs\\oh-my-posh\\bin\\',
-      'C:\\Users\\gordo\\AppData\\Local\\Microsoft\\WindowsApps',
+      '${USERPROFILE}/AppData\\Local\\Programs\\oh-my-posh\\bin\\',
+      '${USERPROFILE}/AppData\\Local\\Microsoft\\WindowsApps',
       '',
-      'C:\\Users\\gordo\\.local\\bin',
-      'C:\\Users\\gordo\\AppData\\Local\\Programs\\Ollama',
+      '${USERPROFILE}/.local\\bin',
+      '${USERPROFILE}/AppData\\Local\\Programs\\Ollama',
       [length]: 22
     ]
   }
@@ -5893,11 +5893,11 @@ Error response from daemon: container ec88880cb87b6cb79217eaf6d8f5532fd08fa9ad58
       'C:\\Program Files\\Sunshine\\tools',
       'C:\\Program Files\\Docker\\Docker\\resources\\bin',
       'C:\\Program Files\\GitHub CLI\\',
-      'C:\\Users\\gordo\\AppData\\Local\\Programs\\oh-my-posh\\bin\\',
-      'C:\\Users\\gordo\\AppData\\Local\\Microsoft\\WindowsApps',
+      '${USERPROFILE}/AppData\\Local\\Programs\\oh-my-posh\\bin\\',
+      '${USERPROFILE}/AppData\\Local\\Microsoft\\WindowsApps',
       '',
-      'C:\\Users\\gordo\\.local\\bin',
-      'C:\\Users\\gordo\\AppData\\Local\\Programs\\Ollama',
+      '${USERPROFILE}/.local\\bin',
+      '${USERPROFILE}/AppData\\Local\\Programs\\Ollama',
       [length]: 22
     ]
   }
@@ -5937,11 +5937,11 @@ Error response from daemon: container ec88880cb87b6cb79217eaf6d8f5532fd08fa9ad58
       'C:\\Program Files\\Sunshine\\tools',
       'C:\\Program Files\\Docker\\Docker\\resources\\bin',
       'C:\\Program Files\\GitHub CLI\\',
-      'C:\\Users\\gordo\\AppData\\Local\\Programs\\oh-my-posh\\bin\\',
-      'C:\\Users\\gordo\\AppData\\Local\\Microsoft\\WindowsApps',
+      '${USERPROFILE}/AppData\\Local\\Programs\\oh-my-posh\\bin\\',
+      '${USERPROFILE}/AppData\\Local\\Microsoft\\WindowsApps',
       '',
-      'C:\\Users\\gordo\\.local\\bin',
-      'C:\\Users\\gordo\\AppData\\Local\\Programs\\Ollama',
+      '${USERPROFILE}/.local\\bin',
+      '${USERPROFILE}/AppData\\Local\\Programs\\Ollama',
       [length]: 22
     ]
   }
@@ -5984,11 +5984,11 @@ failed to connect to the docker API at npipe:////./pipe/dockerDesktopLinuxEngine
       'C:\\Program Files\\Sunshine\\tools',
       'C:\\Program Files\\Docker\\Docker\\resources\\bin',
       'C:\\Program Files\\GitHub CLI\\',
-      'C:\\Users\\gordo\\AppData\\Local\\Programs\\oh-my-posh\\bin\\',
-      'C:\\Users\\gordo\\AppData\\Local\\Microsoft\\WindowsApps',
+      '${USERPROFILE}/AppData\\Local\\Programs\\oh-my-posh\\bin\\',
+      '${USERPROFILE}/AppData\\Local\\Microsoft\\WindowsApps',
       '',
-      'C:\\Users\\gordo\\.local\\bin',
-      'C:\\Users\\gordo\\AppData\\Local\\Programs\\Ollama',
+      '${USERPROFILE}/.local\\bin',
+      '${USERPROFILE}/AppData\\Local\\Programs\\Ollama',
       [length]: 22
     ]
   }
@@ -6037,11 +6037,11 @@ failed to connect to the docker API at npipe:////./pipe/dockerDesktopLinuxEngine
       'C:\\Program Files\\Sunshine\\tools',
       'C:\\Program Files\\Docker\\Docker\\resources\\bin',
       'C:\\Program Files\\GitHub CLI\\',
-      'C:\\Users\\gordo\\AppData\\Local\\Programs\\oh-my-posh\\bin\\',
-      'C:\\Users\\gordo\\AppData\\Local\\Microsoft\\WindowsApps',
+      '${USERPROFILE}/AppData\\Local\\Programs\\oh-my-posh\\bin\\',
+      '${USERPROFILE}/AppData\\Local\\Microsoft\\WindowsApps',
       '',
-      'C:\\Users\\gordo\\.local\\bin',
-      'C:\\Users\\gordo\\AppData\\Local\\Programs\\Ollama',
+      '${USERPROFILE}/.local\\bin',
+      '${USERPROFILE}/AppData\\Local\\Programs\\Ollama',
       [length]: 23
     ]
   }
@@ -6084,12 +6084,12 @@ failed to connect to the docker API at npipe:////./pipe/dockerDesktopLinuxEngine
       'C:\\Program Files\\Docker\\Docker\\resources\\bin',
       'C:\\Program Files\\GitHub CLI\\',
       'C:\\Program Files\\nodejs\\',
-      'C:\\Users\\gordo\\AppData\\Local\\Programs\\oh-my-posh\\bin\\',
-      'C:\\Users\\gordo\\AppData\\Local\\Microsoft\\WindowsApps',
+      '${USERPROFILE}/AppData\\Local\\Programs\\oh-my-posh\\bin\\',
+      '${USERPROFILE}/AppData\\Local\\Microsoft\\WindowsApps',
       '',
-      'C:\\Users\\gordo\\.local\\bin',
-      'C:\\Users\\gordo\\AppData\\Local\\Programs\\Ollama',
-      'C:\\Users\\gordo\\AppData\\Roaming\\npm',
+      '${USERPROFILE}/.local\\bin',
+      '${USERPROFILE}/AppData\\Local\\Programs\\Ollama',
+      '${USERPROFILE}/AppData\\Roaming\\npm',
       [length]: 26
     ]
   }
@@ -6135,12 +6135,12 @@ failed to connect to the docker API at npipe:////./pipe/dockerDesktopLinuxEngine
       'C:\\Program Files\\Docker\\Docker\\resources\\bin',
       'C:\\Program Files\\GitHub CLI\\',
       'C:\\Program Files\\nodejs\\',
-      'C:\\Users\\gordo\\AppData\\Local\\Programs\\oh-my-posh\\bin\\',
-      'C:\\Users\\gordo\\AppData\\Local\\Microsoft\\WindowsApps',
+      '${USERPROFILE}/AppData\\Local\\Programs\\oh-my-posh\\bin\\',
+      '${USERPROFILE}/AppData\\Local\\Microsoft\\WindowsApps',
       '',
-      'C:\\Users\\gordo\\.local\\bin',
-      'C:\\Users\\gordo\\AppData\\Local\\Programs\\Ollama',
-      'C:\\Users\\gordo\\AppData\\Roaming\\npm',
+      '${USERPROFILE}/.local\\bin',
+      '${USERPROFILE}/AppData\\Local\\Programs\\Ollama',
+      '${USERPROFILE}/AppData\\Roaming\\npm',
       [length]: 26
     ]
   }
@@ -6188,13 +6188,13 @@ failed to connect to the docker API at npipe:////./pipe/dockerDesktopLinuxEngine
       'C:\\Program Files\\nodejs\\',
       'C:\\Program Files\\Docker\\Docker\\resources\\bin',
       'C:\\Program Files\\GitHub CLI\\',
-      'C:\\Users\\gordo\\AppData\\Local\\Programs\\oh-my-posh\\bin\\',
-      'C:\\Users\\gordo\\AppData\\Local\\Microsoft\\WindowsApps',
+      '${USERPROFILE}/AppData\\Local\\Programs\\oh-my-posh\\bin\\',
+      '${USERPROFILE}/AppData\\Local\\Microsoft\\WindowsApps',
       '',
-      'C:\\Users\\gordo\\.local\\bin',
-      'C:\\Users\\gordo\\AppData\\Local\\Programs\\Ollama',
-      'C:\\Users\\gordo\\AppData\\Roaming\\npm',
-      'C:\\Users\\gordo\\AppData\\Roaming\\Python\\Python314\\Scripts',
+      '${USERPROFILE}/.local\\bin',
+      '${USERPROFILE}/AppData\\Local\\Programs\\Ollama',
+      '${USERPROFILE}/AppData\\Roaming\\npm',
+      '${USERPROFILE}/AppData\\Roaming\\Python\\Python314\\Scripts',
       [length]: 27
     ]
   }
@@ -6240,13 +6240,13 @@ failed to connect to the docker API at npipe:////./pipe/dockerDesktopLinuxEngine
       'C:\\Program Files\\nodejs\\',
       'C:\\Program Files\\Docker\\Docker\\resources\\bin',
       'C:\\Program Files\\GitHub CLI\\',
-      'C:\\Users\\gordo\\AppData\\Local\\Programs\\oh-my-posh\\bin\\',
-      'C:\\Users\\gordo\\AppData\\Local\\Microsoft\\WindowsApps',
+      '${USERPROFILE}/AppData\\Local\\Programs\\oh-my-posh\\bin\\',
+      '${USERPROFILE}/AppData\\Local\\Microsoft\\WindowsApps',
       '',
-      'C:\\Users\\gordo\\.local\\bin',
-      'C:\\Users\\gordo\\AppData\\Local\\Programs\\Ollama',
-      'C:\\Users\\gordo\\AppData\\Roaming\\npm',
-      'C:\\Users\\gordo\\AppData\\Roaming\\Python\\Python314\\Scripts',
+      '${USERPROFILE}/.local\\bin',
+      '${USERPROFILE}/AppData\\Local\\Programs\\Ollama',
+      '${USERPROFILE}/AppData\\Roaming\\npm',
+      '${USERPROFILE}/AppData\\Roaming\\Python\\Python314\\Scripts',
       [length]: 27
     ]
   }
@@ -6306,13 +6306,13 @@ failed to connect to the docker API at npipe:////./pipe/dockerDesktopLinuxEngine
       'C:\\Program Files\\nodejs\\',
       'C:\\Program Files\\Docker\\Docker\\resources\\bin',
       'C:\\Program Files\\GitHub CLI\\',
-      'C:\\Users\\gordo\\AppData\\Local\\Programs\\oh-my-posh\\bin\\',
-      'C:\\Users\\gordo\\AppData\\Local\\Microsoft\\WindowsApps',
+      '${USERPROFILE}/AppData\\Local\\Programs\\oh-my-posh\\bin\\',
+      '${USERPROFILE}/AppData\\Local\\Microsoft\\WindowsApps',
       '',
-      'C:\\Users\\gordo\\.local\\bin',
-      'C:\\Users\\gordo\\AppData\\Local\\Programs\\Ollama',
-      'C:\\Users\\gordo\\AppData\\Roaming\\npm',
-      'C:\\Users\\gordo\\AppData\\Roaming\\Python\\Python314\\Scripts',
+      '${USERPROFILE}/.local\\bin',
+      '${USERPROFILE}/AppData\\Local\\Programs\\Ollama',
+      '${USERPROFILE}/AppData\\Roaming\\npm',
+      '${USERPROFILE}/AppData\\Roaming\\Python\\Python314\\Scripts',
       [length]: 27
     ]
   }
@@ -6358,13 +6358,13 @@ failed to connect to the docker API at npipe:////./pipe/dockerDesktopLinuxEngine
       'C:\\Program Files\\nodejs\\',
       'C:\\Program Files\\Docker\\Docker\\resources\\bin',
       'C:\\Program Files\\GitHub CLI\\',
-      'C:\\Users\\gordo\\AppData\\Local\\Programs\\oh-my-posh\\bin\\',
-      'C:\\Users\\gordo\\AppData\\Local\\Microsoft\\WindowsApps',
+      '${USERPROFILE}/AppData\\Local\\Programs\\oh-my-posh\\bin\\',
+      '${USERPROFILE}/AppData\\Local\\Microsoft\\WindowsApps',
       '',
-      'C:\\Users\\gordo\\.local\\bin',
-      'C:\\Users\\gordo\\AppData\\Local\\Programs\\Ollama',
-      'C:\\Users\\gordo\\AppData\\Roaming\\npm',
-      'C:\\Users\\gordo\\AppData\\Roaming\\Python\\Python314\\Scripts',
+      '${USERPROFILE}/.local\\bin',
+      '${USERPROFILE}/AppData\\Local\\Programs\\Ollama',
+      '${USERPROFILE}/AppData\\Roaming\\npm',
+      '${USERPROFILE}/AppData\\Roaming\\Python\\Python314\\Scripts',
       [length]: 27
     ]
   }
@@ -6412,13 +6412,13 @@ failed to connect to the docker API at npipe:////./pipe/dockerDesktopLinuxEngine
       'C:\\Program Files\\nodejs\\',
       'C:\\Program Files\\Docker\\Docker\\resources\\bin',
       'C:\\Program Files\\GitHub CLI\\',
-      'C:\\Users\\gordo\\AppData\\Local\\Programs\\oh-my-posh\\bin\\',
-      'C:\\Users\\gordo\\AppData\\Local\\Microsoft\\WindowsApps',
+      '${USERPROFILE}/AppData\\Local\\Programs\\oh-my-posh\\bin\\',
+      '${USERPROFILE}/AppData\\Local\\Microsoft\\WindowsApps',
       '',
-      'C:\\Users\\gordo\\.local\\bin',
-      'C:\\Users\\gordo\\AppData\\Local\\Programs\\Ollama',
-      'C:\\Users\\gordo\\AppData\\Roaming\\npm',
-      'C:\\Users\\gordo\\AppData\\Roaming\\Python\\Python314\\Scripts',
+      '${USERPROFILE}/.local\\bin',
+      '${USERPROFILE}/AppData\\Local\\Programs\\Ollama',
+      '${USERPROFILE}/AppData\\Roaming\\npm',
+      '${USERPROFILE}/AppData\\Roaming\\Python\\Python314\\Scripts',
       [length]: 27
     ]
   }
@@ -6463,13 +6463,13 @@ Error response from daemon: container a941ac77ba654f9414fce4a9100f4360920d2cc76c
       'C:\\Program Files\\nodejs\\',
       'C:\\Program Files\\GitHub CLI\\',
       'C:\\Program Files\\Docker\\Docker\\resources\\bin',
-      'C:\\Users\\gordo\\AppData\\Local\\Programs\\oh-my-posh\\bin\\',
-      'C:\\Users\\gordo\\AppData\\Local\\Microsoft\\WindowsApps',
+      '${USERPROFILE}/AppData\\Local\\Programs\\oh-my-posh\\bin\\',
+      '${USERPROFILE}/AppData\\Local\\Microsoft\\WindowsApps',
       '',
-      'C:\\Users\\gordo\\.local\\bin',
-      'C:\\Users\\gordo\\AppData\\Local\\Programs\\Ollama',
-      'C:\\Users\\gordo\\AppData\\Roaming\\npm',
-      'C:\\Users\\gordo\\AppData\\Roaming\\Python\\Python314\\Scripts',
+      '${USERPROFILE}/.local\\bin',
+      '${USERPROFILE}/AppData\\Local\\Programs\\Ollama',
+      '${USERPROFILE}/AppData\\Roaming\\npm',
+      '${USERPROFILE}/AppData\\Roaming\\Python\\Python314\\Scripts',
       [length]: 27
     ]
   }
@@ -6516,13 +6516,13 @@ Error response from daemon: container a941ac77ba654f9414fce4a9100f4360920d2cc76c
       'C:\\Program Files\\nodejs\\',
       'C:\\Program Files\\GitHub CLI\\',
       'C:\\Program Files\\Docker\\Docker\\resources\\bin',
-      'C:\\Users\\gordo\\AppData\\Local\\Programs\\oh-my-posh\\bin\\',
-      'C:\\Users\\gordo\\AppData\\Local\\Microsoft\\WindowsApps',
+      '${USERPROFILE}/AppData\\Local\\Programs\\oh-my-posh\\bin\\',
+      '${USERPROFILE}/AppData\\Local\\Microsoft\\WindowsApps',
       '',
-      'C:\\Users\\gordo\\.local\\bin',
-      'C:\\Users\\gordo\\AppData\\Local\\Programs\\Ollama',
-      'C:\\Users\\gordo\\AppData\\Roaming\\npm',
-      'C:\\Users\\gordo\\AppData\\Roaming\\Python\\Python314\\Scripts',
+      '${USERPROFILE}/.local\\bin',
+      '${USERPROFILE}/AppData\\Local\\Programs\\Ollama',
+      '${USERPROFILE}/AppData\\Roaming\\npm',
+      '${USERPROFILE}/AppData\\Roaming\\Python\\Python314\\Scripts',
       [length]: 27
     ]
   }
@@ -6570,13 +6570,13 @@ Error response from daemon: container a941ac77ba654f9414fce4a9100f4360920d2cc76c
       'C:\\Program Files\\nodejs\\',
       'C:\\Program Files\\GitHub CLI\\',
       'C:\\Program Files\\Docker\\Docker\\resources\\bin',
-      'C:\\Users\\gordo\\AppData\\Local\\Programs\\oh-my-posh\\bin\\',
-      'C:\\Users\\gordo\\AppData\\Local\\Microsoft\\WindowsApps',
+      '${USERPROFILE}/AppData\\Local\\Programs\\oh-my-posh\\bin\\',
+      '${USERPROFILE}/AppData\\Local\\Microsoft\\WindowsApps',
       '',
-      'C:\\Users\\gordo\\.local\\bin',
-      'C:\\Users\\gordo\\AppData\\Local\\Programs\\Ollama',
-      'C:\\Users\\gordo\\AppData\\Roaming\\npm',
-      'C:\\Users\\gordo\\AppData\\Roaming\\Python\\Python314\\Scripts',
+      '${USERPROFILE}/.local\\bin',
+      '${USERPROFILE}/AppData\\Local\\Programs\\Ollama',
+      '${USERPROFILE}/AppData\\Roaming\\npm',
+      '${USERPROFILE}/AppData\\Roaming\\Python\\Python314\\Scripts',
       [length]: 27
     ]
   }
@@ -6622,13 +6622,13 @@ failed to connect to the docker API at npipe:////./pipe/dockerDesktopLinuxEngine
       'C:\\Program Files\\nodejs\\',
       'C:\\Program Files\\GitHub CLI\\',
       'C:\\Program Files\\Docker\\Docker\\resources\\bin',
-      'C:\\Users\\gordo\\AppData\\Local\\Programs\\oh-my-posh\\bin\\',
-      'C:\\Users\\gordo\\AppData\\Local\\Microsoft\\WindowsApps',
+      '${USERPROFILE}/AppData\\Local\\Programs\\oh-my-posh\\bin\\',
+      '${USERPROFILE}/AppData\\Local\\Microsoft\\WindowsApps',
       '',
-      'C:\\Users\\gordo\\.local\\bin',
-      'C:\\Users\\gordo\\AppData\\Local\\Programs\\Ollama',
-      'C:\\Users\\gordo\\AppData\\Roaming\\npm',
-      'C:\\Users\\gordo\\AppData\\Roaming\\Python\\Python314\\Scripts',
+      '${USERPROFILE}/.local\\bin',
+      '${USERPROFILE}/AppData\\Local\\Programs\\Ollama',
+      '${USERPROFILE}/AppData\\Roaming\\npm',
+      '${USERPROFILE}/AppData\\Roaming\\Python\\Python314\\Scripts',
       [length]: 27
     ]
   }
@@ -6673,13 +6673,13 @@ Error response from daemon: container a941ac77ba654f9414fce4a9100f4360920d2cc76c
       'C:\\Program Files\\nodejs\\',
       'C:\\Program Files\\GitHub CLI\\',
       'C:\\Program Files\\Docker\\Docker\\resources\\bin',
-      'C:\\Users\\gordo\\AppData\\Local\\Programs\\oh-my-posh\\bin\\',
-      'C:\\Users\\gordo\\AppData\\Local\\Microsoft\\WindowsApps',
+      '${USERPROFILE}/AppData\\Local\\Programs\\oh-my-posh\\bin\\',
+      '${USERPROFILE}/AppData\\Local\\Microsoft\\WindowsApps',
       '',
-      'C:\\Users\\gordo\\.local\\bin',
-      'C:\\Users\\gordo\\AppData\\Local\\Programs\\Ollama',
-      'C:\\Users\\gordo\\AppData\\Roaming\\npm',
-      'C:\\Users\\gordo\\AppData\\Roaming\\Python\\Python314\\Scripts',
+      '${USERPROFILE}/.local\\bin',
+      '${USERPROFILE}/AppData\\Local\\Programs\\Ollama',
+      '${USERPROFILE}/AppData\\Roaming\\npm',
+      '${USERPROFILE}/AppData\\Roaming\\Python\\Python314\\Scripts',
       [length]: 27
     ]
   }
@@ -6722,13 +6722,13 @@ Error response from daemon: container a941ac77ba654f9414fce4a9100f4360920d2cc76c
       'C:\\Program Files\\nodejs\\',
       'C:\\Program Files\\GitHub CLI\\',
       'C:\\Program Files\\Docker\\Docker\\resources\\bin',
-      'C:\\Users\\gordo\\AppData\\Local\\Programs\\oh-my-posh\\bin\\',
-      'C:\\Users\\gordo\\AppData\\Local\\Microsoft\\WindowsApps',
+      '${USERPROFILE}/AppData\\Local\\Programs\\oh-my-posh\\bin\\',
+      '${USERPROFILE}/AppData\\Local\\Microsoft\\WindowsApps',
       '',
-      'C:\\Users\\gordo\\.local\\bin',
-      'C:\\Users\\gordo\\AppData\\Local\\Programs\\Ollama',
-      'C:\\Users\\gordo\\AppData\\Roaming\\npm',
-      'C:\\Users\\gordo\\AppData\\Roaming\\Python\\Python314\\Scripts',
+      '${USERPROFILE}/.local\\bin',
+      '${USERPROFILE}/AppData\\Local\\Programs\\Ollama',
+      '${USERPROFILE}/AppData\\Roaming\\npm',
+      '${USERPROFILE}/AppData\\Roaming\\Python\\Python314\\Scripts',
       [length]: 27
     ]
   }
@@ -6780,13 +6780,13 @@ Error response from daemon: container a941ac77ba654f9414fce4a9100f4360920d2cc76c
       'C:\\Program Files\\nodejs\\',
       'C:\\Program Files\\GitHub CLI\\',
       'C:\\Program Files\\Docker\\Docker\\resources\\bin',
-      'C:\\Users\\gordo\\AppData\\Local\\Programs\\oh-my-posh\\bin\\',
-      'C:\\Users\\gordo\\AppData\\Local\\Microsoft\\WindowsApps',
+      '${USERPROFILE}/AppData\\Local\\Programs\\oh-my-posh\\bin\\',
+      '${USERPROFILE}/AppData\\Local\\Microsoft\\WindowsApps',
       '',
-      'C:\\Users\\gordo\\.local\\bin',
-      'C:\\Users\\gordo\\AppData\\Local\\Programs\\Ollama',
-      'C:\\Users\\gordo\\AppData\\Roaming\\npm',
-      'C:\\Users\\gordo\\AppData\\Roaming\\Python\\Python314\\Scripts',
+      '${USERPROFILE}/.local\\bin',
+      '${USERPROFILE}/AppData\\Local\\Programs\\Ollama',
+      '${USERPROFILE}/AppData\\Roaming\\npm',
+      '${USERPROFILE}/AppData\\Roaming\\Python\\Python314\\Scripts',
       [length]: 27
     ]
   }
@@ -6838,13 +6838,13 @@ Error response from daemon: container a941ac77ba654f9414fce4a9100f4360920d2cc76c
       'C:\\Program Files\\nodejs\\',
       'C:\\Program Files\\GitHub CLI\\',
       'C:\\Program Files\\Docker\\Docker\\resources\\bin',
-      'C:\\Users\\gordo\\AppData\\Local\\Programs\\oh-my-posh\\bin\\',
-      'C:\\Users\\gordo\\AppData\\Local\\Microsoft\\WindowsApps',
+      '${USERPROFILE}/AppData\\Local\\Programs\\oh-my-posh\\bin\\',
+      '${USERPROFILE}/AppData\\Local\\Microsoft\\WindowsApps',
       '',
-      'C:\\Users\\gordo\\.local\\bin',
-      'C:\\Users\\gordo\\AppData\\Local\\Programs\\Ollama',
-      'C:\\Users\\gordo\\AppData\\Roaming\\npm',
-      'C:\\Users\\gordo\\AppData\\Roaming\\Python\\Python314\\Scripts',
+      '${USERPROFILE}/.local\\bin',
+      '${USERPROFILE}/AppData\\Local\\Programs\\Ollama',
+      '${USERPROFILE}/AppData\\Roaming\\npm',
+      '${USERPROFILE}/AppData\\Roaming\\Python\\Python314\\Scripts',
       [length]: 27
     ]
   }
@@ -6896,13 +6896,13 @@ Error response from daemon: container a941ac77ba654f9414fce4a9100f4360920d2cc76c
       'C:\\Program Files\\nodejs\\',
       'C:\\Program Files\\GitHub CLI\\',
       'C:\\Program Files\\Docker\\Docker\\resources\\bin',
-      'C:\\Users\\gordo\\AppData\\Local\\Programs\\oh-my-posh\\bin\\',
-      'C:\\Users\\gordo\\AppData\\Local\\Microsoft\\WindowsApps',
+      '${USERPROFILE}/AppData\\Local\\Programs\\oh-my-posh\\bin\\',
+      '${USERPROFILE}/AppData\\Local\\Microsoft\\WindowsApps',
       '',
-      'C:\\Users\\gordo\\.local\\bin',
-      'C:\\Users\\gordo\\AppData\\Local\\Programs\\Ollama',
-      'C:\\Users\\gordo\\AppData\\Roaming\\npm',
-      'C:\\Users\\gordo\\AppData\\Roaming\\Python\\Python314\\Scripts',
+      '${USERPROFILE}/.local\\bin',
+      '${USERPROFILE}/AppData\\Local\\Programs\\Ollama',
+      '${USERPROFILE}/AppData\\Roaming\\npm',
+      '${USERPROFILE}/AppData\\Roaming\\Python\\Python314\\Scripts',
       [length]: 27
     ]
   }
@@ -6950,13 +6950,13 @@ Error response from daemon: container a941ac77ba654f9414fce4a9100f4360920d2cc76c
       'C:\\Program Files\\nodejs\\',
       'C:\\Program Files\\GitHub CLI\\',
       'C:\\Program Files\\Docker\\Docker\\resources\\bin',
-      'C:\\Users\\gordo\\AppData\\Local\\Programs\\oh-my-posh\\bin\\',
-      'C:\\Users\\gordo\\AppData\\Local\\Microsoft\\WindowsApps',
+      '${USERPROFILE}/AppData\\Local\\Programs\\oh-my-posh\\bin\\',
+      '${USERPROFILE}/AppData\\Local\\Microsoft\\WindowsApps',
       '',
-      'C:\\Users\\gordo\\.local\\bin',
-      'C:\\Users\\gordo\\AppData\\Local\\Programs\\Ollama',
-      'C:\\Users\\gordo\\AppData\\Roaming\\npm',
-      'C:\\Users\\gordo\\AppData\\Roaming\\Python\\Python314\\Scripts',
+      '${USERPROFILE}/.local\\bin',
+      '${USERPROFILE}/AppData\\Local\\Programs\\Ollama',
+      '${USERPROFILE}/AppData\\Roaming\\npm',
+      '${USERPROFILE}/AppData\\Roaming\\Python\\Python314\\Scripts',
       [length]: 27
     ]
   }
@@ -7003,13 +7003,13 @@ Error response from daemon: container 96e3800e495ef5c108abf658461d7a065c7f257d6b
       'C:\\Program Files\\nodejs\\',
       'C:\\Program Files\\GitHub CLI\\',
       'C:\\Program Files\\Docker\\Docker\\resources\\bin',
-      'C:\\Users\\gordo\\AppData\\Local\\Programs\\oh-my-posh\\bin\\',
-      'C:\\Users\\gordo\\AppData\\Local\\Microsoft\\WindowsApps',
+      '${USERPROFILE}/AppData\\Local\\Programs\\oh-my-posh\\bin\\',
+      '${USERPROFILE}/AppData\\Local\\Microsoft\\WindowsApps',
       '',
-      'C:\\Users\\gordo\\.local\\bin',
-      'C:\\Users\\gordo\\AppData\\Local\\Programs\\Ollama',
-      'C:\\Users\\gordo\\AppData\\Roaming\\npm',
-      'C:\\Users\\gordo\\AppData\\Roaming\\Python\\Python314\\Scripts',
+      '${USERPROFILE}/.local\\bin',
+      '${USERPROFILE}/AppData\\Local\\Programs\\Ollama',
+      '${USERPROFILE}/AppData\\Roaming\\npm',
+      '${USERPROFILE}/AppData\\Roaming\\Python\\Python314\\Scripts',
       [length]: 27
     ]
   }
@@ -7052,13 +7052,13 @@ Error response from daemon: container 96e3800e495ef5c108abf658461d7a065c7f257d6b
       'C:\\Program Files\\nodejs\\',
       'C:\\Program Files\\GitHub CLI\\',
       'C:\\Program Files\\Docker\\Docker\\resources\\bin',
-      'C:\\Users\\gordo\\AppData\\Local\\Programs\\oh-my-posh\\bin\\',
-      'C:\\Users\\gordo\\AppData\\Local\\Microsoft\\WindowsApps',
+      '${USERPROFILE}/AppData\\Local\\Programs\\oh-my-posh\\bin\\',
+      '${USERPROFILE}/AppData\\Local\\Microsoft\\WindowsApps',
       '',
-      'C:\\Users\\gordo\\.local\\bin',
-      'C:\\Users\\gordo\\AppData\\Local\\Programs\\Ollama',
-      'C:\\Users\\gordo\\AppData\\Roaming\\npm',
-      'C:\\Users\\gordo\\AppData\\Roaming\\Python\\Python314\\Scripts',
+      '${USERPROFILE}/.local\\bin',
+      '${USERPROFILE}/AppData\\Local\\Programs\\Ollama',
+      '${USERPROFILE}/AppData\\Roaming\\npm',
+      '${USERPROFILE}/AppData\\Roaming\\Python\\Python314\\Scripts',
       [length]: 27
     ]
   }
@@ -7105,13 +7105,13 @@ Error response from daemon: container 96e3800e495ef5c108abf658461d7a065c7f257d6b
       'C:\\Program Files\\nodejs\\',
       'C:\\Program Files\\GitHub CLI\\',
       'C:\\Program Files\\Docker\\Docker\\resources\\bin',
-      'C:\\Users\\gordo\\AppData\\Local\\Programs\\oh-my-posh\\bin\\',
-      'C:\\Users\\gordo\\AppData\\Local\\Microsoft\\WindowsApps',
+      '${USERPROFILE}/AppData\\Local\\Programs\\oh-my-posh\\bin\\',
+      '${USERPROFILE}/AppData\\Local\\Microsoft\\WindowsApps',
       '',
-      'C:\\Users\\gordo\\.local\\bin',
-      'C:\\Users\\gordo\\AppData\\Local\\Programs\\Ollama',
-      'C:\\Users\\gordo\\AppData\\Roaming\\npm',
-      'C:\\Users\\gordo\\AppData\\Roaming\\Python\\Python314\\Scripts',
+      '${USERPROFILE}/.local\\bin',
+      '${USERPROFILE}/AppData\\Local\\Programs\\Ollama',
+      '${USERPROFILE}/AppData\\Roaming\\npm',
+      '${USERPROFILE}/AppData\\Roaming\\Python\\Python314\\Scripts',
       [length]: 27
     ]
   }
@@ -7154,13 +7154,13 @@ Error response from daemon: container 96e3800e495ef5c108abf658461d7a065c7f257d6b
       'C:\\Program Files\\nodejs\\',
       'C:\\Program Files\\GitHub CLI\\',
       'C:\\Program Files\\Docker\\Docker\\resources\\bin',
-      'C:\\Users\\gordo\\AppData\\Local\\Programs\\oh-my-posh\\bin\\',
-      'C:\\Users\\gordo\\AppData\\Local\\Microsoft\\WindowsApps',
+      '${USERPROFILE}/AppData\\Local\\Programs\\oh-my-posh\\bin\\',
+      '${USERPROFILE}/AppData\\Local\\Microsoft\\WindowsApps',
       '',
-      'C:\\Users\\gordo\\.local\\bin',
-      'C:\\Users\\gordo\\AppData\\Local\\Programs\\Ollama',
-      'C:\\Users\\gordo\\AppData\\Roaming\\npm',
-      'C:\\Users\\gordo\\AppData\\Roaming\\Python\\Python314\\Scripts',
+      '${USERPROFILE}/.local\\bin',
+      '${USERPROFILE}/AppData\\Local\\Programs\\Ollama',
+      '${USERPROFILE}/AppData\\Roaming\\npm',
+      '${USERPROFILE}/AppData\\Roaming\\Python\\Python314\\Scripts',
       [length]: 27
     ]
   }
@@ -7206,13 +7206,13 @@ failed to connect to the docker API at npipe:////./pipe/dockerDesktopLinuxEngine
       'C:\\Program Files\\nodejs\\',
       'C:\\Program Files\\GitHub CLI\\',
       'C:\\Program Files\\Docker\\Docker\\resources\\bin',
-      'C:\\Users\\gordo\\AppData\\Local\\Programs\\oh-my-posh\\bin\\',
-      'C:\\Users\\gordo\\AppData\\Local\\Microsoft\\WindowsApps',
+      '${USERPROFILE}/AppData\\Local\\Programs\\oh-my-posh\\bin\\',
+      '${USERPROFILE}/AppData\\Local\\Microsoft\\WindowsApps',
       '',
-      'C:\\Users\\gordo\\.local\\bin',
-      'C:\\Users\\gordo\\AppData\\Local\\Programs\\Ollama',
-      'C:\\Users\\gordo\\AppData\\Roaming\\npm',
-      'C:\\Users\\gordo\\AppData\\Roaming\\Python\\Python314\\Scripts',
+      '${USERPROFILE}/.local\\bin',
+      '${USERPROFILE}/AppData\\Local\\Programs\\Ollama',
+      '${USERPROFILE}/AppData\\Roaming\\npm',
+      '${USERPROFILE}/AppData\\Roaming\\Python\\Python314\\Scripts',
       [length]: 27
     ]
   }
@@ -7264,13 +7264,13 @@ failed to connect to the docker API at npipe:////./pipe/dockerDesktopLinuxEngine
       'C:\\Program Files\\nodejs\\',
       'C:\\Program Files\\GitHub CLI\\',
       'C:\\Program Files\\Docker\\Docker\\resources\\bin',
-      'C:\\Users\\gordo\\AppData\\Local\\Programs\\oh-my-posh\\bin\\',
-      'C:\\Users\\gordo\\AppData\\Local\\Microsoft\\WindowsApps',
+      '${USERPROFILE}/AppData\\Local\\Programs\\oh-my-posh\\bin\\',
+      '${USERPROFILE}/AppData\\Local\\Microsoft\\WindowsApps',
       '',
-      'C:\\Users\\gordo\\.local\\bin',
-      'C:\\Users\\gordo\\AppData\\Local\\Programs\\Ollama',
-      'C:\\Users\\gordo\\AppData\\Roaming\\npm',
-      'C:\\Users\\gordo\\AppData\\Roaming\\Python\\Python314\\Scripts',
+      '${USERPROFILE}/.local\\bin',
+      '${USERPROFILE}/AppData\\Local\\Programs\\Ollama',
+      '${USERPROFILE}/AppData\\Roaming\\npm',
+      '${USERPROFILE}/AppData\\Roaming\\Python\\Python314\\Scripts',
       [length]: 27
     ]
   }
@@ -7322,13 +7322,13 @@ failed to connect to the docker API at npipe:////./pipe/dockerDesktopLinuxEngine
       'C:\\Program Files\\nodejs\\',
       'C:\\Program Files\\GitHub CLI\\',
       'C:\\Program Files\\Docker\\Docker\\resources\\bin',
-      'C:\\Users\\gordo\\AppData\\Local\\Programs\\oh-my-posh\\bin\\',
-      'C:\\Users\\gordo\\AppData\\Local\\Microsoft\\WindowsApps',
+      '${USERPROFILE}/AppData\\Local\\Programs\\oh-my-posh\\bin\\',
+      '${USERPROFILE}/AppData\\Local\\Microsoft\\WindowsApps',
       '',
-      'C:\\Users\\gordo\\.local\\bin',
-      'C:\\Users\\gordo\\AppData\\Local\\Programs\\Ollama',
-      'C:\\Users\\gordo\\AppData\\Roaming\\npm',
-      'C:\\Users\\gordo\\AppData\\Roaming\\Python\\Python314\\Scripts',
+      '${USERPROFILE}/.local\\bin',
+      '${USERPROFILE}/AppData\\Local\\Programs\\Ollama',
+      '${USERPROFILE}/AppData\\Roaming\\npm',
+      '${USERPROFILE}/AppData\\Roaming\\Python\\Python314\\Scripts',
       [length]: 27
     ]
   }
@@ -7379,13 +7379,13 @@ failed to connect to the docker API at npipe:////./pipe/dockerDesktopLinuxEngine
       'C:\\Program Files\\nodejs\\',
       'C:\\Program Files\\GitHub CLI\\',
       'C:\\Program Files\\Docker\\Docker\\resources\\bin',
-      'C:\\Users\\gordo\\AppData\\Local\\Programs\\oh-my-posh\\bin\\',
-      'C:\\Users\\gordo\\AppData\\Local\\Microsoft\\WindowsApps',
+      '${USERPROFILE}/AppData\\Local\\Programs\\oh-my-posh\\bin\\',
+      '${USERPROFILE}/AppData\\Local\\Microsoft\\WindowsApps',
       '',
-      'C:\\Users\\gordo\\.local\\bin',
-      'C:\\Users\\gordo\\AppData\\Local\\Programs\\Ollama',
-      'C:\\Users\\gordo\\AppData\\Roaming\\npm',
-      'C:\\Users\\gordo\\AppData\\Roaming\\Python\\Python314\\Scripts',
+      '${USERPROFILE}/.local\\bin',
+      '${USERPROFILE}/AppData\\Local\\Programs\\Ollama',
+      '${USERPROFILE}/AppData\\Roaming\\npm',
+      '${USERPROFILE}/AppData\\Roaming\\Python\\Python314\\Scripts',
       [length]: 27
     ]
   }
@@ -7432,13 +7432,13 @@ Error response from daemon: container 96e3800e495ef5c108abf658461d7a065c7f257d6b
       'C:\\Program Files\\nodejs\\',
       'C:\\Program Files\\GitHub CLI\\',
       'C:\\Program Files\\Docker\\Docker\\resources\\bin',
-      'C:\\Users\\gordo\\AppData\\Local\\Programs\\oh-my-posh\\bin\\',
-      'C:\\Users\\gordo\\AppData\\Local\\Microsoft\\WindowsApps',
+      '${USERPROFILE}/AppData\\Local\\Programs\\oh-my-posh\\bin\\',
+      '${USERPROFILE}/AppData\\Local\\Microsoft\\WindowsApps',
       '',
-      'C:\\Users\\gordo\\.local\\bin',
-      'C:\\Users\\gordo\\AppData\\Local\\Programs\\Ollama',
-      'C:\\Users\\gordo\\AppData\\Roaming\\npm',
-      'C:\\Users\\gordo\\AppData\\Roaming\\Python\\Python314\\Scripts',
+      '${USERPROFILE}/.local\\bin',
+      '${USERPROFILE}/AppData\\Local\\Programs\\Ollama',
+      '${USERPROFILE}/AppData\\Roaming\\npm',
+      '${USERPROFILE}/AppData\\Roaming\\Python\\Python314\\Scripts',
       [length]: 27
     ]
   }
@@ -7483,13 +7483,13 @@ Error response from daemon: container 96e3800e495ef5c108abf658461d7a065c7f257d6b
       'C:\\Program Files\\nodejs\\',
       'C:\\Program Files\\GitHub CLI\\',
       'C:\\Program Files\\Docker\\Docker\\resources\\bin',
-      'C:\\Users\\gordo\\AppData\\Local\\Programs\\oh-my-posh\\bin\\',
-      'C:\\Users\\gordo\\AppData\\Local\\Microsoft\\WindowsApps',
+      '${USERPROFILE}/AppData\\Local\\Programs\\oh-my-posh\\bin\\',
+      '${USERPROFILE}/AppData\\Local\\Microsoft\\WindowsApps',
       '',
-      'C:\\Users\\gordo\\.local\\bin',
-      'C:\\Users\\gordo\\AppData\\Local\\Programs\\Ollama',
-      'C:\\Users\\gordo\\AppData\\Roaming\\npm',
-      'C:\\Users\\gordo\\AppData\\Roaming\\Python\\Python314\\Scripts',
+      '${USERPROFILE}/.local\\bin',
+      '${USERPROFILE}/AppData\\Local\\Programs\\Ollama',
+      '${USERPROFILE}/AppData\\Roaming\\npm',
+      '${USERPROFILE}/AppData\\Roaming\\Python\\Python314\\Scripts',
       [length]: 27
     ]
   }
@@ -7541,13 +7541,13 @@ Error response from daemon: container 96e3800e495ef5c108abf658461d7a065c7f257d6b
       'C:\\Program Files\\nodejs\\',
       'C:\\Program Files\\GitHub CLI\\',
       'C:\\Program Files\\Docker\\Docker\\resources\\bin',
-      'C:\\Users\\gordo\\AppData\\Local\\Programs\\oh-my-posh\\bin\\',
-      'C:\\Users\\gordo\\AppData\\Local\\Microsoft\\WindowsApps',
+      '${USERPROFILE}/AppData\\Local\\Programs\\oh-my-posh\\bin\\',
+      '${USERPROFILE}/AppData\\Local\\Microsoft\\WindowsApps',
       '',
-      'C:\\Users\\gordo\\.local\\bin',
-      'C:\\Users\\gordo\\AppData\\Local\\Programs\\Ollama',
-      'C:\\Users\\gordo\\AppData\\Roaming\\npm',
-      'C:\\Users\\gordo\\AppData\\Roaming\\Python\\Python314\\Scripts',
+      '${USERPROFILE}/.local\\bin',
+      '${USERPROFILE}/AppData\\Local\\Programs\\Ollama',
+      '${USERPROFILE}/AppData\\Roaming\\npm',
+      '${USERPROFILE}/AppData\\Roaming\\Python\\Python314\\Scripts',
       [length]: 27
     ]
   }
@@ -7649,13 +7649,13 @@ Error response from daemon: container 96e3800e495ef5c108abf658461d7a065c7f257d6b
       'C:\\Program Files\\nodejs\\',
       'C:\\Program Files\\GitHub CLI\\',
       'C:\\Program Files\\Docker\\Docker\\resources\\bin',
-      'C:\\Users\\gordo\\AppData\\Local\\Programs\\oh-my-posh\\bin\\',
-      'C:\\Users\\gordo\\AppData\\Local\\Microsoft\\WindowsApps',
+      '${USERPROFILE}/AppData\\Local\\Programs\\oh-my-posh\\bin\\',
+      '${USERPROFILE}/AppData\\Local\\Microsoft\\WindowsApps',
       '',
-      'C:\\Users\\gordo\\.local\\bin',
-      'C:\\Users\\gordo\\AppData\\Local\\Programs\\Ollama',
-      'C:\\Users\\gordo\\AppData\\Roaming\\npm',
-      'C:\\Users\\gordo\\AppData\\Roaming\\Python\\Python314\\Scripts',
+      '${USERPROFILE}/.local\\bin',
+      '${USERPROFILE}/AppData\\Local\\Programs\\Ollama',
+      '${USERPROFILE}/AppData\\Roaming\\npm',
+      '${USERPROFILE}/AppData\\Roaming\\Python\\Python314\\Scripts',
       [length]: 27
     ]
   }
@@ -7704,13 +7704,13 @@ ModuleNotFoundError: No module named 'requests'
       'C:\\Program Files\\nodejs\\',
       'C:\\Program Files\\GitHub CLI\\',
       'C:\\Program Files\\Docker\\Docker\\resources\\bin',
-      'C:\\Users\\gordo\\AppData\\Local\\Programs\\oh-my-posh\\bin\\',
-      'C:\\Users\\gordo\\AppData\\Local\\Microsoft\\WindowsApps',
+      '${USERPROFILE}/AppData\\Local\\Programs\\oh-my-posh\\bin\\',
+      '${USERPROFILE}/AppData\\Local\\Microsoft\\WindowsApps',
       '',
-      'C:\\Users\\gordo\\.local\\bin',
-      'C:\\Users\\gordo\\AppData\\Local\\Programs\\Ollama',
-      'C:\\Users\\gordo\\AppData\\Roaming\\npm',
-      'C:\\Users\\gordo\\AppData\\Roaming\\Python\\Python314\\Scripts',
+      '${USERPROFILE}/.local\\bin',
+      '${USERPROFILE}/AppData\\Local\\Programs\\Ollama',
+      '${USERPROFILE}/AppData\\Roaming\\npm',
+      '${USERPROFILE}/AppData\\Roaming\\Python\\Python314\\Scripts',
       [length]: 27
     ]
   }
@@ -7759,13 +7759,13 @@ ModuleNotFoundError: No module named 'requests'
       'C:\\Program Files\\nodejs\\',
       'C:\\Program Files\\GitHub CLI\\',
       'C:\\Program Files\\Docker\\Docker\\resources\\bin',
-      'C:\\Users\\gordo\\AppData\\Local\\Programs\\oh-my-posh\\bin\\',
-      'C:\\Users\\gordo\\AppData\\Local\\Microsoft\\WindowsApps',
+      '${USERPROFILE}/AppData\\Local\\Programs\\oh-my-posh\\bin\\',
+      '${USERPROFILE}/AppData\\Local\\Microsoft\\WindowsApps',
       '',
-      'C:\\Users\\gordo\\.local\\bin',
-      'C:\\Users\\gordo\\AppData\\Local\\Programs\\Ollama',
-      'C:\\Users\\gordo\\AppData\\Roaming\\npm',
-      'C:\\Users\\gordo\\AppData\\Roaming\\Python\\Python314\\Scripts',
+      '${USERPROFILE}/.local\\bin',
+      '${USERPROFILE}/AppData\\Local\\Programs\\Ollama',
+      '${USERPROFILE}/AppData\\Roaming\\npm',
+      '${USERPROFILE}/AppData\\Roaming\\Python\\Python314\\Scripts',
       [length]: 27
     ]
   }
@@ -7812,13 +7812,13 @@ ModuleNotFoundError: No module named 'mcp'
       'C:\\Program Files\\nodejs\\',
       'C:\\Program Files\\GitHub CLI\\',
       'C:\\Program Files\\Docker\\Docker\\resources\\bin',
-      'C:\\Users\\gordo\\AppData\\Local\\Programs\\oh-my-posh\\bin\\',
-      'C:\\Users\\gordo\\AppData\\Local\\Microsoft\\WindowsApps',
+      '${USERPROFILE}/AppData\\Local\\Programs\\oh-my-posh\\bin\\',
+      '${USERPROFILE}/AppData\\Local\\Microsoft\\WindowsApps',
       '',
-      'C:\\Users\\gordo\\.local\\bin',
-      'C:\\Users\\gordo\\AppData\\Local\\Programs\\Ollama',
-      'C:\\Users\\gordo\\AppData\\Roaming\\npm',
-      'C:\\Users\\gordo\\AppData\\Roaming\\Python\\Python314\\Scripts',
+      '${USERPROFILE}/.local\\bin',
+      '${USERPROFILE}/AppData\\Local\\Programs\\Ollama',
+      '${USERPROFILE}/AppData\\Roaming\\npm',
+      '${USERPROFILE}/AppData\\Roaming\\Python\\Python314\\Scripts',
       [length]: 27
     ]
   }
@@ -7867,13 +7867,13 @@ ModuleNotFoundError: No module named 'mcp'
       'C:\\Program Files\\nodejs\\',
       'C:\\Program Files\\GitHub CLI\\',
       'C:\\Program Files\\Docker\\Docker\\resources\\bin',
-      'C:\\Users\\gordo\\AppData\\Local\\Programs\\oh-my-posh\\bin\\',
-      'C:\\Users\\gordo\\AppData\\Local\\Microsoft\\WindowsApps',
+      '${USERPROFILE}/AppData\\Local\\Programs\\oh-my-posh\\bin\\',
+      '${USERPROFILE}/AppData\\Local\\Microsoft\\WindowsApps',
       '',
-      'C:\\Users\\gordo\\.local\\bin',
-      'C:\\Users\\gordo\\AppData\\Local\\Programs\\Ollama',
-      'C:\\Users\\gordo\\AppData\\Roaming\\npm',
-      'C:\\Users\\gordo\\AppData\\Roaming\\Python\\Python314\\Scripts',
+      '${USERPROFILE}/.local\\bin',
+      '${USERPROFILE}/AppData\\Local\\Programs\\Ollama',
+      '${USERPROFILE}/AppData\\Roaming\\npm',
+      '${USERPROFILE}/AppData\\Roaming\\Python\\Python314\\Scripts',
       [length]: 27
     ]
   }
@@ -7920,13 +7920,13 @@ ModuleNotFoundError: No module named 'mcp'
       'C:\\Program Files\\nodejs\\',
       'C:\\Program Files\\GitHub CLI\\',
       'C:\\Program Files\\Docker\\Docker\\resources\\bin',
-      'C:\\Users\\gordo\\AppData\\Local\\Programs\\oh-my-posh\\bin\\',
-      'C:\\Users\\gordo\\AppData\\Local\\Microsoft\\WindowsApps',
+      '${USERPROFILE}/AppData\\Local\\Programs\\oh-my-posh\\bin\\',
+      '${USERPROFILE}/AppData\\Local\\Microsoft\\WindowsApps',
       '',
-      'C:\\Users\\gordo\\.local\\bin',
-      'C:\\Users\\gordo\\AppData\\Local\\Programs\\Ollama',
-      'C:\\Users\\gordo\\AppData\\Roaming\\npm',
-      'C:\\Users\\gordo\\AppData\\Roaming\\Python\\Python314\\Scripts',
+      '${USERPROFILE}/.local\\bin',
+      '${USERPROFILE}/AppData\\Local\\Programs\\Ollama',
+      '${USERPROFILE}/AppData\\Roaming\\npm',
+      '${USERPROFILE}/AppData\\Roaming\\Python\\Python314\\Scripts',
       [length]: 27
     ]
   }
@@ -7973,13 +7973,13 @@ Error response from daemon: container 628fc66e028230c430b982d81b9b12d08b730214c3
       'C:\\Program Files\\nodejs\\',
       'C:\\Program Files\\GitHub CLI\\',
       'C:\\Program Files\\Docker\\Docker\\resources\\bin',
-      'C:\\Users\\gordo\\AppData\\Local\\Programs\\oh-my-posh\\bin\\',
-      'C:\\Users\\gordo\\AppData\\Local\\Microsoft\\WindowsApps',
+      '${USERPROFILE}/AppData\\Local\\Programs\\oh-my-posh\\bin\\',
+      '${USERPROFILE}/AppData\\Local\\Microsoft\\WindowsApps',
       '',
-      'C:\\Users\\gordo\\.local\\bin',
-      'C:\\Users\\gordo\\AppData\\Local\\Programs\\Ollama',
-      'C:\\Users\\gordo\\AppData\\Roaming\\npm',
-      'C:\\Users\\gordo\\AppData\\Roaming\\Python\\Python314\\Scripts',
+      '${USERPROFILE}/.local\\bin',
+      '${USERPROFILE}/AppData\\Local\\Programs\\Ollama',
+      '${USERPROFILE}/AppData\\Roaming\\npm',
+      '${USERPROFILE}/AppData\\Roaming\\Python\\Python314\\Scripts',
       [length]: 27
     ]
   }
@@ -8027,13 +8027,13 @@ ModuleNotFoundError: No module named 'mcp'
       'C:\\Program Files\\nodejs\\',
       'C:\\Program Files\\GitHub CLI\\',
       'C:\\Program Files\\Docker\\Docker\\resources\\bin',
-      'C:\\Users\\gordo\\AppData\\Local\\Programs\\oh-my-posh\\bin\\',
-      'C:\\Users\\gordo\\AppData\\Local\\Microsoft\\WindowsApps',
+      '${USERPROFILE}/AppData\\Local\\Programs\\oh-my-posh\\bin\\',
+      '${USERPROFILE}/AppData\\Local\\Microsoft\\WindowsApps',
       '',
-      'C:\\Users\\gordo\\.local\\bin',
-      'C:\\Users\\gordo\\AppData\\Local\\Programs\\Ollama',
-      'C:\\Users\\gordo\\AppData\\Roaming\\npm',
-      'C:\\Users\\gordo\\AppData\\Roaming\\Python\\Python314\\Scripts',
+      '${USERPROFILE}/.local\\bin',
+      '${USERPROFILE}/AppData\\Local\\Programs\\Ollama',
+      '${USERPROFILE}/AppData\\Roaming\\npm',
+      '${USERPROFILE}/AppData\\Roaming\\Python\\Python314\\Scripts',
       [length]: 27
     ]
   }
@@ -8076,13 +8076,13 @@ ModuleNotFoundError: No module named 'mcp'
       'C:\\Program Files\\nodejs\\',
       'C:\\Program Files\\GitHub CLI\\',
       'C:\\Program Files\\Docker\\Docker\\resources\\bin',
-      'C:\\Users\\gordo\\AppData\\Local\\Programs\\oh-my-posh\\bin\\',
-      'C:\\Users\\gordo\\AppData\\Local\\Microsoft\\WindowsApps',
+      '${USERPROFILE}/AppData\\Local\\Programs\\oh-my-posh\\bin\\',
+      '${USERPROFILE}/AppData\\Local\\Microsoft\\WindowsApps',
       '',
-      'C:\\Users\\gordo\\.local\\bin',
-      'C:\\Users\\gordo\\AppData\\Local\\Programs\\Ollama',
-      'C:\\Users\\gordo\\AppData\\Roaming\\npm',
-      'C:\\Users\\gordo\\AppData\\Roaming\\Python\\Python314\\Scripts',
+      '${USERPROFILE}/.local\\bin',
+      '${USERPROFILE}/AppData\\Local\\Programs\\Ollama',
+      '${USERPROFILE}/AppData\\Roaming\\npm',
+      '${USERPROFILE}/AppData\\Roaming\\Python\\Python314\\Scripts',
       [length]: 27
     ]
   }
@@ -8134,13 +8134,13 @@ ModuleNotFoundError: No module named 'mcp'
       'C:\\Program Files\\nodejs\\',
       'C:\\Program Files\\GitHub CLI\\',
       'C:\\Program Files\\Docker\\Docker\\resources\\bin',
-      'C:\\Users\\gordo\\AppData\\Local\\Programs\\oh-my-posh\\bin\\',
-      'C:\\Users\\gordo\\AppData\\Local\\Microsoft\\WindowsApps',
+      '${USERPROFILE}/AppData\\Local\\Programs\\oh-my-posh\\bin\\',
+      '${USERPROFILE}/AppData\\Local\\Microsoft\\WindowsApps',
       '',
-      'C:\\Users\\gordo\\.local\\bin',
-      'C:\\Users\\gordo\\AppData\\Local\\Programs\\Ollama',
-      'C:\\Users\\gordo\\AppData\\Roaming\\npm',
-      'C:\\Users\\gordo\\AppData\\Roaming\\Python\\Python314\\Scripts',
+      '${USERPROFILE}/.local\\bin',
+      '${USERPROFILE}/AppData\\Local\\Programs\\Ollama',
+      '${USERPROFILE}/AppData\\Roaming\\npm',
+      '${USERPROFILE}/AppData\\Roaming\\Python\\Python314\\Scripts',
       [length]: 27
     ]
   }
@@ -8264,14 +8264,14 @@ ModuleNotFoundError: No module named 'mcp'
       'C:\\Program Files\\nodejs\\',
       'C:\\Program Files\\GitHub CLI\\',
       'C:\\Program Files\\Docker\\Docker\\resources\\bin',
-      'C:\\Users\\gordo\\AppData\\Local\\Programs\\oh-my-posh\\bin\\',
-      'C:\\Users\\gordo\\AppData\\Local\\Microsoft\\WindowsApps',
+      '${USERPROFILE}/AppData\\Local\\Programs\\oh-my-posh\\bin\\',
+      '${USERPROFILE}/AppData\\Local\\Microsoft\\WindowsApps',
       '',
-      'C:\\Users\\gordo\\.local\\bin',
-      'C:\\Users\\gordo\\AppData\\Local\\Programs\\Ollama',
-      'C:\\Users\\gordo\\AppData\\Roaming\\npm',
-      'C:\\Users\\gordo\\AppData\\Roaming\\Python\\Python314\\Scripts',
-      'C:\\Users\\gordo\\.bun\\bin',
+      '${USERPROFILE}/.local\\bin',
+      '${USERPROFILE}/AppData\\Local\\Programs\\Ollama',
+      '${USERPROFILE}/AppData\\Roaming\\npm',
+      '${USERPROFILE}/AppData\\Roaming\\Python\\Python314\\Scripts',
+      '${USERPROFILE}/.bun\\bin',
       [length]: 28
     ]
   }
@@ -8386,14 +8386,14 @@ ModuleNotFoundError: No module named 'mcp'
       'C:\\Program Files\\nodejs\\',
       'C:\\Program Files\\GitHub CLI\\',
       'C:\\Program Files\\Docker\\Docker\\resources\\bin',
-      'C:\\Users\\gordo\\AppData\\Local\\Programs\\oh-my-posh\\bin\\',
-      'C:\\Users\\gordo\\AppData\\Local\\Microsoft\\WindowsApps',
+      '${USERPROFILE}/AppData\\Local\\Programs\\oh-my-posh\\bin\\',
+      '${USERPROFILE}/AppData\\Local\\Microsoft\\WindowsApps',
       '',
-      'C:\\Users\\gordo\\.local\\bin',
-      'C:\\Users\\gordo\\AppData\\Local\\Programs\\Ollama',
-      'C:\\Users\\gordo\\AppData\\Roaming\\npm',
-      'C:\\Users\\gordo\\AppData\\Roaming\\Python\\Python314\\Scripts',
-      'C:\\Users\\gordo\\.bun\\bin',
+      '${USERPROFILE}/.local\\bin',
+      '${USERPROFILE}/AppData\\Local\\Programs\\Ollama',
+      '${USERPROFILE}/AppData\\Roaming\\npm',
+      '${USERPROFILE}/AppData\\Roaming\\Python\\Python314\\Scripts',
+      '${USERPROFILE}/.bun\\bin',
       [length]: 28
     ]
   }
@@ -8436,14 +8436,14 @@ ModuleNotFoundError: No module named 'mcp'
       'C:\\Program Files\\nodejs\\',
       'C:\\Program Files\\GitHub CLI\\',
       'C:\\Program Files\\Docker\\Docker\\resources\\bin',
-      'C:\\Users\\gordo\\AppData\\Local\\Programs\\oh-my-posh\\bin\\',
-      'C:\\Users\\gordo\\AppData\\Local\\Microsoft\\WindowsApps',
+      '${USERPROFILE}/AppData\\Local\\Programs\\oh-my-posh\\bin\\',
+      '${USERPROFILE}/AppData\\Local\\Microsoft\\WindowsApps',
       '',
-      'C:\\Users\\gordo\\.local\\bin',
-      'C:\\Users\\gordo\\AppData\\Local\\Programs\\Ollama',
-      'C:\\Users\\gordo\\AppData\\Roaming\\npm',
-      'C:\\Users\\gordo\\AppData\\Roaming\\Python\\Python314\\Scripts',
-      'C:\\Users\\gordo\\.bun\\bin',
+      '${USERPROFILE}/.local\\bin',
+      '${USERPROFILE}/AppData\\Local\\Programs\\Ollama',
+      '${USERPROFILE}/AppData\\Roaming\\npm',
+      '${USERPROFILE}/AppData\\Roaming\\Python\\Python314\\Scripts',
+      '${USERPROFILE}/.bun\\bin',
       [length]: 28
     ]
   }
@@ -8489,14 +8489,14 @@ ModuleNotFoundError: No module named 'mcp'
       'C:\\Program Files\\nodejs\\',
       'C:\\Program Files\\GitHub CLI\\',
       'C:\\Program Files\\Docker\\Docker\\resources\\bin',
-      'C:\\Users\\gordo\\AppData\\Local\\Programs\\oh-my-posh\\bin\\',
-      'C:\\Users\\gordo\\AppData\\Local\\Microsoft\\WindowsApps',
+      '${USERPROFILE}/AppData\\Local\\Programs\\oh-my-posh\\bin\\',
+      '${USERPROFILE}/AppData\\Local\\Microsoft\\WindowsApps',
       '',
-      'C:\\Users\\gordo\\.local\\bin',
-      'C:\\Users\\gordo\\AppData\\Local\\Programs\\Ollama',
-      'C:\\Users\\gordo\\AppData\\Roaming\\npm',
-      'C:\\Users\\gordo\\AppData\\Roaming\\Python\\Python314\\Scripts',
-      'C:\\Users\\gordo\\.bun\\bin',
+      '${USERPROFILE}/.local\\bin',
+      '${USERPROFILE}/AppData\\Local\\Programs\\Ollama',
+      '${USERPROFILE}/AppData\\Roaming\\npm',
+      '${USERPROFILE}/AppData\\Roaming\\Python\\Python314\\Scripts',
+      '${USERPROFILE}/.bun\\bin',
       [length]: 28
     ]
   }
@@ -8543,14 +8543,14 @@ ModuleNotFoundError: No module named 'mcp'
       'C:\\Program Files\\nodejs\\',
       'C:\\Program Files\\GitHub CLI\\',
       'C:\\Program Files\\Docker\\Docker\\resources\\bin',
-      'C:\\Users\\gordo\\AppData\\Local\\Programs\\oh-my-posh\\bin\\',
-      'C:\\Users\\gordo\\AppData\\Local\\Microsoft\\WindowsApps',
+      '${USERPROFILE}/AppData\\Local\\Programs\\oh-my-posh\\bin\\',
+      '${USERPROFILE}/AppData\\Local\\Microsoft\\WindowsApps',
       '',
-      'C:\\Users\\gordo\\.local\\bin',
-      'C:\\Users\\gordo\\AppData\\Local\\Programs\\Ollama',
-      'C:\\Users\\gordo\\AppData\\Roaming\\npm',
-      'C:\\Users\\gordo\\AppData\\Roaming\\Python\\Python314\\Scripts',
-      'C:\\Users\\gordo\\.bun\\bin',
+      '${USERPROFILE}/.local\\bin',
+      '${USERPROFILE}/AppData\\Local\\Programs\\Ollama',
+      '${USERPROFILE}/AppData\\Roaming\\npm',
+      '${USERPROFILE}/AppData\\Roaming\\Python\\Python314\\Scripts',
+      '${USERPROFILE}/.bun\\bin',
       [length]: 28
     ]
   }
@@ -8596,14 +8596,14 @@ ModuleNotFoundError: No module named 'mcp'
       'C:\\Program Files\\nodejs\\',
       'C:\\Program Files\\GitHub CLI\\',
       'C:\\Program Files\\Docker\\Docker\\resources\\bin',
-      'C:\\Users\\gordo\\AppData\\Local\\Programs\\oh-my-posh\\bin\\',
-      'C:\\Users\\gordo\\AppData\\Local\\Microsoft\\WindowsApps',
+      '${USERPROFILE}/AppData\\Local\\Programs\\oh-my-posh\\bin\\',
+      '${USERPROFILE}/AppData\\Local\\Microsoft\\WindowsApps',
       '',
-      'C:\\Users\\gordo\\.local\\bin',
-      'C:\\Users\\gordo\\AppData\\Local\\Programs\\Ollama',
-      'C:\\Users\\gordo\\AppData\\Roaming\\npm',
-      'C:\\Users\\gordo\\AppData\\Roaming\\Python\\Python314\\Scripts',
-      'C:\\Users\\gordo\\.bun\\bin',
+      '${USERPROFILE}/.local\\bin',
+      '${USERPROFILE}/AppData\\Local\\Programs\\Ollama',
+      '${USERPROFILE}/AppData\\Roaming\\npm',
+      '${USERPROFILE}/AppData\\Roaming\\Python\\Python314\\Scripts',
+      '${USERPROFILE}/.bun\\bin',
       [length]: 28
     ]
   }
@@ -8650,14 +8650,14 @@ ModuleNotFoundError: No module named 'mcp'
       'C:\\Program Files\\nodejs\\',
       'C:\\Program Files\\GitHub CLI\\',
       'C:\\Program Files\\Docker\\Docker\\resources\\bin',
-      'C:\\Users\\gordo\\AppData\\Local\\Programs\\oh-my-posh\\bin\\',
-      'C:\\Users\\gordo\\AppData\\Local\\Microsoft\\WindowsApps',
+      '${USERPROFILE}/AppData\\Local\\Programs\\oh-my-posh\\bin\\',
+      '${USERPROFILE}/AppData\\Local\\Microsoft\\WindowsApps',
       '',
-      'C:\\Users\\gordo\\.local\\bin',
-      'C:\\Users\\gordo\\AppData\\Local\\Programs\\Ollama',
-      'C:\\Users\\gordo\\AppData\\Roaming\\npm',
-      'C:\\Users\\gordo\\AppData\\Roaming\\Python\\Python314\\Scripts',
-      'C:\\Users\\gordo\\.bun\\bin',
+      '${USERPROFILE}/.local\\bin',
+      '${USERPROFILE}/AppData\\Local\\Programs\\Ollama',
+      '${USERPROFILE}/AppData\\Roaming\\npm',
+      '${USERPROFILE}/AppData\\Roaming\\Python\\Python314\\Scripts',
+      '${USERPROFILE}/.bun\\bin',
       [length]: 28
     ]
   }
@@ -8853,14 +8853,14 @@ Name: mfa-device
       'C:\\Program Files\\nodejs\\',
       'C:\\Program Files\\GitHub CLI\\',
       'C:\\Program Files\\Docker\\Docker\\resources\\bin',
-      'C:\\Users\\gordo\\AppData\\Local\\Programs\\oh-my-posh\\bin\\',
-      'C:\\Users\\gordo\\AppData\\Local\\Microsoft\\WindowsApps',
+      '${USERPROFILE}/AppData\\Local\\Programs\\oh-my-posh\\bin\\',
+      '${USERPROFILE}/AppData\\Local\\Microsoft\\WindowsApps',
       '',
-      'C:\\Users\\gordo\\.local\\bin',
-      'C:\\Users\\gordo\\AppData\\Local\\Programs\\Ollama',
-      'C:\\Users\\gordo\\AppData\\Roaming\\npm',
-      'C:\\Users\\gordo\\AppData\\Roaming\\Python\\Python314\\Scripts',
-      'C:\\Users\\gordo\\.bun\\bin',
+      '${USERPROFILE}/.local\\bin',
+      '${USERPROFILE}/AppData\\Local\\Programs\\Ollama',
+      '${USERPROFILE}/AppData\\Roaming\\npm',
+      '${USERPROFILE}/AppData\\Roaming\\Python\\Python314\\Scripts',
+      '${USERPROFILE}/.bun\\bin',
       [length]: 28
     ]
   }
@@ -8952,14 +8952,14 @@ Name: mfa-device
       'C:\\Program Files\\nodejs\\',
       'C:\\Program Files\\GitHub CLI\\',
       'C:\\Program Files\\Docker\\Docker\\resources\\bin',
-      'C:\\Users\\gordo\\AppData\\Local\\Programs\\oh-my-posh\\bin\\',
-      'C:\\Users\\gordo\\AppData\\Local\\Microsoft\\WindowsApps',
+      '${USERPROFILE}/AppData\\Local\\Programs\\oh-my-posh\\bin\\',
+      '${USERPROFILE}/AppData\\Local\\Microsoft\\WindowsApps',
       '',
-      'C:\\Users\\gordo\\.local\\bin',
-      'C:\\Users\\gordo\\AppData\\Local\\Programs\\Ollama',
-      'C:\\Users\\gordo\\AppData\\Roaming\\npm',
-      'C:\\Users\\gordo\\AppData\\Roaming\\Python\\Python314\\Scripts',
-      'C:\\Users\\gordo\\.bun\\bin',
+      '${USERPROFILE}/.local\\bin',
+      '${USERPROFILE}/AppData\\Local\\Programs\\Ollama',
+      '${USERPROFILE}/AppData\\Roaming\\npm',
+      '${USERPROFILE}/AppData\\Roaming\\Python\\Python314\\Scripts',
+      '${USERPROFILE}/.bun\\bin',
       [length]: 28
     ]
   }
@@ -9177,14 +9177,14 @@ Name: mfa-device
       'C:\\Program Files\\nodejs\\',
       'C:\\Program Files\\GitHub CLI\\',
       'C:\\Program Files\\Docker\\Docker\\resources\\bin',
-      'C:\\Users\\gordo\\AppData\\Local\\Programs\\oh-my-posh\\bin\\',
-      'C:\\Users\\gordo\\AppData\\Local\\Microsoft\\WindowsApps',
+      '${USERPROFILE}/AppData\\Local\\Programs\\oh-my-posh\\bin\\',
+      '${USERPROFILE}/AppData\\Local\\Microsoft\\WindowsApps',
       '',
-      'C:\\Users\\gordo\\.local\\bin',
-      'C:\\Users\\gordo\\AppData\\Local\\Programs\\Ollama',
-      'C:\\Users\\gordo\\AppData\\Roaming\\npm',
-      'C:\\Users\\gordo\\AppData\\Roaming\\Python\\Python314\\Scripts',
-      'C:\\Users\\gordo\\.bun\\bin',
+      '${USERPROFILE}/.local\\bin',
+      '${USERPROFILE}/AppData\\Local\\Programs\\Ollama',
+      '${USERPROFILE}/AppData\\Roaming\\npm',
+      '${USERPROFILE}/AppData\\Roaming\\Python\\Python314\\Scripts',
+      '${USERPROFILE}/.bun\\bin',
       [length]: 28
     ]
   }
@@ -9231,14 +9231,14 @@ Name: mfa-device
       'C:\\Program Files\\nodejs\\',
       'C:\\Program Files\\GitHub CLI\\',
       'C:\\Program Files\\Docker\\Docker\\resources\\bin',
-      'C:\\Users\\gordo\\AppData\\Local\\Programs\\oh-my-posh\\bin\\',
-      'C:\\Users\\gordo\\AppData\\Local\\Microsoft\\WindowsApps',
+      '${USERPROFILE}/AppData\\Local\\Programs\\oh-my-posh\\bin\\',
+      '${USERPROFILE}/AppData\\Local\\Microsoft\\WindowsApps',
       '',
-      'C:\\Users\\gordo\\.local\\bin',
-      'C:\\Users\\gordo\\AppData\\Local\\Programs\\Ollama',
-      'C:\\Users\\gordo\\AppData\\Roaming\\npm',
-      'C:\\Users\\gordo\\AppData\\Roaming\\Python\\Python314\\Scripts',
-      'C:\\Users\\gordo\\.bun\\bin',
+      '${USERPROFILE}/.local\\bin',
+      '${USERPROFILE}/AppData\\Local\\Programs\\Ollama',
+      '${USERPROFILE}/AppData\\Roaming\\npm',
+      '${USERPROFILE}/AppData\\Roaming\\Python\\Python314\\Scripts',
+      '${USERPROFILE}/.bun\\bin',
       [length]: 28
     ]
   }
@@ -9281,14 +9281,14 @@ Name: mfa-device
       'C:\\Program Files\\nodejs\\',
       'C:\\Program Files\\GitHub CLI\\',
       'C:\\Program Files\\Docker\\Docker\\resources\\bin',
-      'C:\\Users\\gordo\\AppData\\Local\\Programs\\oh-my-posh\\bin\\',
-      'C:\\Users\\gordo\\AppData\\Local\\Microsoft\\WindowsApps',
+      '${USERPROFILE}/AppData\\Local\\Programs\\oh-my-posh\\bin\\',
+      '${USERPROFILE}/AppData\\Local\\Microsoft\\WindowsApps',
       '',
-      'C:\\Users\\gordo\\.local\\bin',
-      'C:\\Users\\gordo\\AppData\\Local\\Programs\\Ollama',
-      'C:\\Users\\gordo\\AppData\\Roaming\\npm',
-      'C:\\Users\\gordo\\AppData\\Roaming\\Python\\Python314\\Scripts',
-      'C:\\Users\\gordo\\.bun\\bin',
+      '${USERPROFILE}/.local\\bin',
+      '${USERPROFILE}/AppData\\Local\\Programs\\Ollama',
+      '${USERPROFILE}/AppData\\Roaming\\npm',
+      '${USERPROFILE}/AppData\\Roaming\\Python\\Python314\\Scripts',
+      '${USERPROFILE}/.bun\\bin',
       [length]: 28
     ]
   }
@@ -9344,14 +9344,14 @@ ModuleNotFoundError: No module named 'curl_cffi'
       'C:\\Program Files\\nodejs\\',
       'C:\\Program Files\\GitHub CLI\\',
       'C:\\Program Files\\Docker\\Docker\\resources\\bin',
-      'C:\\Users\\gordo\\AppData\\Local\\Programs\\oh-my-posh\\bin\\',
-      'C:\\Users\\gordo\\AppData\\Local\\Microsoft\\WindowsApps',
+      '${USERPROFILE}/AppData\\Local\\Programs\\oh-my-posh\\bin\\',
+      '${USERPROFILE}/AppData\\Local\\Microsoft\\WindowsApps',
       '',
-      'C:\\Users\\gordo\\.local\\bin',
-      'C:\\Users\\gordo\\AppData\\Local\\Programs\\Ollama',
-      'C:\\Users\\gordo\\AppData\\Roaming\\npm',
-      'C:\\Users\\gordo\\AppData\\Roaming\\Python\\Python314\\Scripts',
-      'C:\\Users\\gordo\\.bun\\bin',
+      '${USERPROFILE}/.local\\bin',
+      '${USERPROFILE}/AppData\\Local\\Programs\\Ollama',
+      '${USERPROFILE}/AppData\\Roaming\\npm',
+      '${USERPROFILE}/AppData\\Roaming\\Python\\Python314\\Scripts',
+      '${USERPROFILE}/.bun\\bin',
       [length]: 28
     ]
   }
@@ -9405,14 +9405,14 @@ ModuleNotFoundError: No module named 'curl_cffi'
       'C:\\Program Files\\nodejs\\',
       'C:\\Program Files\\GitHub CLI\\',
       'C:\\Program Files\\Docker\\Docker\\resources\\bin',
-      'C:\\Users\\gordo\\AppData\\Local\\Programs\\oh-my-posh\\bin\\',
-      'C:\\Users\\gordo\\AppData\\Local\\Microsoft\\WindowsApps',
+      '${USERPROFILE}/AppData\\Local\\Programs\\oh-my-posh\\bin\\',
+      '${USERPROFILE}/AppData\\Local\\Microsoft\\WindowsApps',
       '',
-      'C:\\Users\\gordo\\.local\\bin',
-      'C:\\Users\\gordo\\AppData\\Local\\Programs\\Ollama',
-      'C:\\Users\\gordo\\AppData\\Roaming\\npm',
-      'C:\\Users\\gordo\\AppData\\Roaming\\Python\\Python314\\Scripts',
-      'C:\\Users\\gordo\\.bun\\bin',
+      '${USERPROFILE}/.local\\bin',
+      '${USERPROFILE}/AppData\\Local\\Programs\\Ollama',
+      '${USERPROFILE}/AppData\\Roaming\\npm',
+      '${USERPROFILE}/AppData\\Roaming\\Python\\Python314\\Scripts',
+      '${USERPROFILE}/.bun\\bin',
       [length]: 28
     ]
   }
@@ -9468,14 +9468,14 @@ ModuleNotFoundError: No module named 'curl_cffi'
       'C:\\Program Files\\nodejs\\',
       'C:\\Program Files\\GitHub CLI\\',
       'C:\\Program Files\\Docker\\Docker\\resources\\bin',
-      'C:\\Users\\gordo\\AppData\\Local\\Programs\\oh-my-posh\\bin\\',
-      'C:\\Users\\gordo\\AppData\\Local\\Microsoft\\WindowsApps',
+      '${USERPROFILE}/AppData\\Local\\Programs\\oh-my-posh\\bin\\',
+      '${USERPROFILE}/AppData\\Local\\Microsoft\\WindowsApps',
       '',
-      'C:\\Users\\gordo\\.local\\bin',
-      'C:\\Users\\gordo\\AppData\\Local\\Programs\\Ollama',
-      'C:\\Users\\gordo\\AppData\\Roaming\\npm',
-      'C:\\Users\\gordo\\AppData\\Roaming\\Python\\Python314\\Scripts',
-      'C:\\Users\\gordo\\.bun\\bin',
+      '${USERPROFILE}/.local\\bin',
+      '${USERPROFILE}/AppData\\Local\\Programs\\Ollama',
+      '${USERPROFILE}/AppData\\Roaming\\npm',
+      '${USERPROFILE}/AppData\\Roaming\\Python\\Python314\\Scripts',
+      '${USERPROFILE}/.bun\\bin',
       [length]: 28
     ]
   }
@@ -9529,14 +9529,14 @@ ModuleNotFoundError: No module named 'curl_cffi'
       'C:\\Program Files\\nodejs\\',
       'C:\\Program Files\\GitHub CLI\\',
       'C:\\Program Files\\Docker\\Docker\\resources\\bin',
-      'C:\\Users\\gordo\\AppData\\Local\\Programs\\oh-my-posh\\bin\\',
-      'C:\\Users\\gordo\\AppData\\Local\\Microsoft\\WindowsApps',
+      '${USERPROFILE}/AppData\\Local\\Programs\\oh-my-posh\\bin\\',
+      '${USERPROFILE}/AppData\\Local\\Microsoft\\WindowsApps',
       '',
-      'C:\\Users\\gordo\\.local\\bin',
-      'C:\\Users\\gordo\\AppData\\Local\\Programs\\Ollama',
-      'C:\\Users\\gordo\\AppData\\Roaming\\npm',
-      'C:\\Users\\gordo\\AppData\\Roaming\\Python\\Python314\\Scripts',
-      'C:\\Users\\gordo\\.bun\\bin',
+      '${USERPROFILE}/.local\\bin',
+      '${USERPROFILE}/AppData\\Local\\Programs\\Ollama',
+      '${USERPROFILE}/AppData\\Roaming\\npm',
+      '${USERPROFILE}/AppData\\Roaming\\Python\\Python314\\Scripts',
+      '${USERPROFILE}/.bun\\bin',
       [length]: 28
     ]
   }
@@ -9592,14 +9592,14 @@ ModuleNotFoundError: No module named 'curl_cffi'
       'C:\\Program Files\\nodejs\\',
       'C:\\Program Files\\GitHub CLI\\',
       'C:\\Program Files\\Docker\\Docker\\resources\\bin',
-      'C:\\Users\\gordo\\AppData\\Local\\Programs\\oh-my-posh\\bin\\',
-      'C:\\Users\\gordo\\AppData\\Local\\Microsoft\\WindowsApps',
+      '${USERPROFILE}/AppData\\Local\\Programs\\oh-my-posh\\bin\\',
+      '${USERPROFILE}/AppData\\Local\\Microsoft\\WindowsApps',
       '',
-      'C:\\Users\\gordo\\.local\\bin',
-      'C:\\Users\\gordo\\AppData\\Local\\Programs\\Ollama',
-      'C:\\Users\\gordo\\AppData\\Roaming\\npm',
-      'C:\\Users\\gordo\\AppData\\Roaming\\Python\\Python314\\Scripts',
-      'C:\\Users\\gordo\\.bun\\bin',
+      '${USERPROFILE}/.local\\bin',
+      '${USERPROFILE}/AppData\\Local\\Programs\\Ollama',
+      '${USERPROFILE}/AppData\\Roaming\\npm',
+      '${USERPROFILE}/AppData\\Roaming\\Python\\Python314\\Scripts',
+      '${USERPROFILE}/.bun\\bin',
       [length]: 28
     ]
   }

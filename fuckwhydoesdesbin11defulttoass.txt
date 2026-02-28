@@ -72,7 +72,7 @@
        9 +$PYTHON_PATH = "/usr/bin/python3"                              
       10  $SCRIPT_PATH =                                                 
           "/workspaces/sfu-library-mcp/src/sfu_library_mcp_server.py"    
-      11  $PROJECT_ROOT = "C:\Users\gordo\OneDrive\Desktop\random ass    
+      11  $PROJECT_ROOT = "${USERPROFILE}/OneDrive\Desktop\random ass    
           scripts\sfu_library_mcp"                                       
       12  $COMPOSE_FILE =                                                
           "$PROJECT_ROOT\.devcontainer\docker-compose.yml"               
@@ -88,7 +88,7 @@
        9 +set PYTHON_PATH=/usr/bin/python3                               
       10  set SCRIPT_PATH=/workspaces/sfu-library-mcp/src/sfu_library_mc 
           p_server.py                                                    
-      11  set COMPOSE_FILE=C:\Users\gordo\OneDrive\Desktop\random ass    
+      11  set COMPOSE_FILE=${USERPROFILE}/OneDrive\Desktop\random ass    
           scripts\sfu_library_mcp\.devcontainer\docker-compose.yml       
       12                                                                 
 
@@ -129,7 +129,7 @@
     "business-plan": {
       "command": "C:\\Program Files\\Python314\\python.exe",
       "args": [
-        "C:\\Users\\gordo\\OneDrive\\Desktop\\random ass scripts\\cataloging
+        "${USERPROFILE}/OneDrive\\Desktop\\random ass scripts\\cataloging
  the buiness plan\\archived_sites\\fm4actioncoach\\fm4_data_export\\scripts\
 \business_plan_mcp.py"
       ]
@@ -147,7 +147,7 @@
     "pommel": {
       "command": "C:\\Program Files\\Python314\\python.exe",
       "args": [
-        "C:\\Users\\gordo\\.claudebox\\mcp-servers\\pommel\\host-server.py"
+        "${USERPROFILE}/.claudebox\\mcp-servers\\pommel\\host-server.py"
       ]
     }
   }
@@ -159,7 +159,7 @@
       "business-plan": {
         "command": "C:\\Program Files\\Python314\\python.exe",
         "args": [
-          "C:\\Users\\gordo\\OneDrive\\Desktop\\random ass scripts\\cataloging the buiness plan\\archived_sites\\fm4actioncoach\\fm4_data_export\\scripts\\business_plan_mcp.py"
+          "${USERPROFILE}/OneDrive\\Desktop\\random ass scripts\\cataloging the buiness plan\\archived_sites\\fm4actioncoach\\fm4_data_export\\scripts\\business_plan_mcp.py"
         ]
       },
       "sfu-library": {
@@ -175,7 +175,7 @@
       "pommel": {
         "command": "C:\\Program Files\\Python314\\python.exe",
         "args": [
-          "C:\\Users\\gordo\\.claudebox\\mcp-servers\\pommel\\host-server.py"
+          "${USERPROFILE}/.claudebox\\mcp-servers\\pommel\\host-server.py"
         ]
       }
     }
@@ -189,7 +189,7 @@ metadata: undefined }
 C:\Program Files\Python314\python.exe with args and path: {
   metadata: {
     args: [
-      'C:\\Users\\gordo\\OneDrive\\Desktop\\random ass 
+      '${USERPROFILE}/OneDrive\\Desktop\\random ass 
 scripts\\sfu_library_mcp\\sfu_library_mcp_server.py',
       [length]: 1
     ],
@@ -210,10 +210,10 @@ scripts\\sfu_library_mcp\\sfu_library_mcp_server.py',
       'C:\\Program Files\\Sunshine',
       'C:\\Program Files\\Sunshine\\tools',
       'C:\\Program Files\\Docker\\Docker\\resources\\bin',
-      'C:\\Users\\gordo\\AppData\\Local\\Programs\\oh-my-posh\\bin\\',
-      'C:\\Users\\gordo\\AppData\\Local\\Microsoft\\WindowsApps',
+      '${USERPROFILE}/AppData\\Local\\Programs\\oh-my-posh\\bin\\',
+      '${USERPROFILE}/AppData\\Local\\Microsoft\\WindowsApps',
       '',
-      'C:\\Users\\gordo\\.local\\bin',
+      '${USERPROFILE}/.local\\bin',
       [length]: 20
     ]
   }
@@ -434,7 +434,7 @@ metadata: undefined }
 C:\Program Files\Python314\python.exe with args and path: {
   metadata: {
     args: [
-      'C:\\Users\\gordo\\OneDrive\\Desktop\\random ass 
+      '${USERPROFILE}/OneDrive\\Desktop\\random ass 
 scripts\\sfu_library_mcp\\sfu_library_mcp_server.py',
       [length]: 1
     ],
@@ -455,10 +455,10 @@ scripts\\sfu_library_mcp\\sfu_library_mcp_server.py',
       'C:\\Program Files\\Sunshine',
       'C:\\Program Files\\Sunshine\\tools',
       'C:\\Program Files\\Docker\\Docker\\resources\\bin',
-      'C:\\Users\\gordo\\AppData\\Local\\Programs\\oh-my-posh\\bin\\',
-      'C:\\Users\\gordo\\AppData\\Local\\Microsoft\\WindowsApps',
+      '${USERPROFILE}/AppData\\Local\\Programs\\oh-my-posh\\bin\\',
+      '${USERPROFILE}/AppData\\Local\\Microsoft\\WindowsApps',
       '',
-      'C:\\Users\\gordo\\.local\\bin',
+      '${USERPROFILE}/.local\\bin',
       [length]: 20
     ]
   }
@@ -571,7 +571,7 @@ metadata: undefined }
 C:\Program Files\Python314\python.exe with args and path: {
   metadata: {
     args: [
-      'C:\\Users\\gordo\\OneDrive\\Desktop\\random ass 
+      '${USERPROFILE}/OneDrive\\Desktop\\random ass 
 scripts\\sfu_library_mcp\\sfu_library_mcp_server.py',
       [length]: 1
     ],
@@ -592,10 +592,10 @@ scripts\\sfu_library_mcp\\sfu_library_mcp_server.py',
       'C:\\Program Files\\Sunshine',
       'C:\\Program Files\\Sunshine\\tools',
       'C:\\Program Files\\Docker\\Docker\\resources\\bin',
-      'C:\\Users\\gordo\\AppData\\Local\\Programs\\oh-my-posh\\bin\\',
-      'C:\\Users\\gordo\\AppData\\Local\\Microsoft\\WindowsApps',
+      '${USERPROFILE}/AppData\\Local\\Programs\\oh-my-posh\\bin\\',
+      '${USERPROFILE}/AppData\\Local\\Microsoft\\WindowsApps',
       '',
-      'C:\\Users\\gordo\\.local\\bin',
+      '${USERPROFILE}/.local\\bin',
       [length]: 20
     ]
   }
@@ -603,7 +603,7 @@ scripts\\sfu_library_mcp\\sfu_library_mcp_server.py',
 2026-01-01T04:03:17.315Z [sfu-library] [info] Server started and connected 
 successfully { metadata: undefined }
 C:\Program Files\Python314\python.exe: can't open file 
-'C:\\Users\\gordo\\OneDrive\\Desktop\\random ass 
+'${USERPROFILE}/OneDrive\\Desktop\\random ass 
 scripts\\sfu_library_mcp\\sfu_library_mcp_server.py': [Errno 2] No such file
  or directory
 2026-01-01T04:03:17.416Z [sfu-library] [info] Server transport closed { 
@@ -631,7 +631,7 @@ metadata: undefined }
 C:\Program Files\Python314\python.exe with args and path: {
   metadata: {
     args: [
-      'C:\\Users\\gordo\\OneDrive\\Desktop\\random ass 
+      '${USERPROFILE}/OneDrive\\Desktop\\random ass 
 scripts\\sfu_library_mcp\\sfu_library_mcp_server.py',
       [length]: 1
     ],
@@ -652,10 +652,10 @@ scripts\\sfu_library_mcp\\sfu_library_mcp_server.py',
       'C:\\Program Files\\Sunshine',
       'C:\\Program Files\\Sunshine\\tools',
       'C:\\Program Files\\Docker\\Docker\\resources\\bin',
-      'C:\\Users\\gordo\\AppData\\Local\\Programs\\oh-my-posh\\bin\\',
-      'C:\\Users\\gordo\\AppData\\Local\\Microsoft\\WindowsApps',
+      '${USERPROFILE}/AppData\\Local\\Programs\\oh-my-posh\\bin\\',
+      '${USERPROFILE}/AppData\\Local\\Microsoft\\WindowsApps',
       '',
-      'C:\\Users\\gordo\\.local\\bin',
+      '${USERPROFILE}/.local\\bin',
       [length]: 20
     ]
   }
@@ -667,7 +667,7 @@ successfully { metadata: undefined }
 ientInfo":{"name":"claude-ai","version":"0.1.0"}},"jsonrpc":"2.0","id":0} { 
 metadata: undefined }
 C:\Program Files\Python314\python.exe: can't open file 
-'C:\\Users\\gordo\\OneDrive\\Desktop\\random ass 
+'${USERPROFILE}/OneDrive\\Desktop\\random ass 
 scripts\\sfu_library_mcp\\sfu_library_mcp_server.py': [Errno 2] No such file
  or directory
 2026-01-01T04:03:25.715Z [sfu-library] [info] Server transport closed { 
@@ -691,7 +691,7 @@ metadata: undefined }
 C:\Program Files\Python314\python.exe with args and path: {
   metadata: {
     args: [
-      'C:\\Users\\gordo\\OneDrive\\Desktop\\random ass 
+      '${USERPROFILE}/OneDrive\\Desktop\\random ass 
 scripts\\sfu_library_mcp\\sfu_library_mcp_server.py',
       [length]: 1
     ],
@@ -712,10 +712,10 @@ scripts\\sfu_library_mcp\\sfu_library_mcp_server.py',
       'C:\\Program Files\\Sunshine',
       'C:\\Program Files\\Sunshine\\tools',
       'C:\\Program Files\\Docker\\Docker\\resources\\bin',
-      'C:\\Users\\gordo\\AppData\\Local\\Programs\\oh-my-posh\\bin\\',
-      'C:\\Users\\gordo\\AppData\\Local\\Microsoft\\WindowsApps',
+      '${USERPROFILE}/AppData\\Local\\Programs\\oh-my-posh\\bin\\',
+      '${USERPROFILE}/AppData\\Local\\Microsoft\\WindowsApps',
       '',
-      'C:\\Users\\gordo\\.local\\bin',
+      '${USERPROFILE}/.local\\bin',
       [length]: 20
     ]
   }
@@ -723,7 +723,7 @@ scripts\\sfu_library_mcp\\sfu_library_mcp_server.py',
 2026-01-01T04:14:34.490Z [sfu-library] [info] Server started and connected 
 successfully { metadata: undefined }
 C:\Program Files\Python314\python.exe: can't open file 
-'C:\\Users\\gordo\\OneDrive\\Desktop\\random ass 
+'${USERPROFILE}/OneDrive\\Desktop\\random ass 
 scripts\\sfu_library_mcp\\sfu_library_mcp_server.py': [Errno 2] No such file
  or directory
 2026-01-01T04:14:34.557Z [sfu-library] [info] Server transport closed { 
@@ -751,7 +751,7 @@ metadata: undefined }
 C:\Program Files\Python314\python.exe with args and path: {
   metadata: {
     args: [
-      'C:\\Users\\gordo\\OneDrive\\Desktop\\random ass 
+      '${USERPROFILE}/OneDrive\\Desktop\\random ass 
 scripts\\sfu_library_mcp\\sfu_library_mcp_server.py',
       [length]: 1
     ],
@@ -772,10 +772,10 @@ scripts\\sfu_library_mcp\\sfu_library_mcp_server.py',
       'C:\\Program Files\\Sunshine',
       'C:\\Program Files\\Sunshine\\tools',
       'C:\\Program Files\\Docker\\Docker\\resources\\bin',
-      'C:\\Users\\gordo\\AppData\\Local\\Programs\\oh-my-posh\\bin\\',
-      'C:\\Users\\gordo\\AppData\\Local\\Microsoft\\WindowsApps',
+      '${USERPROFILE}/AppData\\Local\\Programs\\oh-my-posh\\bin\\',
+      '${USERPROFILE}/AppData\\Local\\Microsoft\\WindowsApps',
       '',
-      'C:\\Users\\gordo\\.local\\bin',
+      '${USERPROFILE}/.local\\bin',
       [length]: 20
     ]
   }
@@ -787,7 +787,7 @@ successfully { metadata: undefined }
 ientInfo":{"name":"claude-ai","version":"0.1.0"}},"jsonrpc":"2.0","id":0} { 
 metadata: undefined }
 C:\Program Files\Python314\python.exe: can't open file 
-'C:\\Users\\gordo\\OneDrive\\Desktop\\random ass 
+'${USERPROFILE}/OneDrive\\Desktop\\random ass 
 scripts\\sfu_library_mcp\\sfu_library_mcp_server.py': [Errno 2] No such file
  or directory
 2026-01-01T04:14:36.958Z [sfu-library] [info] Server transport closed { 
@@ -811,7 +811,7 @@ metadata: undefined }
 C:\Program Files\Python314\python.exe with args and path: {
   metadata: {
     args: [
-      'C:\\Users\\gordo\\OneDrive\\Desktop\\random ass 
+      '${USERPROFILE}/OneDrive\\Desktop\\random ass 
 scripts\\sfu_library_mcp\\sfu_library_mcp_server.py',
       [length]: 1
     ],
@@ -832,10 +832,10 @@ scripts\\sfu_library_mcp\\sfu_library_mcp_server.py',
       'C:\\Program Files\\Sunshine',
       'C:\\Program Files\\Sunshine\\tools',
       'C:\\Program Files\\Docker\\Docker\\resources\\bin',
-      'C:\\Users\\gordo\\AppData\\Local\\Programs\\oh-my-posh\\bin\\',
-      'C:\\Users\\gordo\\AppData\\Local\\Microsoft\\WindowsApps',
+      '${USERPROFILE}/AppData\\Local\\Programs\\oh-my-posh\\bin\\',
+      '${USERPROFILE}/AppData\\Local\\Microsoft\\WindowsApps',
       '',
-      'C:\\Users\\gordo\\.local\\bin',
+      '${USERPROFILE}/.local\\bin',
       [length]: 20
     ]
   }
@@ -843,7 +843,7 @@ scripts\\sfu_library_mcp\\sfu_library_mcp_server.py',
 2026-01-01T04:29:25.093Z [sfu-library] [info] Server started and connected 
 successfully { metadata: undefined }
 C:\Program Files\Python314\python.exe: can't open file 
-'C:\\Users\\gordo\\OneDrive\\Desktop\\random ass 
+'${USERPROFILE}/OneDrive\\Desktop\\random ass 
 scripts\\sfu_library_mcp\\sfu_library_mcp_server.py': [Errno 2] No such file
  or directory
 2026-01-01T04:29:25.157Z [sfu-library] [info] Server transport closed { 
@@ -871,7 +871,7 @@ metadata: undefined }
 C:\Program Files\Python314\python.exe with args and path: {
   metadata: {
     args: [
-      'C:\\Users\\gordo\\OneDrive\\Desktop\\random ass 
+      '${USERPROFILE}/OneDrive\\Desktop\\random ass 
 scripts\\sfu_library_mcp\\sfu_library_mcp_server.py',
       [length]: 1
     ],
@@ -892,10 +892,10 @@ scripts\\sfu_library_mcp\\sfu_library_mcp_server.py',
       'C:\\Program Files\\Sunshine',
       'C:\\Program Files\\Sunshine\\tools',
       'C:\\Program Files\\Docker\\Docker\\resources\\bin',
-      'C:\\Users\\gordo\\AppData\\Local\\Programs\\oh-my-posh\\bin\\',
-      'C:\\Users\\gordo\\AppData\\Local\\Microsoft\\WindowsApps',
+      '${USERPROFILE}/AppData\\Local\\Programs\\oh-my-posh\\bin\\',
+      '${USERPROFILE}/AppData\\Local\\Microsoft\\WindowsApps',
       '',
-      'C:\\Users\\gordo\\.local\\bin',
+      '${USERPROFILE}/.local\\bin',
       [length]: 20
     ]
   }
@@ -907,7 +907,7 @@ successfully { metadata: undefined }
 ientInfo":{"name":"claude-ai","version":"0.1.0"}},"jsonrpc":"2.0","id":0} { 
 metadata: undefined }
 C:\Program Files\Python314\python.exe: can't open file 
-'C:\\Users\\gordo\\OneDrive\\Desktop\\random ass 
+'${USERPROFILE}/OneDrive\\Desktop\\random ass 
 scripts\\sfu_library_mcp\\sfu_library_mcp_server.py': [Errno 2] No such file
  or directory
 2026-01-01T04:29:30.826Z [sfu-library] [info] Server transport closed { 
@@ -931,7 +931,7 @@ metadata: undefined }
 C:\Program Files\Python314\python.exe with args and path: {
   metadata: {
     args: [
-      'C:\\Users\\gordo\\OneDrive\\Desktop\\random ass 
+      '${USERPROFILE}/OneDrive\\Desktop\\random ass 
 scripts\\sfu_library_mcp\\sfu_library_mcp_server.py',
       [length]: 1
     ],
@@ -952,10 +952,10 @@ scripts\\sfu_library_mcp\\sfu_library_mcp_server.py',
       'C:\\Program Files\\Sunshine',
       'C:\\Program Files\\Sunshine\\tools',
       'C:\\Program Files\\Docker\\Docker\\resources\\bin',
-      'C:\\Users\\gordo\\AppData\\Local\\Programs\\oh-my-posh\\bin\\',
-      'C:\\Users\\gordo\\AppData\\Local\\Microsoft\\WindowsApps',
+      '${USERPROFILE}/AppData\\Local\\Programs\\oh-my-posh\\bin\\',
+      '${USERPROFILE}/AppData\\Local\\Microsoft\\WindowsApps',
       '',
-      'C:\\Users\\gordo\\.local\\bin',
+      '${USERPROFILE}/.local\\bin',
       [length]: 20
     ]
   }
@@ -963,7 +963,7 @@ scripts\\sfu_library_mcp\\sfu_library_mcp_server.py',
 2026-01-01T05:26:02.350Z [sfu-library] [info] Server started and connected 
 successfully { metadata: undefined }
 C:\Program Files\Python314\python.exe: can't open file 
-'C:\\Users\\gordo\\OneDrive\\Desktop\\random ass 
+'${USERPROFILE}/OneDrive\\Desktop\\random ass 
 scripts\\sfu_library_mcp\\sfu_library_mcp_server.py': [Errno 2] No such file
  or directory
 2026-01-01T05:26:02.427Z [sfu-library] [info] Server transport closed { 
@@ -991,7 +991,7 @@ metadata: undefined }
 C:\Program Files\Python314\python.exe with args and path: {
   metadata: {
     args: [
-      'C:\\Users\\gordo\\OneDrive\\Desktop\\random ass 
+      '${USERPROFILE}/OneDrive\\Desktop\\random ass 
 scripts\\sfu_library_mcp\\sfu_library_mcp_server.py',
       [length]: 1
     ],
@@ -1012,10 +1012,10 @@ scripts\\sfu_library_mcp\\sfu_library_mcp_server.py',
       'C:\\Program Files\\Sunshine',
       'C:\\Program Files\\Sunshine\\tools',
       'C:\\Program Files\\Docker\\Docker\\resources\\bin',
-      'C:\\Users\\gordo\\AppData\\Local\\Programs\\oh-my-posh\\bin\\',
-      'C:\\Users\\gordo\\AppData\\Local\\Microsoft\\WindowsApps',
+      '${USERPROFILE}/AppData\\Local\\Programs\\oh-my-posh\\bin\\',
+      '${USERPROFILE}/AppData\\Local\\Microsoft\\WindowsApps',
       '',
-      'C:\\Users\\gordo\\.local\\bin',
+      '${USERPROFILE}/.local\\bin',
       [length]: 20
     ]
   }
@@ -1027,7 +1027,7 @@ successfully { metadata: undefined }
 ientInfo":{"name":"claude-ai","version":"0.1.0"}},"jsonrpc":"2.0","id":0} { 
 metadata: undefined }
 C:\Program Files\Python314\python.exe: can't open file 
-'C:\\Users\\gordo\\OneDrive\\Desktop\\random ass 
+'${USERPROFILE}/OneDrive\\Desktop\\random ass 
 scripts\\sfu_library_mcp\\sfu_library_mcp_server.py': [Errno 2] No such file
  or directory
 2026-01-01T07:41:58.281Z [sfu-library] [info] Server transport closed { 
@@ -1073,10 +1073,10 @@ C:\WINDOWS\system32\wsl.exe with args and path: {
       'C:\\Program Files\\Sunshine',
       'C:\\Program Files\\Sunshine\\tools',
       'C:\\Program Files\\Docker\\Docker\\resources\\bin',
-      'C:\\Users\\gordo\\AppData\\Local\\Programs\\oh-my-posh\\bin\\',
-      'C:\\Users\\gordo\\AppData\\Local\\Microsoft\\WindowsApps',
+      '${USERPROFILE}/AppData\\Local\\Programs\\oh-my-posh\\bin\\',
+      '${USERPROFILE}/AppData\\Local\\Microsoft\\WindowsApps',
       '',
-      'C:\\Users\\gordo\\.local\\bin',
+      '${USERPROFILE}/.local\\bin',
       [length]: 20
     ]
   }
@@ -1133,10 +1133,10 @@ C:\WINDOWS\system32\wsl.exe with args and path: {
       'C:\\Program Files\\Sunshine',
       'C:\\Program Files\\Sunshine\\tools',
       'C:\\Program Files\\Docker\\Docker\\resources\\bin',
-      'C:\\Users\\gordo\\AppData\\Local\\Programs\\oh-my-posh\\bin\\',
-      'C:\\Users\\gordo\\AppData\\Local\\Microsoft\\WindowsApps',
+      '${USERPROFILE}/AppData\\Local\\Programs\\oh-my-posh\\bin\\',
+      '${USERPROFILE}/AppData\\Local\\Microsoft\\WindowsApps',
       '',
-      'C:\\Users\\gordo\\.local\\bin',
+      '${USERPROFILE}/.local\\bin',
       [length]: 20
     ]
   }
@@ -1196,10 +1196,10 @@ C:\Program Files\Docker\Docker\resources\bin\docker.exe with args and path:
       'C:\\Program Files\\Sunshine',
       'C:\\Program Files\\Sunshine\\tools',
       'C:\\Program Files\\Docker\\Docker\\resources\\bin',
-      'C:\\Users\\gordo\\AppData\\Local\\Programs\\oh-my-posh\\bin\\',
-      'C:\\Users\\gordo\\AppData\\Local\\Microsoft\\WindowsApps',
+      '${USERPROFILE}/AppData\\Local\\Programs\\oh-my-posh\\bin\\',
+      '${USERPROFILE}/AppData\\Local\\Microsoft\\WindowsApps',
       '',
-      'C:\\Users\\gordo\\.local\\bin',
+      '${USERPROFILE}/.local\\bin',
       [length]: 20
     ]
   }
@@ -1337,10 +1337,10 @@ C:\Program Files\Docker\Docker\resources\bin\docker.exe with args and path:
       'C:\\Program Files\\Sunshine',
       'C:\\Program Files\\Sunshine\\tools',
       'C:\\Program Files\\Docker\\Docker\\resources\\bin',
-      'C:\\Users\\gordo\\AppData\\Local\\Programs\\oh-my-posh\\bin\\',
-      'C:\\Users\\gordo\\AppData\\Local\\Microsoft\\WindowsApps',
+      '${USERPROFILE}/AppData\\Local\\Programs\\oh-my-posh\\bin\\',
+      '${USERPROFILE}/AppData\\Local\\Microsoft\\WindowsApps',
       '',
-      'C:\\Users\\gordo\\.local\\bin',
+      '${USERPROFILE}/.local\\bin',
       [length]: 20
     ]
   }
@@ -1400,10 +1400,10 @@ C:\Program Files\Docker\Docker\resources\bin\docker.exe with args and path:
       'C:\\Program Files\\Sunshine',
       'C:\\Program Files\\Sunshine\\tools',
       'C:\\Program Files\\Docker\\Docker\\resources\\bin',
-      'C:\\Users\\gordo\\AppData\\Local\\Programs\\oh-my-posh\\bin\\',
-      'C:\\Users\\gordo\\AppData\\Local\\Microsoft\\WindowsApps',
+      '${USERPROFILE}/AppData\\Local\\Programs\\oh-my-posh\\bin\\',
+      '${USERPROFILE}/AppData\\Local\\Microsoft\\WindowsApps',
       '',
-      'C:\\Users\\gordo\\.local\\bin',
+      '${USERPROFILE}/.local\\bin',
       [length]: 20
     ]
   }
@@ -1463,10 +1463,10 @@ C:\Program Files\Docker\Docker\resources\bin\docker.exe with args and path:
       'C:\\Program Files\\Sunshine',
       'C:\\Program Files\\Sunshine\\tools',
       'C:\\Program Files\\Docker\\Docker\\resources\\bin',
-      'C:\\Users\\gordo\\AppData\\Local\\Programs\\oh-my-posh\\bin\\',
-      'C:\\Users\\gordo\\AppData\\Local\\Microsoft\\WindowsApps',
+      '${USERPROFILE}/AppData\\Local\\Programs\\oh-my-posh\\bin\\',
+      '${USERPROFILE}/AppData\\Local\\Microsoft\\WindowsApps',
       '',
-      'C:\\Users\\gordo\\.local\\bin',
+      '${USERPROFILE}/.local\\bin',
       [length]: 20
     ]
   }
@@ -1604,10 +1604,10 @@ C:\Program Files\Docker\Docker\resources\bin\docker.exe with args and path:
       'C:\\Program Files\\Sunshine',
       'C:\\Program Files\\Sunshine\\tools',
       'C:\\Program Files\\Docker\\Docker\\resources\\bin',
-      'C:\\Users\\gordo\\AppData\\Local\\Programs\\oh-my-posh\\bin\\',
-      'C:\\Users\\gordo\\AppData\\Local\\Microsoft\\WindowsApps',
+      '${USERPROFILE}/AppData\\Local\\Programs\\oh-my-posh\\bin\\',
+      '${USERPROFILE}/AppData\\Local\\Microsoft\\WindowsApps',
       '',
-      'C:\\Users\\gordo\\.local\\bin',
+      '${USERPROFILE}/.local\\bin',
       [length]: 20
     ]
   }
@@ -1667,10 +1667,10 @@ C:\Program Files\Docker\Docker\resources\bin\docker.exe with args and path:
       'C:\\Program Files\\Sunshine',
       'C:\\Program Files\\Sunshine\\tools',
       'C:\\Program Files\\Docker\\Docker\\resources\\bin',
-      'C:\\Users\\gordo\\AppData\\Local\\Programs\\oh-my-posh\\bin\\',
-      'C:\\Users\\gordo\\AppData\\Local\\Microsoft\\WindowsApps',
+      '${USERPROFILE}/AppData\\Local\\Programs\\oh-my-posh\\bin\\',
+      '${USERPROFILE}/AppData\\Local\\Microsoft\\WindowsApps',
       '',
-      'C:\\Users\\gordo\\.local\\bin',
+      '${USERPROFILE}/.local\\bin',
       [length]: 20
     ]
   }
@@ -1730,10 +1730,10 @@ C:\Program Files\Docker\Docker\resources\bin\docker.exe with args and path:
       'C:\\Program Files\\Sunshine',
       'C:\\Program Files\\Sunshine\\tools',
       'C:\\Program Files\\Docker\\Docker\\resources\\bin',
-      'C:\\Users\\gordo\\AppData\\Local\\Programs\\oh-my-posh\\bin\\',
-      'C:\\Users\\gordo\\AppData\\Local\\Microsoft\\WindowsApps',
+      '${USERPROFILE}/AppData\\Local\\Programs\\oh-my-posh\\bin\\',
+      '${USERPROFILE}/AppData\\Local\\Microsoft\\WindowsApps',
       '',
-      'C:\\Users\\gordo\\.local\\bin',
+      '${USERPROFILE}/.local\\bin',
       [length]: 20
     ]
   }
@@ -1871,11 +1871,11 @@ C:\Program Files\Docker\Docker\resources\bin\docker.exe with args and path:
       'C:\\Program Files\\Sunshine',
       'C:\\Program Files\\Sunshine\\tools',
       'C:\\Program Files\\Docker\\Docker\\resources\\bin',
-      'C:\\Users\\gordo\\AppData\\Local\\Programs\\oh-my-posh\\bin\\',
-      'C:\\Users\\gordo\\AppData\\Local\\Microsoft\\WindowsApps',
+      '${USERPROFILE}/AppData\\Local\\Programs\\oh-my-posh\\bin\\',
+      '${USERPROFILE}/AppData\\Local\\Microsoft\\WindowsApps',
       '',
-      'C:\\Users\\gordo\\.local\\bin',
-      'C:\\Users\\gordo\\AppData\\Local\\Programs\\Ollama',
+      '${USERPROFILE}/.local\\bin',
+      '${USERPROFILE}/AppData\\Local\\Programs\\Ollama',
       [length]: 21
     ]
   }
@@ -2028,11 +2028,11 @@ C:\Program Files\Docker\Docker\resources\bin\docker.exe with args and path:
       'C:\\Program Files\\Sunshine',
       'C:\\Program Files\\Sunshine\\tools',
       'C:\\Program Files\\Docker\\Docker\\resources\\bin',
-      'C:\\Users\\gordo\\AppData\\Local\\Programs\\oh-my-posh\\bin\\',
-      'C:\\Users\\gordo\\AppData\\Local\\Microsoft\\WindowsApps',
+      '${USERPROFILE}/AppData\\Local\\Programs\\oh-my-posh\\bin\\',
+      '${USERPROFILE}/AppData\\Local\\Microsoft\\WindowsApps',
       '',
-      'C:\\Users\\gordo\\.local\\bin',
-      'C:\\Users\\gordo\\AppData\\Local\\Programs\\Ollama',
+      '${USERPROFILE}/.local\\bin',
+      '${USERPROFILE}/AppData\\Local\\Programs\\Ollama',
       [length]: 21
     ]
   }
@@ -2046,16 +2046,16 @@ runtim"... is not valid JSON {
     stack: `SyntaxError: Unexpected token 'O', "OCI runtim"... is not valid 
 JSON\n` +
       '    at JSON.parse (<anonymous>)\n' +
-      '    at _Oe (C:\\Users\\gordo\\AppData\\Local\\AnthropicClaude\\app-1.
+      '    at _Oe (${USERPROFILE}/AppData\\Local\\AnthropicClaude\\app-1.
 0.2339\\resources\\app.asar\\.vite\\build\\index.js:196:207)\n' +
-      '    at bOe.readMessage (C:\\Users\\gordo\\AppData\\Local\\AnthropicCl
+      '    at bOe.readMessage (${USERPROFILE}/AppData\\Local\\AnthropicCl
 aude\\app-1.0.2339\\resources\\app.asar\\.vite\\build\\index.js:196:133)\n' 
 +
       '    at xOe.processReadBuffer 
-(C:\\Users\\gordo\\AppData\\Local\\AnthropicClaude\\app-1.0.2339\\resources\
+(${USERPROFILE}/AppData\\Local\\AnthropicClaude\\app-1.0.2339\\resources\
 \app.asar\\.vite\\build\\index.js:197:2203)\n' +
       '    at Socket.<anonymous> 
-(C:\\Users\\gordo\\AppData\\Local\\AnthropicClaude\\app-1.0.2339\\resources\
+(${USERPROFILE}/AppData\\Local\\AnthropicClaude\\app-1.0.2339\\resources\
 \app.asar\\.vite\\build\\index.js:197:1653)\n' +
       '    at Socket.emit (node:events:519:28)\n' +
       '    at addChunk (node:internal/streams/readable:561:12)\n' +
@@ -2115,11 +2115,11 @@ C:\Program Files\Docker\Docker\resources\bin\docker.exe with args and path:
       'C:\\Program Files\\Sunshine',
       'C:\\Program Files\\Sunshine\\tools',
       'C:\\Program Files\\Docker\\Docker\\resources\\bin',
-      'C:\\Users\\gordo\\AppData\\Local\\Programs\\oh-my-posh\\bin\\',
-      'C:\\Users\\gordo\\AppData\\Local\\Microsoft\\WindowsApps',
+      '${USERPROFILE}/AppData\\Local\\Programs\\oh-my-posh\\bin\\',
+      '${USERPROFILE}/AppData\\Local\\Microsoft\\WindowsApps',
       '',
-      'C:\\Users\\gordo\\.local\\bin',
-      'C:\\Users\\gordo\\AppData\\Local\\Programs\\Ollama',
+      '${USERPROFILE}/.local\\bin',
+      '${USERPROFILE}/AppData\\Local\\Programs\\Ollama',
       [length]: 21
     ]
   }
@@ -2137,16 +2137,16 @@ runtim"... is not valid JSON {
     stack: `SyntaxError: Unexpected token 'O', "OCI runtim"... is not valid 
 JSON\n` +
       '    at JSON.parse (<anonymous>)\n' +
-      '    at _Oe (C:\\Users\\gordo\\AppData\\Local\\AnthropicClaude\\app-1.
+      '    at _Oe (${USERPROFILE}/AppData\\Local\\AnthropicClaude\\app-1.
 0.2339\\resources\\app.asar\\.vite\\build\\index.js:196:207)\n' +
-      '    at bOe.readMessage (C:\\Users\\gordo\\AppData\\Local\\AnthropicCl
+      '    at bOe.readMessage (${USERPROFILE}/AppData\\Local\\AnthropicCl
 aude\\app-1.0.2339\\resources\\app.asar\\.vite\\build\\index.js:196:133)\n' 
 +
       '    at xOe.processReadBuffer 
-(C:\\Users\\gordo\\AppData\\Local\\AnthropicClaude\\app-1.0.2339\\resources\
+(${USERPROFILE}/AppData\\Local\\AnthropicClaude\\app-1.0.2339\\resources\
 \app.asar\\.vite\\build\\index.js:197:2203)\n' +
       '    at Socket.<anonymous> 
-(C:\\Users\\gordo\\AppData\\Local\\AnthropicClaude\\app-1.0.2339\\resources\
+(${USERPROFILE}/AppData\\Local\\AnthropicClaude\\app-1.0.2339\\resources\
 \app.asar\\.vite\\build\\index.js:197:1653)\n' +
       '    at Socket.emit (node:events:519:28)\n' +
       '    at addChunk (node:internal/streams/readable:561:12)\n' +
@@ -2202,11 +2202,11 @@ C:\Program Files\Docker\Docker\resources\bin\docker.exe with args and path:
       'C:\\Program Files\\Sunshine',
       'C:\\Program Files\\Sunshine\\tools',
       'C:\\Program Files\\Docker\\Docker\\resources\\bin',
-      'C:\\Users\\gordo\\AppData\\Local\\Programs\\oh-my-posh\\bin\\',
-      'C:\\Users\\gordo\\AppData\\Local\\Microsoft\\WindowsApps',
+      '${USERPROFILE}/AppData\\Local\\Programs\\oh-my-posh\\bin\\',
+      '${USERPROFILE}/AppData\\Local\\Microsoft\\WindowsApps',
       '',
-      'C:\\Users\\gordo\\.local\\bin',
-      'C:\\Users\\gordo\\AppData\\Local\\Programs\\Ollama',
+      '${USERPROFILE}/.local\\bin',
+      '${USERPROFILE}/AppData\\Local\\Programs\\Ollama',
       [length]: 21
     ]
   }
@@ -2220,16 +2220,16 @@ runtim"... is not valid JSON {
     stack: `SyntaxError: Unexpected token 'O', "OCI runtim"... is not valid 
 JSON\n` +
       '    at JSON.parse (<anonymous>)\n' +
-      '    at _Oe (C:\\Users\\gordo\\AppData\\Local\\AnthropicClaude\\app-1.
+      '    at _Oe (${USERPROFILE}/AppData\\Local\\AnthropicClaude\\app-1.
 0.2339\\resources\\app.asar\\.vite\\build\\index.js:196:207)\n' +
-      '    at bOe.readMessage (C:\\Users\\gordo\\AppData\\Local\\AnthropicCl
+      '    at bOe.readMessage (${USERPROFILE}/AppData\\Local\\AnthropicCl
 aude\\app-1.0.2339\\resources\\app.asar\\.vite\\build\\index.js:196:133)\n' 
 +
       '    at xOe.processReadBuffer 
-(C:\\Users\\gordo\\AppData\\Local\\AnthropicClaude\\app-1.0.2339\\resources\
+(${USERPROFILE}/AppData\\Local\\AnthropicClaude\\app-1.0.2339\\resources\
 \app.asar\\.vite\\build\\index.js:197:2203)\n' +
       '    at Socket.<anonymous> 
-(C:\\Users\\gordo\\AppData\\Local\\AnthropicClaude\\app-1.0.2339\\resources\
+(${USERPROFILE}/AppData\\Local\\AnthropicClaude\\app-1.0.2339\\resources\
 \app.asar\\.vite\\build\\index.js:197:1653)\n' +
       '    at Socket.emit (node:events:519:28)\n' +
       '    at addChunk (node:internal/streams/readable:561:12)\n' +
@@ -2289,11 +2289,11 @@ C:\Program Files\Docker\Docker\resources\bin\docker.exe with args and path:
       'C:\\Program Files\\Sunshine',
       'C:\\Program Files\\Sunshine\\tools',
       'C:\\Program Files\\Docker\\Docker\\resources\\bin',
-      'C:\\Users\\gordo\\AppData\\Local\\Programs\\oh-my-posh\\bin\\',
-      'C:\\Users\\gordo\\AppData\\Local\\Microsoft\\WindowsApps',
+      '${USERPROFILE}/AppData\\Local\\Programs\\oh-my-posh\\bin\\',
+      '${USERPROFILE}/AppData\\Local\\Microsoft\\WindowsApps',
       '',
-      'C:\\Users\\gordo\\.local\\bin',
-      'C:\\Users\\gordo\\AppData\\Local\\Programs\\Ollama',
+      '${USERPROFILE}/.local\\bin',
+      '${USERPROFILE}/AppData\\Local\\Programs\\Ollama',
       [length]: 21
     ]
   }
@@ -2311,16 +2311,16 @@ runtim"... is not valid JSON {
     stack: `SyntaxError: Unexpected token 'O', "OCI runtim"... is not valid 
 JSON\n` +
       '    at JSON.parse (<anonymous>)\n' +
-      '    at _Oe (C:\\Users\\gordo\\AppData\\Local\\AnthropicClaude\\app-1.
+      '    at _Oe (${USERPROFILE}/AppData\\Local\\AnthropicClaude\\app-1.
 0.2339\\resources\\app.asar\\.vite\\build\\index.js:196:207)\n' +
-      '    at bOe.readMessage (C:\\Users\\gordo\\AppData\\Local\\AnthropicCl
+      '    at bOe.readMessage (${USERPROFILE}/AppData\\Local\\AnthropicCl
 aude\\app-1.0.2339\\resources\\app.asar\\.vite\\build\\index.js:196:133)\n' 
 +
       '    at xOe.processReadBuffer 
-(C:\\Users\\gordo\\AppData\\Local\\AnthropicClaude\\app-1.0.2339\\resources\
+(${USERPROFILE}/AppData\\Local\\AnthropicClaude\\app-1.0.2339\\resources\
 \app.asar\\.vite\\build\\index.js:197:2203)\n' +
       '    at Socket.<anonymous> 
-(C:\\Users\\gordo\\AppData\\Local\\AnthropicClaude\\app-1.0.2339\\resources\
+(${USERPROFILE}/AppData\\Local\\AnthropicClaude\\app-1.0.2339\\resources\
 \app.asar\\.vite\\build\\index.js:197:1653)\n' +
       '    at Socket.emit (node:events:519:28)\n' +
       '    at addChunk (node:internal/streams/readable:561:12)\n' +
@@ -2376,11 +2376,11 @@ C:\Program Files\Docker\Docker\resources\bin\docker.exe with args and path:
       'C:\\Program Files\\Sunshine',
       'C:\\Program Files\\Sunshine\\tools',
       'C:\\Program Files\\Docker\\Docker\\resources\\bin',
-      'C:\\Users\\gordo\\AppData\\Local\\Programs\\oh-my-posh\\bin\\',
-      'C:\\Users\\gordo\\AppData\\Local\\Microsoft\\WindowsApps',
+      '${USERPROFILE}/AppData\\Local\\Programs\\oh-my-posh\\bin\\',
+      '${USERPROFILE}/AppData\\Local\\Microsoft\\WindowsApps',
       '',
-      'C:\\Users\\gordo\\.local\\bin',
-      'C:\\Users\\gordo\\AppData\\Local\\Programs\\Ollama',
+      '${USERPROFILE}/.local\\bin',
+      '${USERPROFILE}/AppData\\Local\\Programs\\Ollama',
       [length]: 21
     ]
   }
@@ -2394,16 +2394,16 @@ runtim"... is not valid JSON {
     stack: `SyntaxError: Unexpected token 'O', "OCI runtim"... is not valid 
 JSON\n` +
       '    at JSON.parse (<anonymous>)\n' +
-      '    at FDe (C:\\Users\\gordo\\AppData\\Local\\AnthropicClaude\\app-1.
+      '    at FDe (${USERPROFILE}/AppData\\Local\\AnthropicClaude\\app-1.
 0.2768\\resources\\app.asar\\.vite\\build\\index.js:196:207)\n' +
-      '    at LDe.readMessage (C:\\Users\\gordo\\AppData\\Local\\AnthropicCl
+      '    at LDe.readMessage (${USERPROFILE}/AppData\\Local\\AnthropicCl
 aude\\app-1.0.2768\\resources\\app.asar\\.vite\\build\\index.js:196:133)\n' 
 +
       '    at qDe.processReadBuffer 
-(C:\\Users\\gordo\\AppData\\Local\\AnthropicClaude\\app-1.0.2768\\resources\
+(${USERPROFILE}/AppData\\Local\\AnthropicClaude\\app-1.0.2768\\resources\
 \app.asar\\.vite\\build\\index.js:197:2203)\n' +
       '    at Socket.<anonymous> 
-(C:\\Users\\gordo\\AppData\\Local\\AnthropicClaude\\app-1.0.2768\\resources\
+(${USERPROFILE}/AppData\\Local\\AnthropicClaude\\app-1.0.2768\\resources\
 \app.asar\\.vite\\build\\index.js:197:1653)\n' +
       '    at Socket.emit (node:events:519:28)\n' +
       '    at addChunk (node:internal/streams/readable:561:12)\n' +
@@ -2463,11 +2463,11 @@ C:\Program Files\Docker\Docker\resources\bin\docker.exe with args and path:
       'C:\\Program Files\\Sunshine',
       'C:\\Program Files\\Sunshine\\tools',
       'C:\\Program Files\\Docker\\Docker\\resources\\bin',
-      'C:\\Users\\gordo\\AppData\\Local\\Programs\\oh-my-posh\\bin\\',
-      'C:\\Users\\gordo\\AppData\\Local\\Microsoft\\WindowsApps',
+      '${USERPROFILE}/AppData\\Local\\Programs\\oh-my-posh\\bin\\',
+      '${USERPROFILE}/AppData\\Local\\Microsoft\\WindowsApps',
       '',
-      'C:\\Users\\gordo\\.local\\bin',
-      'C:\\Users\\gordo\\AppData\\Local\\Programs\\Ollama',
+      '${USERPROFILE}/.local\\bin',
+      '${USERPROFILE}/AppData\\Local\\Programs\\Ollama',
       [length]: 21
     ]
   }
@@ -2485,16 +2485,16 @@ runtim"... is not valid JSON {
     stack: `SyntaxError: Unexpected token 'O', "OCI runtim"... is not valid 
 JSON\n` +
       '    at JSON.parse (<anonymous>)\n' +
-      '    at FDe (C:\\Users\\gordo\\AppData\\Local\\AnthropicClaude\\app-1.
+      '    at FDe (${USERPROFILE}/AppData\\Local\\AnthropicClaude\\app-1.
 0.2768\\resources\\app.asar\\.vite\\build\\index.js:196:207)\n' +
-      '    at LDe.readMessage (C:\\Users\\gordo\\AppData\\Local\\AnthropicCl
+      '    at LDe.readMessage (${USERPROFILE}/AppData\\Local\\AnthropicCl
 aude\\app-1.0.2768\\resources\\app.asar\\.vite\\build\\index.js:196:133)\n' 
 +
       '    at qDe.processReadBuffer 
-(C:\\Users\\gordo\\AppData\\Local\\AnthropicClaude\\app-1.0.2768\\resources\
+(${USERPROFILE}/AppData\\Local\\AnthropicClaude\\app-1.0.2768\\resources\
 \app.asar\\.vite\\build\\index.js:197:2203)\n' +
       '    at Socket.<anonymous> 
-(C:\\Users\\gordo\\AppData\\Local\\AnthropicClaude\\app-1.0.2768\\resources\
+(${USERPROFILE}/AppData\\Local\\AnthropicClaude\\app-1.0.2768\\resources\
 \app.asar\\.vite\\build\\index.js:197:1653)\n' +
       '    at Socket.emit (node:events:519:28)\n' +
       '    at addChunk (node:internal/streams/readable:561:12)\n' +
@@ -2550,11 +2550,11 @@ C:\Program Files\Docker\Docker\resources\bin\docker.exe with args and path:
       'C:\\Program Files\\Sunshine',
       'C:\\Program Files\\Sunshine\\tools',
       'C:\\Program Files\\Docker\\Docker\\resources\\bin',
-      'C:\\Users\\gordo\\AppData\\Local\\Programs\\oh-my-posh\\bin\\',
-      'C:\\Users\\gordo\\AppData\\Local\\Microsoft\\WindowsApps',
+      '${USERPROFILE}/AppData\\Local\\Programs\\oh-my-posh\\bin\\',
+      '${USERPROFILE}/AppData\\Local\\Microsoft\\WindowsApps',
       '',
-      'C:\\Users\\gordo\\.local\\bin',
-      'C:\\Users\\gordo\\AppData\\Local\\Programs\\Ollama',
+      '${USERPROFILE}/.local\\bin',
+      '${USERPROFILE}/AppData\\Local\\Programs\\Ollama',
       [length]: 21
     ]
   }
@@ -2568,16 +2568,16 @@ runtim"... is not valid JSON {
     stack: `SyntaxError: Unexpected token 'O', "OCI runtim"... is not valid 
 JSON\n` +
       '    at JSON.parse (<anonymous>)\n' +
-      '    at FDe (C:\\Users\\gordo\\AppData\\Local\\AnthropicClaude\\app-1.
+      '    at FDe (${USERPROFILE}/AppData\\Local\\AnthropicClaude\\app-1.
 0.2768\\resources\\app.asar\\.vite\\build\\index.js:196:207)\n' +
-      '    at LDe.readMessage (C:\\Users\\gordo\\AppData\\Local\\AnthropicCl
+      '    at LDe.readMessage (${USERPROFILE}/AppData\\Local\\AnthropicCl
 aude\\app-1.0.2768\\resources\\app.asar\\.vite\\build\\index.js:196:133)\n' 
 +
       '    at qDe.processReadBuffer 
-(C:\\Users\\gordo\\AppData\\Local\\AnthropicClaude\\app-1.0.2768\\resources\
+(${USERPROFILE}/AppData\\Local\\AnthropicClaude\\app-1.0.2768\\resources\
 \app.asar\\.vite\\build\\index.js:197:2203)\n' +
       '    at Socket.<anonymous> 
-(C:\\Users\\gordo\\AppData\\Local\\AnthropicClaude\\app-1.0.2768\\resources\
+(${USERPROFILE}/AppData\\Local\\AnthropicClaude\\app-1.0.2768\\resources\
 \app.asar\\.vite\\build\\index.js:197:1653)\n' +
       '    at Socket.emit (node:events:519:28)\n' +
       '    at addChunk (node:internal/streams/readable:561:12)\n' +
@@ -2637,11 +2637,11 @@ C:\Program Files\Docker\Docker\resources\bin\docker.exe with args and path:
       'C:\\Program Files\\Sunshine',
       'C:\\Program Files\\Sunshine\\tools',
       'C:\\Program Files\\Docker\\Docker\\resources\\bin',
-      'C:\\Users\\gordo\\AppData\\Local\\Programs\\oh-my-posh\\bin\\',
-      'C:\\Users\\gordo\\AppData\\Local\\Microsoft\\WindowsApps',
+      '${USERPROFILE}/AppData\\Local\\Programs\\oh-my-posh\\bin\\',
+      '${USERPROFILE}/AppData\\Local\\Microsoft\\WindowsApps',
       '',
-      'C:\\Users\\gordo\\.local\\bin',
-      'C:\\Users\\gordo\\AppData\\Local\\Programs\\Ollama',
+      '${USERPROFILE}/.local\\bin',
+      '${USERPROFILE}/AppData\\Local\\Programs\\Ollama',
       [length]: 21
     ]
   }
@@ -2659,16 +2659,16 @@ runtim"... is not valid JSON {
     stack: `SyntaxError: Unexpected token 'O', "OCI runtim"... is not valid 
 JSON\n` +
       '    at JSON.parse (<anonymous>)\n' +
-      '    at FDe (C:\\Users\\gordo\\AppData\\Local\\AnthropicClaude\\app-1.
+      '    at FDe (${USERPROFILE}/AppData\\Local\\AnthropicClaude\\app-1.
 0.2768\\resources\\app.asar\\.vite\\build\\index.js:196:207)\n' +
-      '    at LDe.readMessage (C:\\Users\\gordo\\AppData\\Local\\AnthropicCl
+      '    at LDe.readMessage (${USERPROFILE}/AppData\\Local\\AnthropicCl
 aude\\app-1.0.2768\\resources\\app.asar\\.vite\\build\\index.js:196:133)\n' 
 +
       '    at qDe.processReadBuffer 
-(C:\\Users\\gordo\\AppData\\Local\\AnthropicClaude\\app-1.0.2768\\resources\
+(${USERPROFILE}/AppData\\Local\\AnthropicClaude\\app-1.0.2768\\resources\
 \app.asar\\.vite\\build\\index.js:197:2203)\n' +
       '    at Socket.<anonymous> 
-(C:\\Users\\gordo\\AppData\\Local\\AnthropicClaude\\app-1.0.2768\\resources\
+(${USERPROFILE}/AppData\\Local\\AnthropicClaude\\app-1.0.2768\\resources\
 \app.asar\\.vite\\build\\index.js:197:1653)\n' +
       '    at Socket.emit (node:events:519:28)\n' +
       '    at addChunk (node:internal/streams/readable:561:12)\n' +
@@ -2724,11 +2724,11 @@ C:\Program Files\Docker\Docker\resources\bin\docker.exe with args and path:
       'C:\\Program Files\\Sunshine',
       'C:\\Program Files\\Sunshine\\tools',
       'C:\\Program Files\\Docker\\Docker\\resources\\bin',
-      'C:\\Users\\gordo\\AppData\\Local\\Programs\\oh-my-posh\\bin\\',
-      'C:\\Users\\gordo\\AppData\\Local\\Microsoft\\WindowsApps',
+      '${USERPROFILE}/AppData\\Local\\Programs\\oh-my-posh\\bin\\',
+      '${USERPROFILE}/AppData\\Local\\Microsoft\\WindowsApps',
       '',
-      'C:\\Users\\gordo\\.local\\bin',
-      'C:\\Users\\gordo\\AppData\\Local\\Programs\\Ollama',
+      '${USERPROFILE}/.local\\bin',
+      '${USERPROFILE}/AppData\\Local\\Programs\\Ollama',
       [length]: 21
     ]
   }
@@ -2746,16 +2746,16 @@ runtim"... is not valid JSON {
     stack: `SyntaxError: Unexpected token 'O', "OCI runtim"... is not valid 
 JSON\n` +
       '    at JSON.parse (<anonymous>)\n' +
-      '    at FDe (C:\\Users\\gordo\\AppData\\Local\\AnthropicClaude\\app-1.
+      '    at FDe (${USERPROFILE}/AppData\\Local\\AnthropicClaude\\app-1.
 0.2768\\resources\\app.asar\\.vite\\build\\index.js:196:207)\n' +
-      '    at LDe.readMessage (C:\\Users\\gordo\\AppData\\Local\\AnthropicCl
+      '    at LDe.readMessage (${USERPROFILE}/AppData\\Local\\AnthropicCl
 aude\\app-1.0.2768\\resources\\app.asar\\.vite\\build\\index.js:196:133)\n' 
 +
       '    at qDe.processReadBuffer 
-(C:\\Users\\gordo\\AppData\\Local\\AnthropicClaude\\app-1.0.2768\\resources\
+(${USERPROFILE}/AppData\\Local\\AnthropicClaude\\app-1.0.2768\\resources\
 \app.asar\\.vite\\build\\index.js:197:2203)\n' +
       '    at Socket.<anonymous> 
-(C:\\Users\\gordo\\AppData\\Local\\AnthropicClaude\\app-1.0.2768\\resources\
+(${USERPROFILE}/AppData\\Local\\AnthropicClaude\\app-1.0.2768\\resources\
 \app.asar\\.vite\\build\\index.js:197:1653)\n' +
       '    at Socket.emit (node:events:519:28)\n' +
       '    at addChunk (node:internal/streams/readable:561:12)\n' +
@@ -2815,11 +2815,11 @@ C:\Program Files\Docker\Docker\resources\bin\docker.exe with args and path:
       'C:\\Program Files\\Sunshine',
       'C:\\Program Files\\Sunshine\\tools',
       'C:\\Program Files\\Docker\\Docker\\resources\\bin',
-      'C:\\Users\\gordo\\AppData\\Local\\Programs\\oh-my-posh\\bin\\',
-      'C:\\Users\\gordo\\AppData\\Local\\Microsoft\\WindowsApps',
+      '${USERPROFILE}/AppData\\Local\\Programs\\oh-my-posh\\bin\\',
+      '${USERPROFILE}/AppData\\Local\\Microsoft\\WindowsApps',
       '',
-      'C:\\Users\\gordo\\.local\\bin',
-      'C:\\Users\\gordo\\AppData\\Local\\Programs\\Ollama',
+      '${USERPROFILE}/.local\\bin',
+      '${USERPROFILE}/AppData\\Local\\Programs\\Ollama',
       [length]: 21
     ]
   }
@@ -2833,16 +2833,16 @@ runtim"... is not valid JSON {
     stack: `SyntaxError: Unexpected token 'O', "OCI runtim"... is not valid 
 JSON\n` +
       '    at JSON.parse (<anonymous>)\n' +
-      '    at FDe (C:\\Users\\gordo\\AppData\\Local\\AnthropicClaude\\app-1.
+      '    at FDe (${USERPROFILE}/AppData\\Local\\AnthropicClaude\\app-1.
 0.2768\\resources\\app.asar\\.vite\\build\\index.js:196:207)\n' +
-      '    at LDe.readMessage (C:\\Users\\gordo\\AppData\\Local\\AnthropicCl
+      '    at LDe.readMessage (${USERPROFILE}/AppData\\Local\\AnthropicCl
 aude\\app-1.0.2768\\resources\\app.asar\\.vite\\build\\index.js:196:133)\n' 
 +
       '    at qDe.processReadBuffer 
-(C:\\Users\\gordo\\AppData\\Local\\AnthropicClaude\\app-1.0.2768\\resources\
+(${USERPROFILE}/AppData\\Local\\AnthropicClaude\\app-1.0.2768\\resources\
 \app.asar\\.vite\\build\\index.js:197:2203)\n' +
       '    at Socket.<anonymous> 
-(C:\\Users\\gordo\\AppData\\Local\\AnthropicClaude\\app-1.0.2768\\resources\
+(${USERPROFILE}/AppData\\Local\\AnthropicClaude\\app-1.0.2768\\resources\
 \app.asar\\.vite\\build\\index.js:197:1653)\n' +
       '    at Socket.emit (node:events:519:28)\n' +
       '    at addChunk (node:internal/streams/readable:561:12)\n' +
@@ -2902,11 +2902,11 @@ C:\Program Files\Docker\Docker\resources\bin\docker.exe with args and path:
       'C:\\Program Files\\Sunshine',
       'C:\\Program Files\\Sunshine\\tools',
       'C:\\Program Files\\Docker\\Docker\\resources\\bin',
-      'C:\\Users\\gordo\\AppData\\Local\\Programs\\oh-my-posh\\bin\\',
-      'C:\\Users\\gordo\\AppData\\Local\\Microsoft\\WindowsApps',
+      '${USERPROFILE}/AppData\\Local\\Programs\\oh-my-posh\\bin\\',
+      '${USERPROFILE}/AppData\\Local\\Microsoft\\WindowsApps',
       '',
-      'C:\\Users\\gordo\\.local\\bin',
-      'C:\\Users\\gordo\\AppData\\Local\\Programs\\Ollama',
+      '${USERPROFILE}/.local\\bin',
+      '${USERPROFILE}/AppData\\Local\\Programs\\Ollama',
       [length]: 21
     ]
   }
@@ -2924,16 +2924,16 @@ runtim"... is not valid JSON {
     stack: `SyntaxError: Unexpected token 'O', "OCI runtim"... is not valid 
 JSON\n` +
       '    at JSON.parse (<anonymous>)\n' +
-      '    at FDe (C:\\Users\\gordo\\AppData\\Local\\AnthropicClaude\\app-1.
+      '    at FDe (${USERPROFILE}/AppData\\Local\\AnthropicClaude\\app-1.
 0.2768\\resources\\app.asar\\.vite\\build\\index.js:196:207)\n' +
-      '    at LDe.readMessage (C:\\Users\\gordo\\AppData\\Local\\AnthropicCl
+      '    at LDe.readMessage (${USERPROFILE}/AppData\\Local\\AnthropicCl
 aude\\app-1.0.2768\\resources\\app.asar\\.vite\\build\\index.js:196:133)\n' 
 +
       '    at qDe.processReadBuffer 
-(C:\\Users\\gordo\\AppData\\Local\\AnthropicClaude\\app-1.0.2768\\resources\
+(${USERPROFILE}/AppData\\Local\\AnthropicClaude\\app-1.0.2768\\resources\
 \app.asar\\.vite\\build\\index.js:197:2203)\n' +
       '    at Socket.<anonymous> 
-(C:\\Users\\gordo\\AppData\\Local\\AnthropicClaude\\app-1.0.2768\\resources\
+(${USERPROFILE}/AppData\\Local\\AnthropicClaude\\app-1.0.2768\\resources\
 \app.asar\\.vite\\build\\index.js:197:1653)\n' +
       '    at Socket.emit (node:events:519:28)\n' +
       '    at addChunk (node:internal/streams/readable:561:12)\n' +
@@ -2993,11 +2993,11 @@ C:\Program Files\Docker\Docker\resources\bin\docker.exe with args and path:
       'C:\\Program Files\\Sunshine',
       'C:\\Program Files\\Sunshine\\tools',
       'C:\\Program Files\\Docker\\Docker\\resources\\bin',
-      'C:\\Users\\gordo\\AppData\\Local\\Programs\\oh-my-posh\\bin\\',
-      'C:\\Users\\gordo\\AppData\\Local\\Microsoft\\WindowsApps',
+      '${USERPROFILE}/AppData\\Local\\Programs\\oh-my-posh\\bin\\',
+      '${USERPROFILE}/AppData\\Local\\Microsoft\\WindowsApps',
       '',
-      'C:\\Users\\gordo\\.local\\bin',
-      'C:\\Users\\gordo\\AppData\\Local\\Programs\\Ollama',
+      '${USERPROFILE}/.local\\bin',
+      '${USERPROFILE}/AppData\\Local\\Programs\\Ollama',
       [length]: 21
     ]
   }
@@ -3015,16 +3015,16 @@ runtim"... is not valid JSON {
     stack: `SyntaxError: Unexpected token 'O', "OCI runtim"... is not valid 
 JSON\n` +
       '    at JSON.parse (<anonymous>)\n' +
-      '    at FDe (C:\\Users\\gordo\\AppData\\Local\\AnthropicClaude\\app-1.
+      '    at FDe (${USERPROFILE}/AppData\\Local\\AnthropicClaude\\app-1.
 0.2768\\resources\\app.asar\\.vite\\build\\index.js:196:207)\n' +
-      '    at LDe.readMessage (C:\\Users\\gordo\\AppData\\Local\\AnthropicCl
+      '    at LDe.readMessage (${USERPROFILE}/AppData\\Local\\AnthropicCl
 aude\\app-1.0.2768\\resources\\app.asar\\.vite\\build\\index.js:196:133)\n' 
 +
       '    at qDe.processReadBuffer 
-(C:\\Users\\gordo\\AppData\\Local\\AnthropicClaude\\app-1.0.2768\\resources\
+(${USERPROFILE}/AppData\\Local\\AnthropicClaude\\app-1.0.2768\\resources\
 \app.asar\\.vite\\build\\index.js:197:2203)\n' +
       '    at Socket.<anonymous> 
-(C:\\Users\\gordo\\AppData\\Local\\AnthropicClaude\\app-1.0.2768\\resources\
+(${USERPROFILE}/AppData\\Local\\AnthropicClaude\\app-1.0.2768\\resources\
 \app.asar\\.vite\\build\\index.js:197:1653)\n' +
       '    at Socket.emit (node:events:519:28)\n' +
       '    at addChunk (node:internal/streams/readable:561:12)\n' +
@@ -3080,11 +3080,11 @@ C:\Program Files\Docker\Docker\resources\bin\docker.exe with args and path:
       'C:\\Program Files\\Sunshine',
       'C:\\Program Files\\Sunshine\\tools',
       'C:\\Program Files\\Docker\\Docker\\resources\\bin',
-      'C:\\Users\\gordo\\AppData\\Local\\Programs\\oh-my-posh\\bin\\',
-      'C:\\Users\\gordo\\AppData\\Local\\Microsoft\\WindowsApps',
+      '${USERPROFILE}/AppData\\Local\\Programs\\oh-my-posh\\bin\\',
+      '${USERPROFILE}/AppData\\Local\\Microsoft\\WindowsApps',
       '',
-      'C:\\Users\\gordo\\.local\\bin',
-      'C:\\Users\\gordo\\AppData\\Local\\Programs\\Ollama',
+      '${USERPROFILE}/.local\\bin',
+      '${USERPROFILE}/AppData\\Local\\Programs\\Ollama',
       [length]: 21
     ]
   }
@@ -3145,11 +3145,11 @@ C:\Program Files\Docker\Docker\resources\bin\docker.exe with args and path:
       'C:\\Program Files\\Sunshine',
       'C:\\Program Files\\Sunshine\\tools',
       'C:\\Program Files\\Docker\\Docker\\resources\\bin',
-      'C:\\Users\\gordo\\AppData\\Local\\Programs\\oh-my-posh\\bin\\',
-      'C:\\Users\\gordo\\AppData\\Local\\Microsoft\\WindowsApps',
+      '${USERPROFILE}/AppData\\Local\\Programs\\oh-my-posh\\bin\\',
+      '${USERPROFILE}/AppData\\Local\\Microsoft\\WindowsApps',
       '',
-      'C:\\Users\\gordo\\.local\\bin',
-      'C:\\Users\\gordo\\AppData\\Local\\Programs\\Ollama',
+      '${USERPROFILE}/.local\\bin',
+      '${USERPROFILE}/AppData\\Local\\Programs\\Ollama',
       [length]: 21
     ]
   }
@@ -3167,16 +3167,16 @@ runtim"... is not valid JSON {
     stack: `SyntaxError: Unexpected token 'O', "OCI runtim"... is not valid 
 JSON\n` +
       '    at JSON.parse (<anonymous>)\n' +
-      '    at FDe (C:\\Users\\gordo\\AppData\\Local\\AnthropicClaude\\app-1.
+      '    at FDe (${USERPROFILE}/AppData\\Local\\AnthropicClaude\\app-1.
 0.2768\\resources\\app.asar\\.vite\\build\\index.js:196:207)\n' +
-      '    at LDe.readMessage (C:\\Users\\gordo\\AppData\\Local\\AnthropicCl
+      '    at LDe.readMessage (${USERPROFILE}/AppData\\Local\\AnthropicCl
 aude\\app-1.0.2768\\resources\\app.asar\\.vite\\build\\index.js:196:133)\n' 
 +
       '    at qDe.processReadBuffer 
-(C:\\Users\\gordo\\AppData\\Local\\AnthropicClaude\\app-1.0.2768\\resources\
+(${USERPROFILE}/AppData\\Local\\AnthropicClaude\\app-1.0.2768\\resources\
 \app.asar\\.vite\\build\\index.js:197:2203)\n' +
       '    at Socket.<anonymous> 
-(C:\\Users\\gordo\\AppData\\Local\\AnthropicClaude\\app-1.0.2768\\resources\
+(${USERPROFILE}/AppData\\Local\\AnthropicClaude\\app-1.0.2768\\resources\
 \app.asar\\.vite\\build\\index.js:197:1653)\n' +
       '    at Socket.emit (node:events:519:28)\n' +
       '    at addChunk (node:internal/streams/readable:561:12)\n' +
@@ -3232,11 +3232,11 @@ C:\Program Files\Docker\Docker\resources\bin\docker.exe with args and path:
       'C:\\Program Files\\Sunshine',
       'C:\\Program Files\\Sunshine\\tools',
       'C:\\Program Files\\Docker\\Docker\\resources\\bin',
-      'C:\\Users\\gordo\\AppData\\Local\\Programs\\oh-my-posh\\bin\\',
-      'C:\\Users\\gordo\\AppData\\Local\\Microsoft\\WindowsApps',
+      '${USERPROFILE}/AppData\\Local\\Programs\\oh-my-posh\\bin\\',
+      '${USERPROFILE}/AppData\\Local\\Microsoft\\WindowsApps',
       '',
-      'C:\\Users\\gordo\\.local\\bin',
-      'C:\\Users\\gordo\\AppData\\Local\\Programs\\Ollama',
+      '${USERPROFILE}/.local\\bin',
+      '${USERPROFILE}/AppData\\Local\\Programs\\Ollama',
       [length]: 21
     ]
   }
@@ -3250,16 +3250,16 @@ runtim"... is not valid JSON {
     stack: `SyntaxError: Unexpected token 'O', "OCI runtim"... is not valid 
 JSON\n` +
       '    at JSON.parse (<anonymous>)\n' +
-      '    at FDe (C:\\Users\\gordo\\AppData\\Local\\AnthropicClaude\\app-1.
+      '    at FDe (${USERPROFILE}/AppData\\Local\\AnthropicClaude\\app-1.
 0.2768\\resources\\app.asar\\.vite\\build\\index.js:196:207)\n' +
-      '    at LDe.readMessage (C:\\Users\\gordo\\AppData\\Local\\AnthropicCl
+      '    at LDe.readMessage (${USERPROFILE}/AppData\\Local\\AnthropicCl
 aude\\app-1.0.2768\\resources\\app.asar\\.vite\\build\\index.js:196:133)\n' 
 +
       '    at qDe.processReadBuffer 
-(C:\\Users\\gordo\\AppData\\Local\\AnthropicClaude\\app-1.0.2768\\resources\
+(${USERPROFILE}/AppData\\Local\\AnthropicClaude\\app-1.0.2768\\resources\
 \app.asar\\.vite\\build\\index.js:197:2203)\n' +
       '    at Socket.<anonymous> 
-(C:\\Users\\gordo\\AppData\\Local\\AnthropicClaude\\app-1.0.2768\\resources\
+(${USERPROFILE}/AppData\\Local\\AnthropicClaude\\app-1.0.2768\\resources\
 \app.asar\\.vite\\build\\index.js:197:1653)\n' +
       '    at Socket.emit (node:events:519:28)\n' +
       '    at addChunk (node:internal/streams/readable:561:12)\n' +
@@ -3319,11 +3319,11 @@ C:\Program Files\Docker\Docker\resources\bin\docker.exe with args and path:
       'C:\\Program Files\\Sunshine',
       'C:\\Program Files\\Sunshine\\tools',
       'C:\\Program Files\\Docker\\Docker\\resources\\bin',
-      'C:\\Users\\gordo\\AppData\\Local\\Programs\\oh-my-posh\\bin\\',
-      'C:\\Users\\gordo\\AppData\\Local\\Microsoft\\WindowsApps',
+      '${USERPROFILE}/AppData\\Local\\Programs\\oh-my-posh\\bin\\',
+      '${USERPROFILE}/AppData\\Local\\Microsoft\\WindowsApps',
       '',
-      'C:\\Users\\gordo\\.local\\bin',
-      'C:\\Users\\gordo\\AppData\\Local\\Programs\\Ollama',
+      '${USERPROFILE}/.local\\bin',
+      '${USERPROFILE}/AppData\\Local\\Programs\\Ollama',
       [length]: 21
     ]
   }
@@ -3341,16 +3341,16 @@ runtim"... is not valid JSON {
     stack: `SyntaxError: Unexpected token 'O', "OCI runtim"... is not valid 
 JSON\n` +
       '    at JSON.parse (<anonymous>)\n' +
-      '    at FDe (C:\\Users\\gordo\\AppData\\Local\\AnthropicClaude\\app-1.
+      '    at FDe (${USERPROFILE}/AppData\\Local\\AnthropicClaude\\app-1.
 0.2768\\resources\\app.asar\\.vite\\build\\index.js:196:207)\n' +
-      '    at LDe.readMessage (C:\\Users\\gordo\\AppData\\Local\\AnthropicCl
+      '    at LDe.readMessage (${USERPROFILE}/AppData\\Local\\AnthropicCl
 aude\\app-1.0.2768\\resources\\app.asar\\.vite\\build\\index.js:196:133)\n' 
 +
       '    at qDe.processReadBuffer 
-(C:\\Users\\gordo\\AppData\\Local\\AnthropicClaude\\app-1.0.2768\\resources\
+(${USERPROFILE}/AppData\\Local\\AnthropicClaude\\app-1.0.2768\\resources\
 \app.asar\\.vite\\build\\index.js:197:2203)\n' +
       '    at Socket.<anonymous> 
-(C:\\Users\\gordo\\AppData\\Local\\AnthropicClaude\\app-1.0.2768\\resources\
+(${USERPROFILE}/AppData\\Local\\AnthropicClaude\\app-1.0.2768\\resources\
 \app.asar\\.vite\\build\\index.js:197:1653)\n' +
       '    at Socket.emit (node:events:519:28)\n' +
       '    at addChunk (node:internal/streams/readable:561:12)\n' +
@@ -3406,11 +3406,11 @@ C:\Program Files\Docker\Docker\resources\bin\docker.exe with args and path:
       'C:\\Program Files\\Sunshine',
       'C:\\Program Files\\Sunshine\\tools',
       'C:\\Program Files\\Docker\\Docker\\resources\\bin',
-      'C:\\Users\\gordo\\AppData\\Local\\Programs\\oh-my-posh\\bin\\',
-      'C:\\Users\\gordo\\AppData\\Local\\Microsoft\\WindowsApps',
+      '${USERPROFILE}/AppData\\Local\\Programs\\oh-my-posh\\bin\\',
+      '${USERPROFILE}/AppData\\Local\\Microsoft\\WindowsApps',
       '',
-      'C:\\Users\\gordo\\.local\\bin',
-      'C:\\Users\\gordo\\AppData\\Local\\Programs\\Ollama',
+      '${USERPROFILE}/.local\\bin',
+      '${USERPROFILE}/AppData\\Local\\Programs\\Ollama',
       [length]: 21
     ]
   }
@@ -3424,16 +3424,16 @@ runtim"... is not valid JSON {
     stack: `SyntaxError: Unexpected token 'O', "OCI runtim"... is not valid 
 JSON\n` +
       '    at JSON.parse (<anonymous>)\n' +
-      '    at FDe (C:\\Users\\gordo\\AppData\\Local\\AnthropicClaude\\app-1.
+      '    at FDe (${USERPROFILE}/AppData\\Local\\AnthropicClaude\\app-1.
 0.2768\\resources\\app.asar\\.vite\\build\\index.js:196:207)\n' +
-      '    at LDe.readMessage (C:\\Users\\gordo\\AppData\\Local\\AnthropicCl
+      '    at LDe.readMessage (${USERPROFILE}/AppData\\Local\\AnthropicCl
 aude\\app-1.0.2768\\resources\\app.asar\\.vite\\build\\index.js:196:133)\n' 
 +
       '    at qDe.processReadBuffer 
-(C:\\Users\\gordo\\AppData\\Local\\AnthropicClaude\\app-1.0.2768\\resources\
+(${USERPROFILE}/AppData\\Local\\AnthropicClaude\\app-1.0.2768\\resources\
 \app.asar\\.vite\\build\\index.js:197:2203)\n' +
       '    at Socket.<anonymous> 
-(C:\\Users\\gordo\\AppData\\Local\\AnthropicClaude\\app-1.0.2768\\resources\
+(${USERPROFILE}/AppData\\Local\\AnthropicClaude\\app-1.0.2768\\resources\
 \app.asar\\.vite\\build\\index.js:197:1653)\n' +
       '    at Socket.emit (node:events:519:28)\n' +
       '    at addChunk (node:internal/streams/readable:561:12)\n' +
@@ -3493,11 +3493,11 @@ C:\Program Files\Docker\Docker\resources\bin\docker.exe with args and path:
       'C:\\Program Files\\Sunshine',
       'C:\\Program Files\\Sunshine\\tools',
       'C:\\Program Files\\Docker\\Docker\\resources\\bin',
-      'C:\\Users\\gordo\\AppData\\Local\\Programs\\oh-my-posh\\bin\\',
-      'C:\\Users\\gordo\\AppData\\Local\\Microsoft\\WindowsApps',
+      '${USERPROFILE}/AppData\\Local\\Programs\\oh-my-posh\\bin\\',
+      '${USERPROFILE}/AppData\\Local\\Microsoft\\WindowsApps',
       '',
-      'C:\\Users\\gordo\\.local\\bin',
-      'C:\\Users\\gordo\\AppData\\Local\\Programs\\Ollama',
+      '${USERPROFILE}/.local\\bin',
+      '${USERPROFILE}/AppData\\Local\\Programs\\Ollama',
       [length]: 21
     ]
   }
@@ -3515,16 +3515,16 @@ runtim"... is not valid JSON {
     stack: `SyntaxError: Unexpected token 'O', "OCI runtim"... is not valid 
 JSON\n` +
       '    at JSON.parse (<anonymous>)\n' +
-      '    at FDe (C:\\Users\\gordo\\AppData\\Local\\AnthropicClaude\\app-1.
+      '    at FDe (${USERPROFILE}/AppData\\Local\\AnthropicClaude\\app-1.
 0.2768\\resources\\app.asar\\.vite\\build\\index.js:196:207)\n' +
-      '    at LDe.readMessage (C:\\Users\\gordo\\AppData\\Local\\AnthropicCl
+      '    at LDe.readMessage (${USERPROFILE}/AppData\\Local\\AnthropicCl
 aude\\app-1.0.2768\\resources\\app.asar\\.vite\\build\\index.js:196:133)\n' 
 +
       '    at qDe.processReadBuffer 
-(C:\\Users\\gordo\\AppData\\Local\\AnthropicClaude\\app-1.0.2768\\resources\
+(${USERPROFILE}/AppData\\Local\\AnthropicClaude\\app-1.0.2768\\resources\
 \app.asar\\.vite\\build\\index.js:197:2203)\n' +
       '    at Socket.<anonymous> 
-(C:\\Users\\gordo\\AppData\\Local\\AnthropicClaude\\app-1.0.2768\\resources\
+(${USERPROFILE}/AppData\\Local\\AnthropicClaude\\app-1.0.2768\\resources\
 \app.asar\\.vite\\build\\index.js:197:1653)\n' +
       '    at Socket.emit (node:events:519:28)\n' +
       '    at addChunk (node:internal/streams/readable:561:12)\n' +
@@ -3580,11 +3580,11 @@ C:\Program Files\Docker\Docker\resources\bin\docker.exe with args and path:
       'C:\\Program Files\\Sunshine',
       'C:\\Program Files\\Sunshine\\tools',
       'C:\\Program Files\\Docker\\Docker\\resources\\bin',
-      'C:\\Users\\gordo\\AppData\\Local\\Programs\\oh-my-posh\\bin\\',
-      'C:\\Users\\gordo\\AppData\\Local\\Microsoft\\WindowsApps',
+      '${USERPROFILE}/AppData\\Local\\Programs\\oh-my-posh\\bin\\',
+      '${USERPROFILE}/AppData\\Local\\Microsoft\\WindowsApps',
       '',
-      'C:\\Users\\gordo\\.local\\bin',
-      'C:\\Users\\gordo\\AppData\\Local\\Programs\\Ollama',
+      '${USERPROFILE}/.local\\bin',
+      '${USERPROFILE}/AppData\\Local\\Programs\\Ollama',
       [length]: 21
     ]
   }
@@ -3650,11 +3650,11 @@ C:\Program Files\Docker\Docker\resources\bin\docker.exe with args and path:
       'C:\\Program Files\\Sunshine',
       'C:\\Program Files\\Sunshine\\tools',
       'C:\\Program Files\\Docker\\Docker\\resources\\bin',
-      'C:\\Users\\gordo\\AppData\\Local\\Programs\\oh-my-posh\\bin\\',
-      'C:\\Users\\gordo\\AppData\\Local\\Microsoft\\WindowsApps',
+      '${USERPROFILE}/AppData\\Local\\Programs\\oh-my-posh\\bin\\',
+      '${USERPROFILE}/AppData\\Local\\Microsoft\\WindowsApps',
       '',
-      'C:\\Users\\gordo\\.local\\bin',
-      'C:\\Users\\gordo\\AppData\\Local\\Programs\\Ollama',
+      '${USERPROFILE}/.local\\bin',
+      '${USERPROFILE}/AppData\\Local\\Programs\\Ollama',
       [length]: 21
     ]
   }
@@ -3821,7 +3821,7 @@ ModuleNotFoundError: No module named 'ensurepip'
       "sfu-library": {
         "command": "C:\\Program Files\\Python314\\python.exe",
         "args": [
-          "C:\\Users\\gordo\\OneDrive\\Desktop\\random ass scripts\\sfu_library_mcp\\sfu_library_mcp_server.py"
+          "${USERPROFILE}/OneDrive\\Desktop\\random ass scripts\\sfu_library_mcp\\sfu_library_mcp_server.py"
         ]
       }
     }
@@ -3830,14 +3830,14 @@ ModuleNotFoundError: No module named 'ensurepip'
   First, let's get the script to Windows:
 
   # Copy the script from container to Windows
-  docker cp claudebox-sfu-library-mcp-app:/workspaces/sfu-library-mcp/src/sfu_library_mcp_server.py "C:\Users\gordo\OneDrive\Desktop\random ass scripts\sfu_library_mcp\"
+  docker cp claudebox-sfu-library-mcp-app:/workspaces/sfu-library-mcp/src/sfu_library_mcp_server.py "${USERPROFILE}/OneDrive\Desktop\random ass scripts\sfu_library_mcp\"
 
 > {
   "mcpServers": {
     "business-plan": {
       "command": "C:\\Program Files\\Python314\\python.exe",
       "args": [
-        "C:\\Users\\gordo\\OneDrive\\Desktop\\random ass scripts\\cataloging
+        "${USERPROFILE}/OneDrive\\Desktop\\random ass scripts\\cataloging
  the buiness plan\\archived_sites\\fm4actioncoach\\fm4_data_export\\scripts\
 \business_plan_mcp.py"
       ]
@@ -3855,7 +3855,7 @@ ModuleNotFoundError: No module named 'ensurepip'
     "pommel": {
       "command": "C:\\Program Files\\Python314\\python.exe",
       "args": [
-        "C:\\Users\\gordo\\.claudebox\\mcp-servers\\pommel\\host-server.py"
+        "${USERPROFILE}/.claudebox\\mcp-servers\\pommel\\host-server.py"
       ]
     }
   }
@@ -3864,7 +3864,7 @@ ModuleNotFoundError: No module named 'ensurepip'
 ● You need to switch the sfu-library section. First, copy the script to Windows, then update the config.
 
   Step 1: Copy the script from container to Windows
-  docker cp claudebox-sfu-library-mcp-app:/workspaces/sfu-library-mcp/src/sfu_library_mcp_server.py "C:\Users\gordo\OneDrive\Desktop\random ass scripts\sfu_library_mcp\"
+  docker cp claudebox-sfu-library-mcp-app:/workspaces/sfu-library-mcp/src/sfu_library_mcp_server.py "${USERPROFILE}/OneDrive\Desktop\random ass scripts\sfu_library_mcp\"
 
   Step 2: Use this config (only the sfu-library section changes):
 
@@ -3873,19 +3873,19 @@ ModuleNotFoundError: No module named 'ensurepip'
       "business-plan": {
         "command": "C:\\Program Files\\Python314\\python.exe",
         "args": [
-          "C:\\Users\\gordo\\OneDrive\\Desktop\\random ass scripts\\cataloging the buiness plan\\archived_sites\\fm4actioncoach\\fm4_data_export\\scripts\\business_plan_mcp.py"
+          "${USERPROFILE}/OneDrive\\Desktop\\random ass scripts\\cataloging the buiness plan\\archived_sites\\fm4actioncoach\\fm4_data_export\\scripts\\business_plan_mcp.py"
         ]
       },
       "sfu-library": {
         "command": "C:\\Program Files\\Python314\\python.exe",
         "args": [
-          "C:\\Users\\gordo\\OneDrive\\Desktop\\random ass scripts\\sfu_library_mcp\\sfu_library_mcp_server.py"
+          "${USERPROFILE}/OneDrive\\Desktop\\random ass scripts\\sfu_library_mcp\\sfu_library_mcp_server.py"
         ]
       },
       "pommel": {
         "command": "C:\\Program Files\\Python314\\python.exe",
         "args": [
-          "C:\\Users\\gordo\\.claudebox\\mcp-servers\\pommel\\host-server.py"
+          "${USERPROFILE}/.claudebox\\mcp-servers\\pommel\\host-server.py"
         ]
       }
     }
@@ -3913,13 +3913,13 @@ version of python?
     "sfu-library": {
       "command": "C:\\Program Files\\Python314\\python.exe",
       "args": [
-        "C:\\Users\\gordo\\OneDrive\\Desktop\\random ass scripts\\sfu_library_mcp\\sfu_library_mcp_server.py"
+        "${USERPROFILE}/OneDrive\\Desktop\\random ass scripts\\sfu_library_mcp\\sfu_library_mcp_server.py"
       ]
     }
   }
 
   Then copy the script once:
-  docker cp claudebox-sfu-library-mcp-app:/workspaces/sfu-library-mcp/src/sfu_library_mcp_server.py "C:\Users\gordo\OneDrive\Desktop\random ass scripts\sfu_library_mcp\"
+  docker cp claudebox-sfu-library-mcp-app:/workspaces/sfu-library-mcp/src/sfu_library_mcp_server.py "${USERPROFILE}/OneDrive\Desktop\random ass scripts\sfu_library_mcp\"
 
   Option 2: Fix the container's Python (if you want true container execution)
 
@@ -4755,7 +4755,7 @@ E: Couldn't find any package by regex 'python3.10-dev'
   At this point, the Windows approach is much simpler. Your Windows Python 3.14 already has everything working. Just:
 
   1. Copy the script to Windows:
-  docker cp claudebox-sfu-library-mcp-app:/workspaces/sfu-library-mcp/src/sfu_library_mcp_server.py "C:\Users\gordo\OneDrive\Desktop\random ass scripts\sfu_library_mcp\"
+  docker cp claudebox-sfu-library-mcp-app:/workspaces/sfu-library-mcp/src/sfu_library_mcp_server.py "${USERPROFILE}/OneDrive\Desktop\random ass scripts\sfu_library_mcp\"
 
   2. Use this config:
   {
@@ -4763,7 +4763,7 @@ E: Couldn't find any package by regex 'python3.10-dev'
       "sfu-library": {
         "command": "C:\\Program Files\\Python314\\python.exe",
         "args": [
-          "C:\\Users\\gordo\\OneDrive\\Desktop\\random ass scripts\\sfu_library_mcp\\sfu_library_mcp_server.py"
+          "${USERPROFILE}/OneDrive\\Desktop\\random ass scripts\\sfu_library_mcp\\sfu_library_mcp_server.py"
         ]
       }
     }
