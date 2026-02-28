@@ -39,6 +39,13 @@ RUN curl -fsSL https://deb.nodesource.com/setup_20.x | bash - \
 # Initialize version JSON placeholder (updated at runtime by entrypoint)
 RUN echo "{\"version\":\"pending\",\"installedAt\":\"pending\",\"installerType\":\"native\",\"autoUpdate\":true}" > /usr/local/share/claude-version.json
 
+# Install Chrome + ChromeDriver for Selenium auth (SFU Library MCP)
+RUN wget -q -O - https://dl.google.com/linux/linux_signing_key.pub | gpg --dearmor -o /usr/share/keyrings/google-chrome.gpg \
+    && echo "deb [arch=amd64 signed-by=/usr/share/keyrings/google-chrome.gpg] http://dl.google.com/linux/chrome/deb/ stable main" > /etc/apt/sources.list.d/google-chrome.list \
+    && apt-get update \
+    && apt-get install -y --no-install-recommends google-chrome-stable \
+    && apt-get clean -y && rm -rf /var/lib/apt/lists/*
+
 # Install Python and quality tools (CodePro features)
 # These enable the dashboard quality-status and quality-check APIs
 RUN apt-get update && apt-get install -y python3-full python3-pip python3-venv \
