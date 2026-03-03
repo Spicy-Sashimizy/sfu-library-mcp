@@ -22,6 +22,7 @@ from urllib.parse import urlparse
 import requests
 
 from lib.citations import extract_full_text_links, extract_metadata
+from lib.client import _reap_zombie_children
 from lib.config import ServerConfig
 from lib.proxy_utils import make_proxied_url, unwrap_proxied_hostname
 from lib.publisher_router import PublisherRouter
@@ -246,100 +247,101 @@ class ArticleDownloader:
                     headless=True,
                     args=STEALTH_LAUNCH_ARGS,
                 )
-                context = browser.new_context(
-                    **get_stealth_context_options(BROWSER_HEADERS["User-Agent"]),
-                )
-
-                # Inject cookies — Playwright requires domain/path
-                if merged_cookies:
-                    parsed = urlparse(url)
-                    pw_cookies = []
-                    for name, value in merged_cookies.items():
-                        cookie_entry = {
-                            "name": name,
-                            "value": value,
-                            "domain": parsed.hostname,
-                            "path": "/",
-                        }
-                        # __Secure- prefix requires secure=True per cookie spec
-                        if name.startswith("__Secure-"):
-                            cookie_entry["secure"] = True
-                            cookie_entry["sameSite"] = "None"
-                        elif name.startswith("__Host-"):
-                            cookie_entry["secure"] = True
-                            cookie_entry["sameSite"] = "Lax"
-                        pw_cookies.append(cookie_entry)
-                    try:
-                        context.add_cookies(pw_cookies)
-                    except Exception as e:
-                        logger.warning("Bulk cookie injection failed (%s), retrying one-by-one", e)
-                        for cookie in pw_cookies:
-                            try:
-                                context.add_cookies([cookie])
-                            except Exception as ce:
-                                logger.warning("Skipping invalid cookie '%s': %s", cookie["name"], ce)
-
-                page = context.new_page()
-                apply_stealth(page)
-                pdf_content = None
-                pdf_content_type = "unknown"
-
-                def handle_response(response):
-                    nonlocal pdf_content, pdf_content_type
-                    ct = response.headers.get("content-type", "")
-                    if "application/pdf" in ct or response.url.endswith(".pdf"):
-                        try:
-                            pdf_content = response.body()
-                            pdf_content_type = ct
-                        except Exception:
-                            pass
-
-                page.on("response", handle_response)
-
                 try:
-                    resp = page.goto(url, timeout=pw_timeout * 1000, wait_until="networkidle")
-                except Exception as e:
-                    browser.close()
-                    raise DownloadError(f"Playwright navigation failed: {e}")
-
-                # If we caught a PDF via response interception, use that
-                if pdf_content and pdf_content[:5] == b"%PDF-":
-                    result = FetchResult(
-                        content=pdf_content,
-                        status_code=200,
-                        content_type=pdf_content_type,
-                        tier_used="playwright",
-                        url=page.url,
+                    context = browser.new_context(
+                        **get_stealth_context_options(BROWSER_HEADERS["User-Agent"]),
                     )
-                    browser.close()
-                    return result
 
-                # Otherwise, get the page body (may be a PDF loaded directly)
-                if resp:
-                    body = resp.body()
-                    ct = resp.headers.get("content-type", "unknown")
-                    status = resp.status
-                else:
-                    body = b""
-                    ct = "unknown"
-                    status = 0
+                    # Inject cookies — Playwright requires domain/path
+                    if merged_cookies:
+                        parsed = urlparse(url)
+                        pw_cookies = []
+                        for name, value in merged_cookies.items():
+                            cookie_entry = {
+                                "name": name,
+                                "value": value,
+                                "domain": parsed.hostname,
+                                "path": "/",
+                            }
+                            # __Secure- prefix requires secure=True per cookie spec
+                            if name.startswith("__Secure-"):
+                                cookie_entry["secure"] = True
+                                cookie_entry["sameSite"] = "None"
+                            elif name.startswith("__Host-"):
+                                cookie_entry["secure"] = True
+                                cookie_entry["sameSite"] = "Lax"
+                            pw_cookies.append(cookie_entry)
+                        try:
+                            context.add_cookies(pw_cookies)
+                        except Exception as e:
+                            logger.warning("Bulk cookie injection failed (%s), retrying one-by-one", e)
+                            for cookie in pw_cookies:
+                                try:
+                                    context.add_cookies([cookie])
+                                except Exception as ce:
+                                    logger.warning("Skipping invalid cookie '%s': %s", cookie["name"], ce)
 
-                browser.close()
+                    page = context.new_page()
+                    apply_stealth(page)
+                    pdf_content = None
+                    pdf_content_type = "unknown"
 
-                if status >= 400:
-                    raise DownloadError(f"Playwright HTTP {status} for {url}")
+                    def handle_response(response):
+                        nonlocal pdf_content, pdf_content_type
+                        ct = response.headers.get("content-type", "")
+                        if "application/pdf" in ct or response.url.endswith(".pdf"):
+                            try:
+                                pdf_content = response.body()
+                                pdf_content_type = ct
+                            except Exception:
+                                pass
 
-                return FetchResult(
-                    content=body,
-                    status_code=status,
-                    content_type=ct,
-                    tier_used="playwright",
-                    url=url,
-                )
+                    page.on("response", handle_response)
+
+                    resp = page.goto(url, timeout=pw_timeout * 1000, wait_until="networkidle")
+
+                    # If we caught a PDF via response interception, use that
+                    if pdf_content and pdf_content[:5] == b"%PDF-":
+                        return FetchResult(
+                            content=pdf_content,
+                            status_code=200,
+                            content_type=pdf_content_type,
+                            tier_used="playwright",
+                            url=page.url,
+                        )
+
+                    # Otherwise, get the page body (may be a PDF loaded directly)
+                    if resp:
+                        body = resp.body()
+                        ct = resp.headers.get("content-type", "unknown")
+                        status = resp.status
+                    else:
+                        body = b""
+                        ct = "unknown"
+                        status = 0
+
+                    if status >= 400:
+                        raise DownloadError(f"Playwright HTTP {status} for {url}")
+
+                    return FetchResult(
+                        content=body,
+                        status_code=status,
+                        content_type=ct,
+                        tier_used="playwright",
+                        url=url,
+                    )
+                finally:
+                    try:
+                        browser.close()
+                    except Exception as e:
+                        logger.debug("browser.close() failed: %s", e)
 
         with concurrent.futures.ThreadPoolExecutor(max_workers=1) as executor:
             future = executor.submit(_run)
-            return future.result(timeout=pw_timeout + 15)
+            try:
+                return future.result(timeout=pw_timeout + 15)
+            finally:
+                _reap_zombie_children()
 
     def _fetch_requests(self, url: str, cookies: dict | None = None) -> FetchResult:
         """Tier 3: Fetch using requests (legacy fallback)."""

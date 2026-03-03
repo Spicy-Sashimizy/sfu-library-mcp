@@ -17,6 +17,7 @@ Extracted from the monolith with enhancements for all AUTH, SEL, ERR TODOs:
 - ERR-007: API response validation
 """
 
+import atexit
 import base64
 import fcntl
 import json
@@ -41,6 +42,87 @@ logger = logging.getLogger("sfu_library_mcp")
 
 # Lazy encryption import — only needed when token encryption is enabled
 _fernet = None
+
+# ─── Zombie reaper & driver tracking ──────────────────────────
+
+# Track active ChromeDriver PIDs so atexit can clean them up
+_active_drivers: set[int] = set()
+
+
+def _reap_zombie_children() -> int:
+    """Reap any zombie child processes via waitpid (non-blocking).
+
+    Returns the number of zombies reaped.  Silently handles
+    ChildProcessError (no children to reap) and other OS errors.
+    """
+    reaped = 0
+    while True:
+        try:
+            pid, _ = os.waitpid(-1, os.WNOHANG)
+            if pid == 0:
+                break
+            reaped += 1
+            logger.debug("Reaped zombie child PID %d", pid)
+        except ChildProcessError:
+            break
+        except OSError:
+            break
+    if reaped:
+        logger.info("Reaped %d zombie child process(es)", reaped)
+    return reaped
+
+
+def _kill_process_tree(pid: int) -> None:
+    """Kill a process and all its children, best-effort.
+
+    Tries psutil first (accurate child enumeration), falls back to
+    process-group kill via os.killpg.
+    """
+    try:
+        import psutil
+        parent = psutil.Process(pid)
+        children = parent.children(recursive=True)
+        for child in children:
+            try:
+                child.kill()
+            except (psutil.NoSuchProcess, psutil.AccessDenied):
+                pass
+        try:
+            parent.kill()
+        except (psutil.NoSuchProcess, psutil.AccessDenied):
+            pass
+        # Wait briefly for processes to die, then reap
+        psutil.wait_procs(children + [parent], timeout=3)
+        logger.debug("Killed process tree for PID %d via psutil (%d children)", pid, len(children))
+        return
+    except ImportError:
+        pass
+    except Exception as e:
+        logger.debug("psutil tree kill failed for PID %d: %s, trying fallback", pid, e)
+
+    # Fallback: SIGKILL the PID and attempt process group kill
+    try:
+        pgid = os.getpgid(pid)
+        os.killpg(pgid, signal.SIGKILL)
+        logger.debug("Killed process group %d for PID %d", pgid, pid)
+    except (ProcessLookupError, PermissionError, OSError) as e:
+        logger.debug("Process group kill failed for PID %d: %s", pid, e)
+    try:
+        os.kill(pid, signal.SIGKILL)
+    except (ProcessLookupError, PermissionError):
+        pass
+
+
+def _atexit_cleanup() -> None:
+    """Safety net: kill any tracked ChromeDriver processes on interpreter exit."""
+    for pid in list(_active_drivers):
+        logger.debug("atexit: cleaning up driver PID %d", pid)
+        _kill_process_tree(pid)
+    _active_drivers.clear()
+    _reap_zombie_children()
+
+
+atexit.register(_atexit_cleanup)
 
 
 def _get_fernet(key: bytes):
@@ -294,7 +376,11 @@ class SFULibraryClient:
             logger.debug("Failed to capture screenshot: %s", e)
 
     def _cleanup_driver(self, driver) -> None:
-        """SEL-001: Robust webdriver cleanup with process kill fallback."""
+        """SEL-001: Robust webdriver cleanup with process kill fallback.
+
+        Kills the ChromeDriver process AND all child Chrome processes it
+        spawned, then reaps any resulting zombie children.
+        """
         if driver is None:
             return
         pid = None
@@ -306,15 +392,12 @@ class SFULibraryClient:
             driver.quit()
         except Exception:
             logger.warning("driver.quit() failed, attempting process cleanup")
-            if pid:
-                try:
-                    os.kill(pid, signal.SIGTERM)
-                    time.sleep(0.5)
-                    os.kill(pid, signal.SIGKILL)
-                except ProcessLookupError:
-                    pass
-                except Exception as e:
-                    logger.debug("Process cleanup failed: %s", e)
+        # Whether quit() succeeded or not, ensure the full process tree is dead
+        if pid:
+            _kill_process_tree(pid)
+            _active_drivers.discard(pid)
+        # Reap any zombie children left behind
+        _reap_zombie_children()
 
     def authenticate(self) -> bool:
         """Authenticate and obtain JWT token via Selenium."""
@@ -348,6 +431,12 @@ class SFULibraryClient:
         driver = None
         try:
             driver = webdriver.Chrome(options=chrome_options)
+
+            # Track driver PID for atexit safety net
+            try:
+                _active_drivers.add(driver.service.process.pid)
+            except Exception:
+                pass
 
             # SEL-005: Log versions
             self._log_driver_versions(driver)
@@ -586,6 +675,8 @@ class SFULibraryClient:
         finally:
             # SEL-001: Robust cleanup
             self._cleanup_driver(driver)
+            # Final zombie sweep after all cleanup
+            _reap_zombie_children()
 
     # ─── SEL-002: Health check ───────────────────────────────────
 
