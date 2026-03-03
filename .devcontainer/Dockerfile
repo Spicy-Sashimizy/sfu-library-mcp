@@ -26,8 +26,10 @@ RUN mkdir -p /etc/supervisor/conf.d /var/log/supervisor
 COPY supervisord.conf /etc/supervisor/supervisord.conf
 COPY start-services.sh /usr/local/bin/start-services.sh
 COPY update-libraries.sh /usr/local/bin/update-libraries.sh
-RUN chmod +x /usr/local/bin/start-services.sh /usr/local/bin/update-libraries.sh \
-    && sed -i 's/\r$//' /usr/local/bin/start-services.sh /usr/local/bin/update-libraries.sh
+COPY lsp-healthcheck.sh /usr/local/bin/lsp-healthcheck.sh
+COPY lsp-symbol-bridge.sh /usr/local/bin/lsp-symbol-bridge.sh
+RUN chmod +x /usr/local/bin/start-services.sh /usr/local/bin/update-libraries.sh /usr/local/bin/lsp-healthcheck.sh /usr/local/bin/lsp-symbol-bridge.sh \
+    && sed -i 's/\r$//' /usr/local/bin/start-services.sh /usr/local/bin/update-libraries.sh /usr/local/bin/lsp-healthcheck.sh /usr/local/bin/lsp-symbol-bridge.sh
 
 # Install Node.js 20 (for Claude Code)
 RUN curl -fsSL https://deb.nodesource.com/setup_20.x | bash - \
@@ -39,18 +41,28 @@ RUN curl -fsSL https://deb.nodesource.com/setup_20.x | bash - \
 # Initialize version JSON placeholder (updated at runtime by entrypoint)
 RUN echo "{\"version\":\"pending\",\"installedAt\":\"pending\",\"installerType\":\"native\",\"autoUpdate\":true}" > /usr/local/share/claude-version.json
 
-# Install Chrome + ChromeDriver for Selenium auth (SFU Library MCP)
-RUN wget -q -O - https://dl.google.com/linux/linux_signing_key.pub | gpg --dearmor -o /usr/share/keyrings/google-chrome.gpg \
-    && echo "deb [arch=amd64 signed-by=/usr/share/keyrings/google-chrome.gpg] http://dl.google.com/linux/chrome/deb/ stable main" > /etc/apt/sources.list.d/google-chrome.list \
-    && apt-get update \
-    && apt-get install -y --no-install-recommends google-chrome-stable \
-    && apt-get clean -y && rm -rf /var/lib/apt/lists/*
-
 # Install Python and quality tools (CodePro features)
 # These enable the dashboard quality-status and quality-check APIs
 RUN apt-get update && apt-get install -y python3-full python3-pip python3-venv \
     && python3 -m pip install --break-system-packages ruff mypy \
     && apt-get clean -y && rm -rf /var/lib/apt/lists/*
+
+# Language Servers for Claude Code LSP integration
+# Covers all languages with runtimes in this container
+# Go (gopls) and Rust (rust-analyzer) installed in post-create.sh
+# because their runtimes are added by devcontainer features after Dockerfile
+RUN npm install -g pyright typescript-language-server typescript 2>/dev/null || \
+    echo "[WARN] npm LSP server install failed, will retry at container start"
+
+# C/C++ language server (clangd) - build-essential already provides gcc/g++
+RUN apt-get update && apt-get install -y --no-install-recommends clangd \
+    && apt-get clean -y && rm -rf /var/lib/apt/lists/* \
+    || echo "[WARN] clangd install failed"
+
+# universal-ctags for multi-language symbol extraction (LSP-Pommel synergy)
+RUN apt-get update && apt-get install -y --no-install-recommends universal-ctags \
+    && apt-get clean -y && rm -rf /var/lib/apt/lists/* \
+    || echo "[WARN] ctags install failed"
 
 # Install GitHub CLI for OAuth authentication
 RUN curl -fsSL https://cli.github.com/packages/githubcli-archive-keyring.gpg | dd of=/usr/share/keyrings/githubcli-archive-keyring.gpg \
@@ -60,6 +72,30 @@ RUN curl -fsSL https://cli.github.com/packages/githubcli-archive-keyring.gpg | d
     && apt-get install -y gh \
     && apt-get clean -y \
     && rm -rf /var/lib/apt/lists/*
+
+# Install Google Chrome + ChromeDriver for Selenium authentication pipeline
+# Chrome is required for: CAS login, MFA handling, JWT token extraction, EZProxy session
+RUN apt-get update && apt-get install -y --no-install-recommends fonts-liberation libnss3 libatk-bridge2.0-0 \
+        libdrm2 libxcomposite1 libxdamage1 libxrandr2 libgbm1 libasound2 libpango-1.0-0 \
+        libcairo2 libcups2 libxss1 libgtk-3-0 xdg-utils \
+    && curl -fsSL -o /tmp/google-chrome.deb https://dl.google.com/linux/direct/google-chrome-stable_current_amd64.deb \
+    && apt-get install -y /tmp/google-chrome.deb \
+    && rm /tmp/google-chrome.deb \
+    && CHROME_VERSION=$(google-chrome --version | grep -oP '\d+\.\d+\.\d+') \
+    && DRIVER_URL="https://storage.googleapis.com/chrome-for-testing-public/${CHROME_VERSION}.0/linux64/chromedriver-linux64.zip" \
+    && echo "Attempting ChromeDriver from: ${DRIVER_URL}" \
+    && (curl -fsSL -o /tmp/chromedriver.zip "${DRIVER_URL}" 2>/dev/null \
+        || curl -fsSL -o /tmp/chromedriver.zip \
+           "https://edgedl.me.gvt1.com/edgedl/chrome/chrome-for-testing/${CHROME_VERSION}.0/linux64/chromedriver-linux64.zip") \
+    && unzip -o /tmp/chromedriver.zip -d /tmp/chromedriver \
+    && mv /tmp/chromedriver/chromedriver-linux64/chromedriver /usr/local/bin/chromedriver \
+    && chmod +x /usr/local/bin/chromedriver \
+    && rm -rf /tmp/chromedriver /tmp/chromedriver.zip \
+    && apt-get clean -y && rm -rf /var/lib/apt/lists/*
+
+# Install poppler-utils for pdftotext (PDF text extraction pipeline)
+RUN apt-get update && apt-get install -y --no-install-recommends poppler-utils \
+    && apt-get clean -y && rm -rf /var/lib/apt/lists/*
 
 # Install Gitleaks for pre-commit secret scanning (industry standard, 800+ rules)
 # SHA256 verified against official checksums.txt from GitHub releases
