@@ -267,6 +267,115 @@ fi
 
 chown -R vscode:vscode "$MCP_SERVER_DIR" /home/vscode/.claude 2>/dev/null || true
 echo "  MCP servers configured"
+
+# ==========================================
+# LSP Language Server Setup (ALL supported languages)
+# ==========================================
+echo ""
+echo "Setting up LSP language servers for Claude Code..."
+
+LSP_SERVERS=""
+
+# --- Python: pyright (may already be from Dockerfile) ---
+if command -v pyright >/dev/null 2>&1; then
+    echo "  [OK] pyright"; LSP_SERVERS="$LSP_SERVERS pyright"
+else
+    npm install -g pyright 2>/dev/null && LSP_SERVERS="$LSP_SERVERS pyright" || echo "  [WARN] pyright failed"
+fi
+
+# --- TypeScript/JS: typescript-language-server (may already be from Dockerfile) ---
+if command -v typescript-language-server >/dev/null 2>&1; then
+    echo "  [OK] typescript-language-server"; LSP_SERVERS="$LSP_SERVERS typescript-lsp"
+else
+    npm install -g typescript-language-server typescript 2>/dev/null && \
+        LSP_SERVERS="$LSP_SERVERS typescript-lsp" || echo "  [WARN] typescript-lsp failed"
+fi
+
+# --- Go: gopls (runtime only available after devcontainer feature) ---
+if command -v gopls >/dev/null 2>&1; then
+    echo "  [OK] gopls"; LSP_SERVERS="$LSP_SERVERS gopls"
+elif command -v go >/dev/null 2>&1; then
+    go install golang.org/x/tools/gopls@latest 2>/dev/null && \
+        LSP_SERVERS="$LSP_SERVERS gopls" || echo "  [WARN] gopls failed"
+fi
+
+# --- Rust: rust-analyzer (runtime only available after devcontainer feature) ---
+if command -v rust-analyzer >/dev/null 2>&1; then
+    echo "  [OK] rust-analyzer"; LSP_SERVERS="$LSP_SERVERS rust-analyzer"
+elif command -v rustup >/dev/null 2>&1; then
+    rustup component add rust-analyzer 2>/dev/null && \
+        LSP_SERVERS="$LSP_SERVERS rust-analyzer" || echo "  [WARN] rust-analyzer failed"
+fi
+
+# --- C/C++: clangd (may already be from Dockerfile) ---
+if command -v clangd >/dev/null 2>&1; then
+    echo "  [OK] clangd"; LSP_SERVERS="$LSP_SERVERS clangd"
+else
+    sudo apt-get update -qq && sudo apt-get install -y -qq clangd 2>/dev/null && \
+        LSP_SERVERS="$LSP_SERVERS clangd" || echo "  [WARN] clangd failed"
+fi
+
+echo "  Available LSP servers:${LSP_SERVERS:-" none"}"
+
+# --- Configure settings.json: ENABLE_LSP_TOOL + enabledPlugins ---
+if [ -f "$SETTINGS_FILE" ] && command -v jq >/dev/null 2>&1; then
+    LOCK="/home/vscode/.claude/.settings.lock"
+    ALL_PLUGINS='{
+      "pyright-lsp@claude-plugins-official": true,
+      "typescript-lsp@claude-plugins-official": true,
+      "gopls-lsp@claude-plugins-official": true,
+      "rust-analyzer-lsp@claude-plugins-official": true,
+      "clangd-lsp@claude-plugins-official": true
+    }'
+    (
+      flock -w 10 200 || exit 0
+      jq --argjson plugins "$ALL_PLUGINS" \
+        '.env = (.env // {}) + {"ENABLE_LSP_TOOL": "1"} | .enabledPlugins = (.enabledPlugins // {}) + $plugins' \
+        "$SETTINGS_FILE" > "${SETTINGS_FILE}.tmp" && mv "${SETTINGS_FILE}.tmp" "$SETTINGS_FILE"
+    ) 200>"$LOCK"
+    echo "  LSP enabled in settings.json (ENABLE_LSP_TOOL=1, 5 plugins)"
+fi
+
+# --- Write per-project LSP metadata (local, not shared volume) ---
+LSP_META_DIR="/home/vscode/.claudebox/lsp"
+mkdir -p "$LSP_META_DIR"
+cat > "$LSP_META_DIR/${PROJECT_NAME:-project}.json" <<LSPMETA
+{
+  "project": "${PROJECT_NAME:-project}",
+  "availableServers": [$(echo "$LSP_SERVERS" | sed 's/^ //;s/ /", "/g;s/^/"/;s/$/"/')],
+  "configuredAt": "$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+}
+LSPMETA
+chown -R vscode:vscode "$LSP_META_DIR" 2>/dev/null || true
+echo "  LSP metadata written to $LSP_META_DIR/${PROJECT_NAME:-project}.json"
+
+# --- Best-effort plugin CLI installation ---
+CLAUDE_BIN="/home/vscode/.local/bin/claude"
+if [ -x "$CLAUDE_BIN" ]; then
+    su - vscode -c "$CLAUDE_BIN plugin marketplace update claude-plugins-official" 2>/dev/null || true
+    for plugin in pyright-lsp typescript-lsp gopls-lsp rust-analyzer-lsp clangd-lsp; do
+        su - vscode -c "$CLAUDE_BIN plugin install $plugin" 2>/dev/null || true
+        su - vscode -c "$CLAUDE_BIN plugin enable $plugin" 2>/dev/null || true
+    done
+    echo "  Plugin CLI install attempted (best-effort)"
+fi
+
+echo "  LSP setup complete"
+
+# ==========================================
+# LSP-Pommel Symbol Bridge Setup
+# ==========================================
+echo "Setting up LSP-Pommel symbol bridge..."
+mkdir -p /home/vscode/.claudebox/pommel
+if [ -x "/usr/local/bin/lsp-symbol-bridge.sh" ]; then
+    echo '{"project":"'"${PROJECT_NAME:-project}"'","generatedAt":"","version":"1.0.0","files":{},"stats":{"totalFiles":0,"totalSymbols":0,"method":"none"}}' \
+        > /home/vscode/.claudebox/pommel/symbols.json
+    chown -R vscode:vscode /home/vscode/.claudebox/pommel 2>/dev/null || true
+    echo "  Symbol bridge initialized"
+else
+    echo "  [WARN] lsp-symbol-bridge.sh not found, skipping"
+fi
+
 echo "=========================================="
 echo "  ClaudeBox Environment Ready!"
 echo "=========================================="
@@ -333,7 +442,18 @@ fi
 BASHRC_VENV_EOF
     fi
 
+    # Install Playwright browsers if playwright is in the venv
+    if .venv/bin/python3 -c "import playwright" 2>/dev/null; then
+        echo "Installing Playwright Chromium browser..."
+        .venv/bin/playwright install --with-deps chromium 2>/dev/null || true
+        # Copy to vscode user cache so it works when running as vscode
+        if [ -d /root/.cache/ms-playwright ]; then
+            cp -r /root/.cache/ms-playwright /home/vscode/.cache/ms-playwright 2>/dev/null || true
+        fi
+    fi
+
     chown -R vscode:vscode .venv
+    chown -R vscode:vscode /home/vscode/.cache 2>/dev/null || true
     echo "Python virtual environment ready at .venv/"
 fi
 
