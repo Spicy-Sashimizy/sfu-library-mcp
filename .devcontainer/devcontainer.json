@@ -23,7 +23,7 @@
     "vscode": {
       "settings": {
         "terminal.integrated.defaultProfile.linux": "bash",
-        "python.defaultInterpreterPath": "/usr/local/bin/python",
+        "python.defaultInterpreterPath": "/workspaces/sfu-library-mcp/.venv/bin/python3",
         "python.formatting.provider": "none",
         "editor.formatOnSave": true
       },
