@@ -445,10 +445,24 @@ BASHRC_VENV_EOF
     # Install Playwright browsers if playwright is in the venv
     if .venv/bin/python3 -c "import playwright" 2>/dev/null; then
         echo "Installing Playwright Chromium browser..."
-        .venv/bin/playwright install --with-deps chromium 2>/dev/null || true
+        # Try with --with-deps first (installs system libs), fall back to without
+        .venv/bin/playwright install --with-deps chromium || .venv/bin/playwright install chromium || echo "WARNING: Playwright browser install failed"
         # Copy to vscode user cache so it works when running as vscode
         if [ -d /root/.cache/ms-playwright ]; then
+            mkdir -p /home/vscode/.cache
             cp -r /root/.cache/ms-playwright /home/vscode/.cache/ms-playwright 2>/dev/null || true
+        fi
+        # Verify the install succeeded
+        if .venv/bin/python3 -c "
+from playwright.sync_api import sync_playwright
+with sync_playwright() as p:
+    b = p.chromium.launch(headless=True, args=['--no-sandbox'])
+    b.close()
+    print('Playwright browser verification: OK')
+" 2>/dev/null; then
+            echo "✓ Playwright Chromium installed and verified"
+        else
+            echo "WARNING: Playwright installed but browser launch failed — downloads may fall back to curl_cffi/requests"
         fi
     fi
 
