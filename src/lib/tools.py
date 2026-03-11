@@ -11,7 +11,6 @@ import asyncio
 import json
 import logging
 import os
-import random
 import subprocess
 import time
 from typing import Any
@@ -29,10 +28,6 @@ from lib.citations import (
     format_ris_entry,
 )
 from lib.config import load_config
-from lib.downloader import ArticleDownloader, DownloadError, PDFTextExtractionError
-from lib.proxy_utils import make_proxied_url
-from lib.publisher_router import PublisherRouter
-from lib.rate_limiter import DownloadRateLimiter, RateLimitExceeded
 from lib.formatters import format_search_results, format_item_details
 from lib.reranker import rerank_results
 from lib.validators import sanitize_search_query, validate_isbn
@@ -101,49 +96,8 @@ def _get_features() -> dict[str, bool]:
     return _get_config().features
 
 
-# Lazy-loaded downloader, rate limiter, publisher router, and zotero client
-_downloader: ArticleDownloader | None = None
-_downloader_cookie_id: int | None = None  # Track cookie changes
-_rate_limiter: DownloadRateLimiter | None = None
-_publisher_router: PublisherRouter | None = None
+# Lazy-loaded zotero client
 _zotero_client: ZoteroClient | None = None
-
-
-def _get_rate_limiter() -> DownloadRateLimiter:
-    """Get or create the singleton DownloadRateLimiter."""
-    global _rate_limiter
-    if _rate_limiter is None:
-        _rate_limiter = DownloadRateLimiter(_get_config())
-    return _rate_limiter
-
-
-def _get_publisher_router() -> PublisherRouter:
-    """Get or create the singleton PublisherRouter.
-
-    Persists across downloader recreations (cookie changes) so learned
-    domain preferences survive re-authentication.
-    """
-    global _publisher_router
-    if _publisher_router is None:
-        _publisher_router = PublisherRouter()
-    return _publisher_router
-
-
-def _get_downloader(lib_client) -> ArticleDownloader:
-    """Get or create ArticleDownloader, recreating if cookies changed."""
-    global _downloader, _downloader_cookie_id
-    cookies = getattr(lib_client, "cookies", {})
-    # Content-based fingerprint so we detect when cookies are updated in place
-    cookie_id = hash(frozenset(cookies.items())) if cookies else 0
-
-    if _downloader is None or _downloader_cookie_id != cookie_id:
-        _downloader = ArticleDownloader(
-            _get_config(), cookies,
-            rate_limiter=_get_rate_limiter(),
-            publisher_router=_get_publisher_router(),
-        )
-        _downloader_cookie_id = cookie_id
-    return _downloader
 
 
 def _get_zotero_client() -> ZoteroClient:
@@ -223,42 +177,6 @@ def _cache_search_docs(docs: list[dict]) -> None:
 def _lookup_cached_record(record_id: str) -> dict | None:
     """Strategy B: Look up a previously searched record from cache."""
     return _record_cache.get(record_id)
-
-
-# ─── Skip flag schema properties (shared across download tools) ──
-
-_SKIP_FLAG_PROPERTIES = {
-    "skip_ezproxy": {
-        "type": "boolean",
-        "description": "Skip EZProxy fallback entirely (default: false)",
-        "default": False,
-    },
-    "skip_rate_limit": {
-        "type": "boolean",
-        "description": "Skip rate limiter delay/budget checks (default: false)",
-        "default": False,
-    },
-    "skip_tiers": {
-        "type": "array",
-        "items": {"type": "string"},
-        "description": "Tiers to skip, e.g. [\"playwright\", \"requests\"]",
-    },
-    "skip_pdf_check": {
-        "type": "boolean",
-        "description": "Skip PDF magic-byte validation — accept any content (default: false)",
-        "default": False,
-    },
-    "skip_login_check": {
-        "type": "boolean",
-        "description": "Skip login/auth page detection (default: false)",
-        "default": False,
-    },
-    "skip_copy_to_host": {
-        "type": "boolean",
-        "description": "Skip copying PDF to host Downloads folder (default: false)",
-        "default": False,
-    },
-}
 
 
 # ─── Tool definitions ───────────────────────────────────────────
@@ -561,29 +479,6 @@ TOOL_DEFINITIONS: list[Tool] = [
         }
     ),
     Tool(
-        name="download_article",
-        description=(
-            "Download the PDF of a library article to the container cache and optionally "
-            "to the host Downloads folder. Use after searching to save articles locally."
-        ),
-        inputSchema={
-            "type": "object",
-            "properties": {
-                "record_id": {
-                    "type": "string",
-                    "description": "The record ID of the item (obtained from search results)"
-                },
-                "save_to_host": {
-                    "type": "boolean",
-                    "description": "Also copy PDF to host Downloads folder (default: true)",
-                    "default": True
-                },
-                **_SKIP_FLAG_PROPERTIES,
-            },
-            "required": ["record_id"]
-        }
-    ),
-    Tool(
         name="read_article",
         description=(
             "Retrieve a PDF from the user's Zotero library and extract its full text for analysis. "
@@ -706,58 +601,6 @@ TOOL_DEFINITIONS: list[Tool] = [
             },
             "required": ["collection_name"]
         }
-    ),
-    Tool(
-        name="backfill_collection_pdfs",
-        description=(
-            "Find items in a Zotero collection that only have citation metadata "
-            "(no PDF attached) and attempt to download and attach PDFs for each. "
-            "Use after batch saves where downloads failed, or to enrich an "
-            "existing collection with full-text PDFs."
-        ),
-        inputSchema={
-            "type": "object",
-            "properties": {
-                "collection_name": {
-                    "type": "string",
-                    "description": "Name of the Zotero collection to backfill PDFs for"
-                },
-                "save_to_host": {
-                    "type": "boolean",
-                    "description": "Also copy PDFs to host Downloads folder (default: true)",
-                    "default": True,
-                },
-            },
-            "required": ["collection_name"],
-        },
-    ),
-    Tool(
-        name="download_from_url",
-        description=(
-            "Download a PDF from a direct URL. Use when you have a known PDF URL "
-            "from any source (publisher page, DOI link, direct PDF link). "
-            "Supports tiered download strategies to bypass TLS fingerprint detection."
-        ),
-        inputSchema={
-            "type": "object",
-            "properties": {
-                "url": {
-                    "type": "string",
-                    "description": "Direct URL to the PDF"
-                },
-                "filename": {
-                    "type": "string",
-                    "description": "Optional filename for the downloaded PDF"
-                },
-                "use_ezproxy": {
-                    "type": "boolean",
-                    "description": "Wrap URL with EZProxy prefix for authenticated access",
-                    "default": False,
-                },
-                **_SKIP_FLAG_PROPERTIES,
-            },
-            "required": ["url"],
-        },
     ),
     Tool(
         name="get_diagnostics",
@@ -888,8 +731,6 @@ async def _dispatch_tool(
         return await _handle_export_search(arguments, lib_client)
     elif name == "batch_isbn_lookup":
         return await _handle_batch_isbn(arguments, lib_client)
-    elif name == "download_article":
-        return await _handle_download_article(arguments, lib_client)
     elif name == "read_article":
         return await _handle_read_article(arguments, lib_client)
     elif name == "save_to_zotero":
@@ -902,10 +743,6 @@ async def _dispatch_tool(
         return _handle_search_zotero(arguments)
     elif name == "get_zotero_collection_items":
         return _handle_get_zotero_collection_items(arguments)
-    elif name == "backfill_collection_pdfs":
-        return await _handle_backfill_collection_pdfs(arguments, lib_client)
-    elif name == "download_from_url":
-        return _handle_download_from_url(arguments, lib_client)
     elif name == "get_diagnostics":
         return _handle_get_diagnostics(arguments, lib_client)
     elif name == "get_zotero_status":
@@ -1440,80 +1277,7 @@ async def _handle_batch_isbn(args: dict, client) -> list[TextContent]:
     return [TextContent(type="text", text="\n".join(output))]
 
 
-# ─── PDF Download + Zotero handlers ───────────────────────────
-
-def _extract_skip_flags(args: dict) -> dict:
-    """Extract skip flag arguments into a dict for downloader."""
-    flags = {}
-    for key in ("skip_ezproxy", "skip_rate_limit", "skip_pdf_check",
-                "skip_login_check", "skip_copy_to_host"):
-        if args.get(key):
-            flags[key] = True
-    if args.get("skip_tiers"):
-        flags["skip_tiers"] = args["skip_tiers"]
-    return flags
-
-
-async def _handle_download_article(args: dict, client) -> list[TextContent]:
-    features = _get_features()
-    if not features.get("pdf_download_enabled", True):
-        return [TextContent(type="text", text="PDF download is disabled. Set SFU_FEATURE_PDF_DOWNLOAD_ENABLED=true to enable.")]
-
-    record_id = args.get("record_id", "")
-    save_to_host = args.get("save_to_host", True)
-    skip_flags = _extract_skip_flags(args)
-
-    if not client.ensure_authenticated():
-        return [TextContent(type="text", text="Authentication failed.")]
-
-    item = await _resolve_record(record_id, client)
-    if not item:
-        return [TextContent(type="text", text=f"Could not find item with record ID: {record_id}")]
-
-    downloader = _get_downloader(client)
-    urls = downloader.resolve_all_pdf_urls(item)
-    if not urls:
-        return [TextContent(type="text", text=f"No PDF URL found for record {record_id}. The item may not have an accessible PDF.")]
-
-    metadata = extract_metadata(item)
-    copy_to_host = save_to_host and features.get("host_download_enabled", True)
-    if skip_flags.get("skip_copy_to_host"):
-        copy_to_host = False
-
-    # Try each available URL (direct + EZProxy fallback per URL) until one succeeds
-    config = _get_config()
-    budget = config.download_budget_seconds
-    start_time = time.time()
-    errors = []
-    result = None
-    for url in urls:
-        elapsed = time.time() - start_time
-        if elapsed > budget:
-            errors.append(f"  (skipped remaining URLs — {budget:.0f}s time budget exceeded)")
-            break
-        result = downloader.download_pdf(url, record_id, metadata, copy_to_host=copy_to_host, skip_flags=skip_flags)
-        if result["success"]:
-            break
-        errors.append(f"  {url}: {result['error']}")
-
-    if not result or not result["success"]:
-        error_detail = "\n".join(errors)
-        return [TextContent(type="text", text=(
-            f"Download failed — tried {len(urls)} URL(s) with direct + EZProxy strategies:\n{error_detail}"
-        ))]
-
-    output = ["=" * 50, "ARTICLE DOWNLOADED", "=" * 50]
-    if metadata:
-        output.append(f"\nTitle: {metadata.get('title', 'Unknown')}")
-    output.append(f"Size: {result['size_bytes']:,} bytes")
-    output.append(f"Container path: {result['container_path']}")
-    if result.get("host_path"):
-        output.append(f"Host Downloads: {result['host_path']}")
-    elif save_to_host:
-        output.append("Note: Could not copy to host Downloads folder.")
-
-    return [TextContent(type="text", text="\n".join(output))]
-
+# ─── PDF retrieval + Zotero handlers ──────────────────────────
 
 async def _handle_read_article(args: dict, client) -> list[TextContent]:
     features = _get_features()
@@ -1841,186 +1605,6 @@ def _handle_get_zotero_collection_items(args: dict) -> list[TextContent]:
     return [TextContent(type="text", text="\n".join(output))]
 
 
-def _handle_download_from_url(args: dict, client) -> list[TextContent]:
-    features = _get_features()
-    if not features.get("pdf_download_enabled", True):
-        return [TextContent(type="text", text="PDF download is disabled. Set SFU_FEATURE_PDF_DOWNLOAD_ENABLED=true to enable.")]
-
-    url = args.get("url", "")
-    filename = args.get("filename")
-    use_ezproxy = args.get("use_ezproxy", False)
-    skip_flags = _extract_skip_flags(args)
-
-    if not url:
-        return [TextContent(type="text", text="No URL provided.")]
-
-    config = _get_config()
-    if use_ezproxy and config.ezproxy_proxy_base not in url:
-        url = make_proxied_url(url, config.ezproxy_proxy_base)
-
-    downloader = _get_downloader(client)
-    result = downloader.download_from_direct_url(url, filename=filename, skip_flags=skip_flags)
-
-    if not result["success"]:
-        return [TextContent(type="text", text=f"Download failed: {result['error']}")]
-
-    output = [
-        "=" * 50,
-        "PDF DOWNLOADED FROM URL",
-        "=" * 50,
-        f"\nURL: {url}",
-        f"Size: {result['size_bytes']:,} bytes",
-        f"Tier: {result['tier_used']}",
-        f"Container path: {result['container_path']}",
-    ]
-    if filename:
-        output.append(f"Filename: {filename}")
-
-    return [TextContent(type="text", text="\n".join(output))]
-
-
-async def _handle_backfill_collection_pdfs(args: dict, client) -> list[TextContent]:
-    # Independent auth checks — Zotero and SFU Library are separate paths
-    zotero_auth_err = _ensure_zotero_auth()
-    if zotero_auth_err:
-        return zotero_auth_err
-
-    features = _get_features()
-    if not features.get("pdf_download_enabled", True):
-        return [TextContent(type="text", text="PDF download is disabled.")]
-
-    collection_name = args.get("collection_name", "")
-    save_to_host = args.get("save_to_host", True)
-
-    if not collection_name:
-        return [TextContent(type="text", text="No collection name provided.")]
-
-    sfu_authenticated = client.ensure_authenticated()
-    if not sfu_authenticated:
-        return [TextContent(type="text", text=(
-            "SFU Library authentication failed — cannot search for PDFs. "
-            "Zotero is connected. Use Zotero-only tools (search_zotero, "
-            "list_zotero_collections) which work independently."
-        ))]
-
-    zot_client = _get_zotero_client()
-    downloader = _get_downloader(client)
-
-    # Find collection
-    try:
-        collection_key = zot_client.find_collection_by_name(collection_name)
-    except ZoteroError as e:
-        return [TextContent(type="text", text=f"Zotero error: {e}")]
-
-    if not collection_key:
-        return [TextContent(type="text", text=f"Collection '{collection_name}' not found in Zotero.")]
-
-    # Get items without PDFs
-    try:
-        items_without_pdfs = zot_client.get_items_without_pdfs(collection_key)
-    except ZoteroError as e:
-        return [TextContent(type="text", text=f"Zotero error: {e}")]
-
-    if not items_without_pdfs:
-        return [TextContent(type="text", text=f"All items in '{collection_name}' already have PDFs attached.")]
-
-    # Cap backfill to configured limit
-    config = _get_config()
-    backfill_cap = config.download_backfill_cap
-    if len(items_without_pdfs) > backfill_cap:
-        logger.info(
-            "Backfill capped: %d items without PDFs, limiting to %d",
-            len(items_without_pdfs), backfill_cap,
-        )
-        items_without_pdfs = items_without_pdfs[:backfill_cap]
-
-    # Check budget before starting
-    rate_limiter = _get_rate_limiter()
-    budget = rate_limiter.get_budget_status()
-    if budget["session_remaining"] == 0:
-        return [TextContent(type="text", text="Session download budget exhausted. Restart server to reset.")]
-
-    attached = 0
-    failed = 0
-    details = []
-    copy_to_host = save_to_host and features.get("host_download_enabled", True)
-
-    for item in items_without_pdfs:
-        title_short = item.get("title", "Unknown")[:60]
-        item_key = item.get("key", "")
-        doi = item.get("DOI", "")
-
-        # Try to find the article via DOI or title search
-        search_query = doi if doi else item.get("title", "")
-        if not search_query:
-            details.append(f"  {title_short}: FAILED - no DOI or title for search")
-            failed += 1
-            continue
-
-        # Search library for full record with links
-        record = None
-        try:
-            async with _request_semaphore:
-                results = client.search(query=search_query, limit=1)
-            if results and results.get("docs"):
-                record = results["docs"][0]
-        except Exception as e:
-            logger.warning("Backfill search failed for '%s': %s", search_query[:50], e)
-
-        if not record:
-            details.append(f"  {title_short}: FAILED - not found in library search")
-            failed += 1
-            continue
-
-        # Resolve PDF URLs and try each one
-        urls = downloader.resolve_all_pdf_urls(record)
-        if not urls:
-            details.append(f"  {title_short}: FAILED - no PDF URL found")
-            failed += 1
-            continue
-
-        # Download PDF — try all available URLs
-        metadata = extract_metadata(record)
-        dl_result = None
-        for url in urls:
-            dl_result = downloader.download_pdf(url, item_key, metadata, copy_to_host=copy_to_host)
-            if dl_result["success"]:
-                break
-        if not dl_result or not dl_result["success"]:
-            details.append(f"  {title_short}: FAILED - {dl_result['error'] if dl_result else 'no URLs'}")
-            failed += 1
-            continue
-
-        # Attach to Zotero item
-        try:
-            zot_client.attach_pdf(item_key, dl_result["container_path"])
-            host_info = f" (host: {dl_result['host_path']})" if dl_result.get("host_path") else ""
-            details.append(f"  {title_short}: ATTACHED{host_info}")
-            attached += 1
-        except ZoteroError as e:
-            details.append(f"  {title_short}: FAILED - attach error: {e}")
-            failed += 1
-
-        # Humanized delay between backfill downloads
-        await asyncio.sleep(random.uniform(3.0, 6.0))
-
-    # Include budget status in output
-    budget = rate_limiter.get_budget_status()
-    output = [
-        "=" * 50,
-        "BACKFILL COLLECTION PDFs",
-        "=" * 50,
-        f"\nCollection: {collection_name}",
-        f"Items checked: {len(items_without_pdfs)}",
-        f"PDFs attached: {attached}",
-        f"Failed: {failed}",
-        f"Downloads remaining: {budget['session_remaining']}/{budget['session_budget']}",
-        "",
-    ] + details
-
-    return [TextContent(type="text", text="\n".join(output))]
-
-
 # ─── Zotero status handlers ──────────────────────────────────────
 
 def _handle_get_zotero_status() -> list[TextContent]:
@@ -2147,52 +1731,14 @@ def _handle_get_diagnostics(args: dict, client) -> list[TextContent]:
         output.append("  Status: NO proxy cookies — session not established")
         output.append("  Action: Re-authenticate to establish EZProxy session")
 
-    # 4. Download tier availability
-    output.append("\n--- Download Tier Availability ---")
-    tier_status = {}
-    try:
-        import curl_cffi  # noqa: F401
-        tier_status["curl_cffi"] = "AVAILABLE"
-    except ImportError:
-        tier_status["curl_cffi"] = "NOT INSTALLED"
-    try:
-        from playwright.sync_api import sync_playwright  # noqa: F401
-        tier_status["playwright"] = "AVAILABLE"
-    except ImportError:
-        tier_status["playwright"] = "NOT INSTALLED"
-    tier_status["requests"] = "AVAILABLE (built-in)"
-    for tier, status_str in tier_status.items():
-        output.append(f"  {tier}: {status_str}")
+    # 4. Zotero PDF retrieval
+    output.append("\n--- PDF Retrieval ---")
+    features = _get_features()
+    output.append(f"  Method: Zotero PDF retrieval")
+    output.append(f"  Enabled: {features.get('zotero_pdf_retrieval_enabled', True)}")
+    output.append(f"  Direct download: REMOVED (use capture_server for direct downloads)")
 
-    # 5. Circuit breaker state
-    output.append("\n--- Circuit Breaker ---")
-    try:
-        downloader = _get_downloader(client)
-        cb = downloader._circuit_breaker
-        can_proceed = cb.can_proceed()
-        output.append(f"  Can proceed: {can_proceed}")
-        output.append(f"  Failure count: {cb._failure_count}")
-        output.append(f"  Threshold: {cb._threshold}")
-        output.append(f"  Timeout: {cb._timeout}s")
-        if hasattr(cb, '_last_failure_time') and cb._last_failure_time:
-            last_fail = datetime.datetime.fromtimestamp(cb._last_failure_time).isoformat()
-            output.append(f"  Last failure: {last_fail}")
-    except Exception as e:
-        output.append(f"  Error: {e}")
-
-    # 6. Rate limiter state
-    output.append("\n--- Rate Limiter ---")
-    try:
-        rate_limiter = _get_rate_limiter()
-        budget_status = rate_limiter.get_budget_status()
-        output.append(f"  Session remaining: {budget_status['session_remaining']}/{budget_status['session_budget']}")
-        output.append(f"  Hourly: {budget_status['hourly_used']}/{budget_status['hourly_limit']} used")
-        if budget_status.get("per_domain"):
-            output.append(f"  Per-domain stats: {budget_status['per_domain']}")
-    except Exception as e:
-        output.append(f"  Error: {e}")
-
-    # 7. Log file info
+    # 5. Log file info
     output.append("\n--- Log File ---")
     log_path = getattr(client.config, "log_file", "") or "/tmp/sfu-library-mcp.log"
     try:
