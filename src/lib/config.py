@@ -67,6 +67,7 @@ class ServerConfig:
         "pdf_download_enabled": True,
         "zotero_enabled": True,
         "host_download_enabled": True,
+        "zotero_pdf_retrieval_enabled": True,
     })
 
     # Zotero integration
@@ -186,6 +187,7 @@ def load_config() -> ServerConfig:
         "pdf_download_enabled": True,
         "zotero_enabled": True,
         "host_download_enabled": True,
+        "zotero_pdf_retrieval_enabled": True,
     }
     for key in default_features:
         env_key = f"SFU_FEATURE_{key.upper()}"

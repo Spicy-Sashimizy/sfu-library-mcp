@@ -10,7 +10,9 @@ Extracted from the monolith with:
 import asyncio
 import json
 import logging
+import os
 import random
+import subprocess
 import time
 from typing import Any
 
@@ -37,6 +39,47 @@ from lib.validators import sanitize_search_query, validate_isbn
 from lib.zotero import ZoteroClient, ZoteroError
 
 logger = logging.getLogger("sfu_library_mcp")
+
+
+def extract_text(pdf_path: str, max_chars: int = 100_000) -> str:
+    """Extract text from a PDF using pdftotext (standalone, no downloader dependency).
+
+    Args:
+        pdf_path: Path to the PDF file.
+        max_chars: Maximum characters to return.
+
+    Returns:
+        Extracted text content.
+
+    Raises:
+        RuntimeError: If extraction fails.
+    """
+    if not os.path.exists(pdf_path):
+        raise RuntimeError(f"PDF file not found: {pdf_path}")
+
+    try:
+        result = subprocess.run(
+            ["pdftotext", "-layout", pdf_path, "-"],
+            capture_output=True,
+            text=True,
+            timeout=60,
+        )
+    except FileNotFoundError:
+        raise RuntimeError(
+            "pdftotext not found. Install poppler-utils: apt-get install poppler-utils"
+        )
+    except subprocess.TimeoutExpired:
+        raise RuntimeError("Text extraction timed out after 60s")
+
+    if result.returncode != 0:
+        raise RuntimeError(f"pdftotext failed: {result.stderr}")
+
+    text = result.stdout
+    if len(text) > max_chars:
+        text = text[:max_chars] + f"\n\n[... Text truncated at {max_chars:,} characters. Full PDF available at {pdf_path}]"
+
+    return text
+
 
 # PERF-003: Semaphore to limit concurrent API requests (bumped from 5 for fusion)
 _request_semaphore = asyncio.Semaphore(8)
