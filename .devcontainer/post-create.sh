@@ -1,4 +1,4 @@
-﻿#!/bin/bash
+#!/bin/bash
 set -e
 
 # ==========================================
@@ -9,10 +9,12 @@ SHARED_CREDENTIALS="/home/vscode/.claude/credentials.json"
 CREDENTIALS_DIR="/home/vscode/.claudebox-credentials"
 CREDENTIALS_FILE="${CREDENTIALS_DIR}/credentials.json"
 
-if [ -f "$SHARED_CREDENTIALS" ]; then
+if [ -f "$CREDENTIALS_FILE" ]; then
+    echo "Credentials file already present (bind mount)"
+elif [ -f "$SHARED_CREDENTIALS" ]; then
     echo "Setting up credentials file..."
     mkdir -p "$CREDENTIALS_DIR"
-    cp "$SHARED_CREDENTIALS" "$CREDENTIALS_FILE"
+    cp "$SHARED_CREDENTIALS" "$CREDENTIALS_FILE" 2>/dev/null || echo "Warning: could not copy credentials (read-only mount?)"
     chown -R vscode:vscode "$CREDENTIALS_DIR" 2>/dev/null || true
     echo "âœ“ Credentials file copied from shared volume"
 else
