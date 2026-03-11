@@ -5,7 +5,7 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-from lib.tools import TOOL_DEFINITIONS, handle_tool_call, get_metrics, _reciprocal_rank_fusion, _get_downloader
+from lib.tools import TOOL_DEFINITIONS, handle_tool_call, get_metrics, _reciprocal_rank_fusion
 
 
 class MockClient:
@@ -72,8 +72,8 @@ def mock_client_with_results(sample_pnx_record, mock_search_response):
 
 
 class TestToolDefinitions:
-    def test_exactly_26_tools(self):
-        assert len(TOOL_DEFINITIONS) == 26
+    def test_exactly_23_tools(self):
+        assert len(TOOL_DEFINITIONS) == 23
 
     def test_tool_names(self):
         names = [t.name for t in TOOL_DEFINITIONS]
@@ -84,19 +84,37 @@ class TestToolDefinitions:
             "get_full_text_links", "generate_citation",
             "batch_generate_citations", "export_search_results",
             "batch_isbn_lookup",
-            "download_article", "read_article", "save_to_zotero",
+            "read_article", "save_to_zotero",
             "list_zotero_collections", "batch_save_to_zotero",
             "search_zotero", "get_zotero_collection_items",
-            "backfill_collection_pdfs", "download_from_url",
             "get_diagnostics", "get_zotero_status", "zotero_authenticate",
         ]
         assert names == expected
 
-    def test_download_from_url_tool_exists(self):
+    def test_removed_tools_not_present(self):
         names = [t.name for t in TOOL_DEFINITIONS]
-        assert "download_from_url" in names
-        tool = next(t for t in TOOL_DEFINITIONS if t.name == "download_from_url")
-        assert "url" in tool.inputSchema["required"]
+        assert "download_article" not in names
+        assert "download_from_url" not in names
+        assert "backfill_collection_pdfs" not in names
+
+    def test_read_article_no_skip_flags(self):
+        """read_article should no longer have skip flag properties."""
+        tool = next(t for t in TOOL_DEFINITIONS if t.name == "read_article")
+        props = tool.inputSchema["properties"]
+        assert "skip_ezproxy" not in props
+        assert "skip_rate_limit" not in props
+
+    def test_save_to_zotero_no_attach_pdf(self):
+        """save_to_zotero should no longer have attach_pdf parameter."""
+        tool = next(t for t in TOOL_DEFINITIONS if t.name == "save_to_zotero")
+        props = tool.inputSchema["properties"]
+        assert "attach_pdf" not in props
+
+    def test_batch_save_to_zotero_no_attach_pdfs(self):
+        """batch_save_to_zotero should no longer have attach_pdfs parameter."""
+        tool = next(t for t in TOOL_DEFINITIONS if t.name == "batch_save_to_zotero")
+        props = tool.inputSchema["properties"]
+        assert "attach_pdfs" not in props
 
     def test_all_tools_have_schemas(self):
         for tool in TOOL_DEFINITIONS:
@@ -380,169 +398,101 @@ class TestReciprocalRankFusion:
         assert len(merged["docs"]) == 1
 
 
-class TestGetDownloaderCookieStaleness:
-    """Verify _get_downloader detects cookie changes via content hash."""
-
-    def test_recreates_downloader_when_cookies_mutated(self):
-        """Mutating the same dict object should trigger recreation."""
-        import lib.tools as tools_module
-        # Reset global state
-        tools_module._downloader = None
-        tools_module._downloader_cookie_id = None
-
-        client = MockClient()
-        client.cookies = {"session": "old_value"}
-
-        dl1 = _get_downloader(client)
-        assert dl1 is not None
-
-        # Mutate the SAME dict (this is what re-auth does)
-        client.cookies["ezproxy"] = "new_cookie"
-        client.cookies["session"] = "new_value"
-
-        dl2 = _get_downloader(client)
-        # Should be a NEW downloader since cookies changed
-        assert dl2 is not dl1
-
-    def test_reuses_downloader_when_cookies_unchanged(self):
-        """Same cookies should return the same downloader instance."""
-        import lib.tools as tools_module
-        tools_module._downloader = None
-        tools_module._downloader_cookie_id = None
-
-        client = MockClient()
-        client.cookies = {"session": "abc"}
-
-        dl1 = _get_downloader(client)
-        dl2 = _get_downloader(client)
-        assert dl2 is dl1
-
-
-class TestDownloadFromUrlTool:
-    """Tests for the download_from_url MCP tool."""
+class TestReadArticleZotero:
+    """Tests for read_article using Zotero PDF retrieval."""
 
     @pytest.mark.asyncio
-    async def test_download_from_url_success(self, mock_client):
-        """Successful URL download should report tier and size."""
-        mock_result = {
-            "success": True,
-            "container_path": "/tmp/test.pdf",
-            "size_bytes": 12345,
-            "tier_used": "curl_cffi",
-            "error": None,
-        }
-        with patch("lib.tools._get_downloader") as mock_get_dl:
-            mock_dl = MagicMock()
-            mock_dl.download_from_direct_url.return_value = mock_result
-            mock_get_dl.return_value = mock_dl
-            result = await handle_tool_call(
-                "download_from_url",
-                {"url": "https://example.com/paper.pdf"},
-                mock_client,
-            )
-        assert "PDF DOWNLOADED FROM URL" in result[0].text
-        assert "12,345 bytes" in result[0].text
-        assert "curl_cffi" in result[0].text
-
-    @pytest.mark.asyncio
-    async def test_download_from_url_failure(self, mock_client):
-        """Failed download should return error message."""
-        mock_result = {
-            "success": False,
-            "container_path": None,
-            "size_bytes": 0,
-            "tier_used": None,
-            "error": "All tiers failed",
-        }
-        with patch("lib.tools._get_downloader") as mock_get_dl:
-            mock_dl = MagicMock()
-            mock_dl.download_from_direct_url.return_value = mock_result
-            mock_get_dl.return_value = mock_dl
-            result = await handle_tool_call(
-                "download_from_url",
-                {"url": "https://example.com/fail.pdf"},
-                mock_client,
-            )
-        assert "Download failed" in result[0].text
-
-    @pytest.mark.asyncio
-    async def test_download_from_url_with_ezproxy(self, mock_client):
-        """use_ezproxy=True should wrap the URL in hostname-based proxy format."""
-        mock_result = {
-            "success": True,
-            "container_path": "/tmp/test.pdf",
-            "size_bytes": 100,
-            "tier_used": "requests",
-            "error": None,
-        }
-        with patch("lib.tools._get_downloader") as mock_get_dl:
-            mock_dl = MagicMock()
-            mock_dl.download_from_direct_url.return_value = mock_result
-            mock_get_dl.return_value = mock_dl
-            result = await handle_tool_call(
-                "download_from_url",
-                {"url": "https://example.com/paper.pdf", "use_ezproxy": True},
-                mock_client,
-            )
-        # Check that the URL was wrapped in hostname-based proxy format
-        call_args = mock_dl.download_from_direct_url.call_args
-        called_url = call_args[1].get("url", call_args[0][0] if call_args[0] else "")
-        assert "example-com.proxy.lib.sfu.ca" in called_url
-
-    @pytest.mark.asyncio
-    async def test_download_from_url_empty_url(self, mock_client):
-        """Empty URL should return error."""
-        result = await handle_tool_call(
-            "download_from_url",
-            {"url": ""},
-            mock_client,
-        )
-        assert "No URL provided" in result[0].text
-
-
-class TestBackfillCap:
-    """Verify backfill caps items at configured limit."""
-
-    @pytest.mark.asyncio
-    async def test_backfill_capped_at_config(self, mock_client):
-        """Backfill should cap items_without_pdfs to download_backfill_cap."""
-        # This tests the cap logic: create 20 items, expect only 10 processed
+    async def test_read_article_success(self, mock_client):
+        """Successful Zotero PDF retrieval should return article text."""
         mock_zot = MagicMock()
-        mock_zot.find_collection_by_name.return_value = "col_key_123"
-        # Return 20 items without PDFs
-        items_without_pdfs = [
-            {"title": f"Article {i}", "key": f"key_{i}", "DOI": f"10.1234/{i}"}
-            for i in range(20)
-        ]
-        mock_zot.get_items_without_pdfs.return_value = items_without_pdfs
+        mock_zot.find_item_by_record_id.return_value = {
+            "key": "ITEM123",
+            "title": "Test Article",
+            "authors": ["Smith, John"],
+            "date": "2023",
+            "publication": "Nature",
+            "DOI": "10.1000/test",
+        }
+        mock_zot.download_pdf.return_value = {
+            "success": True,
+            "path": "/tmp/test.pdf",
+            "size_bytes": 5000,
+            "error": None,
+        }
 
-        mock_dl = MagicMock()
-        mock_dl.resolve_pdf_url.return_value = None  # All fail to find URL
-
+        features = {"zotero_pdf_retrieval_enabled": True, "zotero_enabled": True}
         with patch("lib.tools._get_zotero_client", return_value=mock_zot), \
-             patch("lib.tools._get_downloader", return_value=mock_dl), \
-             patch("lib.tools._get_rate_limiter") as mock_get_rl, \
-             patch("lib.tools._get_config") as mock_get_config:
-            from lib.config import ServerConfig
-            mock_get_config.return_value = ServerConfig(download_backfill_cap=10)
-            mock_rl = MagicMock()
-            mock_rl.get_budget_status.return_value = {
-                "session_remaining": 15, "session_budget": 15,
-                "hourly_remaining": 20, "hourly_used": 0,
-                "hourly_limit": 20, "per_domain": {},
-            }
-            mock_get_rl.return_value = mock_rl
-
-            # The search calls will return None (no record found)
-            mock_client._search_result = None
+             patch("lib.tools._ensure_zotero_auth", return_value=None), \
+             patch("lib.tools._get_features", return_value=features), \
+             patch("lib.tools.extract_text", return_value="This is the article text."):
             result = await handle_tool_call(
-                "backfill_collection_pdfs",
-                {"collection_name": "Test Collection"},
+                "read_article",
+                {"record_id": "alma123"},
                 mock_client,
             )
-        text = result[0].text
-        # Should report 10 items checked (capped from 20)
-        assert "Items checked: 10" in text
+        assert "ARTICLE TEXT" in result[0].text
+        assert "Test Article" in result[0].text
+        assert "This is the article text." in result[0].text
+
+    @pytest.mark.asyncio
+    async def test_read_article_not_in_zotero(self, mock_client):
+        """Should return helpful message when item not found in Zotero."""
+        mock_zot = MagicMock()
+        mock_zot.find_item_by_record_id.return_value = None
+
+        features = {"zotero_pdf_retrieval_enabled": True, "zotero_enabled": True}
+        with patch("lib.tools._get_zotero_client", return_value=mock_zot), \
+             patch("lib.tools._ensure_zotero_auth", return_value=None), \
+             patch("lib.tools._get_features", return_value=features):
+            result = await handle_tool_call(
+                "read_article",
+                {"record_id": "alma999"},
+                mock_client,
+            )
+        assert "No item found in Zotero" in result[0].text
+        assert "save_to_zotero" in result[0].text
+
+    @pytest.mark.asyncio
+    async def test_read_article_no_pdf_in_zotero(self, mock_client):
+        """Should return message when item exists but has no PDF."""
+        mock_zot = MagicMock()
+        mock_zot.find_item_by_record_id.return_value = {
+            "key": "ITEM123",
+            "title": "Test Article",
+            "authors": [],
+            "date": "",
+            "publication": "",
+            "DOI": "",
+        }
+        mock_zot.download_pdf.return_value = {
+            "success": False,
+            "path": None,
+            "size_bytes": 0,
+            "error": "No PDF attachment found for this item.",
+        }
+
+        features = {"zotero_pdf_retrieval_enabled": True, "zotero_enabled": True}
+        with patch("lib.tools._get_zotero_client", return_value=mock_zot), \
+             patch("lib.tools._ensure_zotero_auth", return_value=None), \
+             patch("lib.tools._get_features", return_value=features):
+            result = await handle_tool_call(
+                "read_article",
+                {"record_id": "alma123"},
+                mock_client,
+            )
+        assert "No PDF available" in result[0].text
+
+    @pytest.mark.asyncio
+    async def test_read_article_disabled(self, mock_client):
+        """Should return disabled message when feature flag is off."""
+        features = {"zotero_pdf_retrieval_enabled": False}
+        with patch("lib.tools._get_features", return_value=features):
+            result = await handle_tool_call(
+                "read_article",
+                {"record_id": "alma123"},
+                mock_client,
+            )
+        assert "disabled" in result[0].text.lower()
 
 
 class TestMetrics:
@@ -566,9 +516,7 @@ class TestGetDiagnostics:
         assert "Token Status" in text
         assert "Cookie Inventory" in text
         assert "EZProxy Session" in text
-        assert "Download Tier Availability" in text
-        assert "Circuit Breaker" in text
-        assert "Rate Limiter" in text
+        assert "PDF Retrieval" in text
         assert "Log File" in text
         assert "Tool Metrics" in text
 
@@ -596,59 +544,3 @@ class TestGetDiagnostics:
         unauth = MockClient(authenticated=False)
         result = await handle_tool_call("get_diagnostics", {}, unauth)
         assert "INVALID" in result[0].text
-
-
-class TestSkipFlags:
-    """Tests for download skip flags being passed through."""
-
-    @pytest.mark.asyncio
-    async def test_skip_flags_passed_to_downloader(self, mock_client):
-        """Skip flags should be extracted and passed to downloader."""
-        mock_result = {
-            "success": True,
-            "container_path": "/tmp/test.pdf",
-            "size_bytes": 12345,
-            "tier_used": "curl_cffi",
-            "error": None,
-        }
-        with patch("lib.tools._get_downloader") as mock_get_dl:
-            mock_dl = MagicMock()
-            mock_dl.download_from_direct_url.return_value = mock_result
-            mock_get_dl.return_value = mock_dl
-            await handle_tool_call(
-                "download_from_url",
-                {
-                    "url": "https://example.com/paper.pdf",
-                    "skip_rate_limit": True,
-                    "skip_tiers": ["playwright"],
-                },
-                mock_client,
-            )
-        call_kwargs = mock_dl.download_from_direct_url.call_args
-        skip_flags = call_kwargs[1].get("skip_flags", call_kwargs[0][2] if len(call_kwargs[0]) > 2 else {})
-        assert skip_flags.get("skip_rate_limit") is True
-        assert skip_flags.get("skip_tiers") == ["playwright"]
-
-    def test_skip_flag_properties_in_download_article_schema(self):
-        """download_article schema should include skip flag properties."""
-        tool = next(t for t in TOOL_DEFINITIONS if t.name == "download_article")
-        props = tool.inputSchema["properties"]
-        assert "skip_ezproxy" in props
-        assert "skip_rate_limit" in props
-        assert "skip_tiers" in props
-        assert "skip_pdf_check" in props
-        assert "skip_login_check" in props
-        assert "skip_copy_to_host" in props
-
-    def test_skip_flag_properties_in_read_article_schema(self):
-        """read_article schema should include skip flag properties."""
-        tool = next(t for t in TOOL_DEFINITIONS if t.name == "read_article")
-        props = tool.inputSchema["properties"]
-        assert "skip_ezproxy" in props
-
-    def test_skip_flag_properties_in_download_from_url_schema(self):
-        """download_from_url schema should include skip flag properties."""
-        tool = next(t for t in TOOL_DEFINITIONS if t.name == "download_from_url")
-        props = tool.inputSchema["properties"]
-        assert "skip_rate_limit" in props
-        assert "skip_tiers" in props

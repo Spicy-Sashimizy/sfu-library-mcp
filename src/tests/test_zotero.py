@@ -443,6 +443,115 @@ class TestGetItemsWithoutPdfs:
         assert result[0]["key"] == "A"
 
 
+# ─── PDF retrieval ─────────────────────────────────────────────
+
+class TestGetPdfAttachment:
+    def test_finds_pdf_attachment(self, zot_client, mock_pyzotero):
+        """Should return attachment data for items with PDF children."""
+        mock_pyzotero.children.return_value = [
+            {"data": {"key": "ATT1", "itemType": "attachment", "contentType": "application/pdf", "filename": "paper.pdf"}},
+        ]
+        result = zot_client.get_pdf_attachment("ITEM1")
+        assert result is not None
+        assert result["key"] == "ATT1"
+        assert result["contentType"] == "application/pdf"
+
+    def test_no_pdf_attachment(self, zot_client, mock_pyzotero):
+        """Should return None for items without PDF children."""
+        mock_pyzotero.children.return_value = [
+            {"data": {"key": "NOTE1", "itemType": "note", "contentType": ""}},
+        ]
+        result = zot_client.get_pdf_attachment("ITEM1")
+        assert result is None
+
+    def test_no_children(self, zot_client, mock_pyzotero):
+        """Should return None for items with no children."""
+        mock_pyzotero.children.return_value = []
+        result = zot_client.get_pdf_attachment("ITEM1")
+        assert result is None
+
+
+class TestDownloadPdf:
+    def test_download_success(self, zot_client, mock_pyzotero, tmp_path):
+        """Should download and save PDF successfully."""
+        mock_pyzotero.children.return_value = [
+            {"data": {"key": "ATT1", "itemType": "attachment", "contentType": "application/pdf"}},
+        ]
+        mock_pyzotero.file.return_value = b"%PDF-1.4 fake pdf content"
+        result = zot_client.download_pdf("ITEM1", str(tmp_path))
+        assert result["success"] is True
+        assert result["path"].endswith("ATT1.pdf")
+        assert result["size_bytes"] == len(b"%PDF-1.4 fake pdf content")
+        assert result["error"] is None
+
+    def test_download_no_attachment(self, zot_client, mock_pyzotero, tmp_path):
+        """Should return error when no PDF attachment exists."""
+        mock_pyzotero.children.return_value = []
+        result = zot_client.download_pdf("ITEM1", str(tmp_path))
+        assert result["success"] is False
+        assert "No PDF attachment" in result["error"]
+
+    def test_download_api_error(self, zot_client, mock_pyzotero, tmp_path):
+        """Should return error when API fails."""
+        mock_pyzotero.children.return_value = [
+            {"data": {"key": "ATT1", "itemType": "attachment", "contentType": "application/pdf"}},
+        ]
+        mock_pyzotero.file.side_effect = Exception("API rate limit")
+        result = zot_client.download_pdf("ITEM1", str(tmp_path))
+        assert result["success"] is False
+        assert "API rate limit" in result["error"]
+
+
+class TestFindItemByRecordId:
+    def test_finds_item(self, zot_client, mock_pyzotero):
+        """Should find item by SFU-Library-RecordID in extra field."""
+        mock_pyzotero.items.return_value = [
+            {"data": {
+                "key": "FOUND1",
+                "title": "Test Paper",
+                "extra": "SFU-Library-RecordID: alma123456",
+                "itemType": "journalArticle",
+                "creators": [],
+                "collections": [],
+                "tags": [],
+                "DOI": "",
+                "ISBN": "",
+                "date": "",
+                "publicationTitle": "",
+            }},
+        ]
+        result = zot_client.find_item_by_record_id("alma123456")
+        assert result is not None
+        assert result["key"] == "FOUND1"
+        assert result["title"] == "Test Paper"
+
+    def test_no_match(self, zot_client, mock_pyzotero):
+        """Should return None when no item has matching record ID."""
+        mock_pyzotero.items.return_value = [
+            {"data": {
+                "key": "OTHER1",
+                "title": "Other Paper",
+                "extra": "SFU-Library-RecordID: alma999999",
+                "itemType": "journalArticle",
+                "creators": [],
+                "collections": [],
+                "tags": [],
+                "DOI": "",
+                "ISBN": "",
+                "date": "",
+                "publicationTitle": "",
+            }},
+        ]
+        result = zot_client.find_item_by_record_id("alma123456")
+        assert result is None
+
+    def test_empty_results(self, zot_client, mock_pyzotero):
+        """Should return None when search returns no items."""
+        mock_pyzotero.items.return_value = []
+        result = zot_client.find_item_by_record_id("alma123456")
+        assert result is None
+
+
 # ─── Circuit breaker ───────────────────────────────────────────
 
 class TestCircuitBreaker:
