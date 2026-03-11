@@ -330,6 +330,141 @@ FAIRplexica already has full Ollama integration:
 
 ---
 
+## 8. Optional Feature: Custom Dictionary Management UI
+
+A settings page where users and admins can manage domain-specific terms that improve query parsing without retraining the LLM.
+
+### UI Layout
+
+```
+┌──────────────────────────────────────────────────────────────┐
+│ Settings > Custom Dictionary                    [Import JSON] │
+├──────────────────────────────────────────────────────────────┤
+│ [Abbreviations] [Synonyms] [Stop Expansions] [Preferred]     │
+├──────────────────────────────────────────────────────────────┤
+│                                                              │
+│  Abbreviations                              [+ Add Entry]    │
+│  ┌──────────────────────────────────────────────────────┐    │
+│  │ Abbreviation  │ Expansion                    │ Actions│   │
+│  │───────────────│──────────────────────────────│────────│   │
+│  │ REM           │ Resource & Environmental Mgmt │ ✏️ 🗑️  │   │
+│  │ FASS          │ Faculty of Arts & Soc. Sci.  │ ✏️ 🗑️  │   │
+│  │ ILL           │ Interlibrary Loan            │ ✏️ 🗑️  │   │
+│  │ LCSH          │ Library of Congress Subject   │ ✏️ 🗑️  │   │
+│  │               │ Headings                     │        │   │
+│  └──────────────────────────────────────────────────────┘    │
+│                                                              │
+│  [Export JSON]  [Reset to Defaults]                           │
+│                                                              │
+│  ── Scope ──                                                 │
+│  (•) My dictionary (personal)                                │
+│  ( ) Institutional dictionary (admin only)                   │
+│                                                              │
+└──────────────────────────────────────────────────────────────┘
+```
+
+### Component Mapping (Builds on FAIRplexica)
+
+| New Component | Builds On | Notes |
+|---------------|-----------|-------|
+| `DictionaryPage.tsx` | Settings page pattern | New route: `/settings/dictionary` |
+| `DictionaryTable.tsx` | Headless UI Table | Editable rows with inline edit/delete |
+| `DictionaryTabs.tsx` | Headless UI Tab Group | Abbreviations / Synonyms / Stop Expansions / Preferred |
+| `ImportExportButtons.tsx` | File upload pattern (Attach.tsx) | JSON import/export |
+| `DictionaryEntryModal.tsx` | Headless UI Dialog | Add/edit entry form |
+
+### API Routes
+
+| Route | Method | Purpose |
+|-------|--------|---------|
+| `/api/dictionary` | GET | Get user's merged dictionary (personal + institutional) |
+| `/api/dictionary` | PUT | Update user's personal dictionary |
+| `/api/dictionary/entry` | POST | Add single entry |
+| `/api/dictionary/entry` | DELETE | Remove single entry |
+| `/api/admin/dictionary` | GET/PUT | Institutional dictionary (admin JWT required) |
+| `/api/dictionary/export` | GET | Download as JSON |
+| `/api/dictionary/import` | POST | Upload JSON file |
+
+### Storage
+
+- Personal dictionaries: SQLite (Drizzle ORM, already in FAIRplexica)
+- Institutional dictionary: `config/institutional_dictionary.json` (admin-managed, version controlled)
+- At query time, merge: institutional defaults → user overrides
+
+---
+
+## 9. Optional Feature: Model Improvement Dashboard (Admin)
+
+An admin page for monitoring query accuracy and triggering model improvements.
+
+### UI Layout
+
+```
+┌──────────────────────────────────────────────────────────────┐
+│ Admin > Model Management                        [JWT Auth]    │
+├──────────────────────────────────────────────────────────────┤
+│                                                              │
+│  ── Query Accuracy (last 30 days) ──                         │
+│  Queries logged: 1,247                                       │
+│  User refinements: 312 (25%)  ← users who changed search    │
+│  Estimated accuracy: ~75%                                    │
+│                                                              │
+│  ── Active Model ──                                          │
+│  Model: qwen3-1.7b-sfu-v3 (fine-tuned 2026-02-15)          │
+│  Base: qwen3:1.7b                                            │
+│  Training examples: 487                                      │
+│  [Rollback to v2] [View changelog]                           │
+│                                                              │
+│  ── Improvement Options ──                                   │
+│                                                              │
+│  [ RAG Examples ]                                            │
+│  Good query→JSON pairs: 234 curated                          │
+│  [Review & Curate Queries]  [Test Current Accuracy]          │
+│                                                              │
+│  [ Fine-Tune (requires GPU) ]                                │
+│  Status: Ready (487 training examples)                       │
+│  [Start Fine-Tune Job]  [Schedule: Monthly ▼]                │
+│  Last run: 2026-02-15 — accuracy 75% → 82%                  │
+│                                                              │
+│  ── Model Versions ──                                        │
+│  │ Version │ Date       │ Examples │ Accuracy │ Status   │   │
+│  │ v3      │ 2026-02-15 │ 487      │ 82%      │ Active   │   │
+│  │ v2      │ 2026-01-10 │ 312      │ 78%      │ Archived │   │
+│  │ v1      │ 2025-12-01 │ 200      │ 71%      │ Archived │   │
+│  │ base    │ —          │ —        │ 65%      │ Fallback │   │
+│                                                              │
+└──────────────────────────────────────────────────────────────┘
+```
+
+### Query Curation Sub-Page
+
+```
+┌──────────────────────────────────────────────────────────────┐
+│ Admin > Curate Queries                                       │
+├──────────────────────────────────────────────────────────────┤
+│ Filter: [Refined only ▼] [Last 7 days ▼]                    │
+│                                                              │
+│  ┌────────────────────────────────────────────────────────┐  │
+│  │ Query: "REM thesis on salmon in BC"                    │  │
+│  │ LLM Output:                                            │  │
+│  │   terms: ["REM", "thesis", "salmon", "BC"]             │  │
+│  │   material_type: "thesis"                              │  │
+│  │ User refined to: "Resource Environmental Management    │  │
+│  │   salmon British Columbia"                             │  │
+│  │                                                        │  │
+│  │ Correct JSON: [Edit]                                   │  │
+│  │ [✓ Add to training set] [✗ Skip] [Flag for review]    │  │
+│  └────────────────────────────────────────────────────────┘  │
+│                                                              │
+│  Curated: 23/156 pending                                     │
+│  [Save & Continue]                                           │
+└──────────────────────────────────────────────────────────────┘
+```
+
+This page fits naturally into FAIRplexica's existing admin dashboard (JWT-protected, already built).
+
+---
+
 ## Appendix: FAIRplexica Config (What Gets Customized)
 
 ```toml

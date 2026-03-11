@@ -741,6 +741,153 @@ Since the LLM only does query parsing (not conversation), cloud API costs are mi
 - [ ] Draft PIA document
 - [ ] Present to SFU Library IT as "search quality improvement"
 
+### Phase 7 (Optional): Custom Dictionary Management UI
+
+The MCP server currently has no custom dictionary feature. This phase adds one — a user-editable dictionary of domain-specific terms, abbreviations, and synonyms that improves query understanding without retraining the LLM.
+
+**Why it's useful:**
+- SFU departments use acronyms (e.g., "FASS" → Faculty of Arts and Social Sciences, "REM" → Resource & Environmental Management)
+- Library-specific jargon varies by institution (e.g., "course reserves" vs. "short-term loans")
+- The LLM query parser won't know SFU-specific terms — a dictionary provides instant correction without fine-tuning
+
+**Implementation:**
+- [ ] Create `custom_dictionary.json` in project config:
+  ```json
+  {
+    "abbreviations": {
+      "REM": "Resource and Environmental Management",
+      "FASS": "Faculty of Arts and Social Sciences",
+      "SFU": "Simon Fraser University"
+    },
+    "synonyms": {
+      "course reserves": ["short-term loans", "reserve materials", "course readings"],
+      "interlibrary loan": ["ILL", "document delivery"]
+    },
+    "stop_expansions": ["SFU", "BC", "UBC"],
+    "preferred_terms": {
+      "Indigenous": ["Aboriginal", "First Nations", "Native"]
+    }
+  }
+  ```
+- [ ] Add MCP tools: `get_custom_dictionary`, `update_custom_dictionary`, `add_dictionary_entry`, `remove_dictionary_entry`
+- [ ] Build dictionary management UI page in the search frontend (Settings → Dictionary)
+  - Table view with add/edit/delete rows
+  - Import/export as JSON
+  - Category tabs: Abbreviations, Synonyms, Stop Expansions, Preferred Terms
+- [ ] Integrate dictionary into the query parser pipeline:
+  - **Pre-LLM:** Expand abbreviations before sending to the LLM
+  - **Post-LLM:** Replace deprecated terms with preferred terms in `expanded_terms`
+  - **Stop expansions:** Prevent the LLM from expanding certain acronyms (e.g., "BC" should stay "BC", not become "Before Christ")
+- [ ] Allow per-user dictionaries (stored in SQLite) and a global institutional dictionary (admin-managed)
+
+**Architecture fit:**
+```
+User query: "REM thesis on BC salmon"
+        │
+        ▼
+┌─────────────────────────────┐
+│  Dictionary Pre-Processing  │  ← Expands "REM" → "Resource and Environmental Management"
+│  (deterministic, no LLM)    │  ← Keeps "BC" as-is (stop_expansions list)
+└────────────┬────────────────┘
+             │
+             ▼
+┌─────────────────────────────┐
+│  LLM Query Parser           │  ← Now receives clearer input
+│  (Qwen3-1.7B via Ollama)    │
+└────────────┬────────────────┘
+             │
+             ▼
+┌─────────────────────────────┐
+│  Dictionary Post-Processing │  ← Replaces "Aboriginal" with "Indigenous" in expanded_terms
+│  (deterministic, no LLM)    │
+└─────────────────────────────┘
+```
+
+### Phase 8 (Optional): Periodic LLM Fine-Tuning for Query Accuracy
+
+Periodically retrain/fine-tune the local query understanding LLM on accumulated user queries to improve accuracy over time.
+
+**Is this possible? Yes — with caveats.**
+
+The practical pipeline (as of 2025-2026):
+
+1. **Collect training data:** Log user queries + the structured JSON the LLM produced + whether the user refined/corrected the search (implicit feedback signal)
+2. **Periodically fine-tune** using LoRA/QLoRA adapters via [Unsloth](https://unsloth.ai/) or [LlamaFactory](https://github.com/hiyouga/LlamaFactory)
+3. **Export to GGUF** format and hot-swap into Ollama
+4. **Automate** on a schedule (weekly, monthly, or after N queries)
+
+**Key considerations:**
+
+| Factor | Details |
+|--------|---------|
+| **Catastrophic forgetting** | Each round of fine-tuning risks degrading performance on previously learned tasks. Mitigate with replay-based methods (mix new data with a buffer of old examples). |
+| **Hardware for training** | Fine-tuning a 1.7B model with QLoRA needs ~4-6 GB VRAM (a consumer GPU). Cannot train on CPU practically. Could offload to a university GPU server or cloud. |
+| **Data volume** | LoRA fine-tuning is effective with as few as 200-500 curated examples. Collect query logs over weeks, curate ~200 high-quality pairs. |
+| **Evaluation** | Must benchmark before/after on a held-out test set. If accuracy drops → rollback to previous model. |
+| **Privacy (FIPPA)** | Query logs are personal data. If fine-tuning happens locally on the user's machine, no issue. If centralized, needs PIA. Consider federated or anonymized approaches. |
+| **Continual learning (research frontier)** | True real-time continual learning (learn from each query as it arrives) is still a research topic, not production-ready for local setups. Periodic batch fine-tuning is the practical approach. |
+
+**Recommended approach — Periodic LoRA fine-tuning + RAG hybrid:**
+
+```
+┌─────────────────────────────────────────────────────────┐
+│                 Periodic Improvement Loop                │
+│                                                         │
+│  1. COLLECT: Log queries + structured output + feedback │
+│     (user corrected search? clicked results? refined?)  │
+│                                                         │
+│  2. CURATE: Every N weeks, review logs:                 │
+│     - Extract (query, correct_json) pairs               │
+│     - Filter out PII, anonymize if centralizing         │
+│     - Mix with original training data (replay buffer)   │
+│                                                         │
+│  3. FINE-TUNE: Run LoRA/QLoRA training                  │
+│     - Tool: Unsloth or LlamaFactory                     │
+│     - Input: ~200-500 curated examples                  │
+│     - Time: ~30-60 min on consumer GPU                  │
+│     - Output: LoRA adapter files                        │
+│                                                         │
+│  4. EXPORT: Convert to GGUF                             │
+│     - llama.cpp quantize → Q4_K_M                       │
+│     - Create Ollama Modelfile with new weights           │
+│                                                         │
+│  5. EVALUATE: Test on held-out query set                │
+│     - If accuracy improved → deploy                     │
+│     - If accuracy dropped → rollback, investigate       │
+│                                                         │
+│  6. DEPLOY: ollama create sfu-query-model -f Modelfile  │
+│     - Hot-swap: app picks up new model automatically    │
+│     - Keep previous version as fallback                 │
+└─────────────────────────────────────────────────────────┘
+```
+
+**Implementation tasks:**
+- [ ] Add query logging with implicit feedback tracking (did user refine? click results?)
+- [ ] Build a curation UI (admin page) to review logged queries and mark correct/incorrect parses
+- [ ] Write fine-tuning script using Unsloth/LlamaFactory with LoRA
+- [ ] Add GGUF export + Ollama model creation to the pipeline
+- [ ] Build evaluation benchmark (50+ test queries with expected JSON output)
+- [ ] Add model versioning: keep last 3 model versions, rollback button in admin
+- [ ] Schedule automation (cron job or manual "retrain now" button in admin)
+- [ ] Privacy controls: anonymization toggle, local-only mode, opt-out for users
+
+**Alternative to fine-tuning — RAG-enhanced query parsing (simpler, no GPU needed):**
+
+Instead of retraining the model, feed it examples of good query translations at inference time:
+```python
+# At query time, retrieve similar past queries from a vector store
+similar_examples = vector_db.search(user_query, k=3)
+prompt = f"""Parse this library search query into structured JSON.
+
+Here are examples of similar queries and their correct parses:
+{format_examples(similar_examples)}
+
+Now parse this query: {user_query}"""
+```
+This is **much simpler**, requires no GPU, no training pipeline, and improves as you collect more examples. The downside: slightly slower inference (longer prompt) and less generalization than fine-tuning.
+
+**Recommendation:** Start with the RAG approach (few-shot examples from a vector store). Only move to LoRA fine-tuning if the RAG approach plateaus below 90% accuracy. The custom dictionary (Phase 7) combined with RAG examples will likely get you to 90%+ without any model retraining.
+
 ---
 
 ## Appendix A: Model & Tool Comparison
