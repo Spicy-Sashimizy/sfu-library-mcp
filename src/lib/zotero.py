@@ -6,6 +6,7 @@ wraps all API calls with a circuit breaker.
 """
 
 import logging
+import os
 import re
 
 from lib.config import ServerConfig
@@ -423,6 +424,110 @@ class ZoteroClient:
             len(no_pdf), len(items), collection_key,
         )
         return no_pdf
+
+    # ─── PDF retrieval from Zotero ────────────────────────────────
+
+    def get_pdf_attachment(self, item_key: str) -> dict | None:
+        """Find a PDF attachment for a Zotero item.
+
+        Args:
+            item_key: The Zotero item key.
+
+        Returns:
+            Attachment metadata dict or None if no PDF found.
+        """
+        children = self._call_zotero(
+            "get_children",
+            self.zot.children,
+            item_key,
+        )
+        for child in children:
+            data = child.get("data", {})
+            if (
+                data.get("itemType") == "attachment"
+                and data.get("contentType", "").lower() == "application/pdf"
+            ):
+                return data
+        return None
+
+    def download_pdf(self, item_key: str, dest_dir: str) -> dict:
+        """Download a PDF from Zotero for a given item.
+
+        Finds the PDF attachment, downloads it via the Zotero API,
+        and writes it to dest_dir.
+
+        Args:
+            item_key: The Zotero item key.
+            dest_dir: Directory to write the PDF file.
+
+        Returns:
+            dict with keys: success, path, size_bytes, error.
+        """
+        try:
+            attachment = self.get_pdf_attachment(item_key)
+            if not attachment:
+                return {
+                    "success": False,
+                    "path": None,
+                    "size_bytes": 0,
+                    "error": "No PDF attachment found for this item.",
+                }
+
+            attachment_key = attachment["key"]
+            file_content = self._call_zotero(
+                "download_file",
+                self.zot.file,
+                attachment_key,
+            )
+
+            os.makedirs(dest_dir, exist_ok=True)
+            pdf_path = os.path.join(dest_dir, f"{attachment_key}.pdf")
+            with open(pdf_path, "wb") as f:
+                f.write(file_content)
+
+            size_bytes = len(file_content)
+            logger.info(
+                "Downloaded PDF from Zotero: %s (%d bytes)",
+                pdf_path, size_bytes,
+            )
+            return {
+                "success": True,
+                "path": pdf_path,
+                "size_bytes": size_bytes,
+                "error": None,
+            }
+        except ZoteroError as e:
+            return {
+                "success": False,
+                "path": None,
+                "size_bytes": 0,
+                "error": str(e),
+            }
+
+    def find_item_by_record_id(self, record_id: str) -> dict | None:
+        """Find a Zotero item by its SFU Library record ID.
+
+        Searches the Zotero library for items whose 'extra' field
+        contains 'SFU-Library-RecordID: {record_id}'.
+
+        Args:
+            record_id: The SFU Library record ID.
+
+        Returns:
+            Formatted item dict or None if not found.
+        """
+        items = self._call_zotero(
+            "find_by_record_id",
+            self.zot.items,
+            q=record_id,
+            limit=5,
+        )
+        for item in items:
+            data = item.get("data", {})
+            extra = data.get("extra", "")
+            if f"SFU-Library-RecordID: {record_id}" in extra:
+                return self._format_item(item)
+        return None
 
     # ─── Search and browsing ───────────────────────────────────────
 
