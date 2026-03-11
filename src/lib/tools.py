@@ -586,7 +586,8 @@ TOOL_DEFINITIONS: list[Tool] = [
     Tool(
         name="read_article",
         description=(
-            "Download a library article's PDF and extract its full text for analysis. "
+            "Retrieve a PDF from the user's Zotero library and extract its full text for analysis. "
+            "The article must first be saved to Zotero (use save_to_zotero). "
             "Returns the article text content directly so you can read, summarize, or answer questions about it."
         ),
         inputSchema={
@@ -596,7 +597,6 @@ TOOL_DEFINITIONS: list[Tool] = [
                     "type": "string",
                     "description": "The record ID of the item (obtained from search results)"
                 },
-                **_SKIP_FLAG_PROPERTIES,
             },
             "required": ["record_id"]
         }
@@ -1527,67 +1527,56 @@ async def _handle_download_article(args: dict, client) -> list[TextContent]:
 
 async def _handle_read_article(args: dict, client) -> list[TextContent]:
     features = _get_features()
-    if not features.get("pdf_download_enabled", True):
-        return [TextContent(type="text", text="PDF download is disabled. Set SFU_FEATURE_PDF_DOWNLOAD_ENABLED=true to enable.")]
+    if not features.get("zotero_pdf_retrieval_enabled", True):
+        return [TextContent(type="text", text="Zotero PDF retrieval is disabled.")]
 
     record_id = args.get("record_id", "")
-    skip_flags = _extract_skip_flags(args)
 
-    if not client.ensure_authenticated():
-        return [TextContent(type="text", text="Authentication failed.")]
+    # Zotero auth check
+    zotero_auth_err = _ensure_zotero_auth()
+    if zotero_auth_err:
+        return zotero_auth_err
 
-    item = await _resolve_record(record_id, client)
-    if not item:
-        return [TextContent(type="text", text=f"Could not find item with record ID: {record_id}")]
+    zot_client = _get_zotero_client()
 
-    downloader = _get_downloader(client)
-    metadata = extract_metadata(item)
-
-    # Check cache or download — try all available URLs
-    urls = downloader.resolve_all_pdf_urls(item)
-    if not urls:
-        return [TextContent(type="text", text=f"No PDF URL found for record {record_id}. The item may not have an accessible PDF.")]
-
-    config = _get_config()
-    budget = config.download_budget_seconds
-    start_time = time.time()
-    errors = []
-    result = None
-    for url in urls:
-        elapsed = time.time() - start_time
-        if elapsed > budget:
-            errors.append(f"  (skipped remaining URLs — {budget:.0f}s time budget exceeded)")
-            break
-        result = downloader.download_pdf(url, record_id, metadata, copy_to_host=False, skip_flags=skip_flags)
-        if result["success"]:
-            break
-        errors.append(f"  {url}: {result['error']}")
-
-    if not result or not result["success"]:
-        error_detail = "\n".join(errors)
+    # Find the item in Zotero by record ID
+    zot_item = zot_client.find_item_by_record_id(record_id)
+    if not zot_item:
         return [TextContent(type="text", text=(
-            f"Download failed — tried {len(urls)} URL(s) with direct + EZProxy strategies:\n{error_detail}"
+            f"No item found in Zotero for record ID: {record_id}. "
+            f"Save it to Zotero first using save_to_zotero."
         ))]
 
+    item_key = zot_item.get("key", "")
+    if not item_key:
+        return [TextContent(type="text", text="Could not determine Zotero item key.")]
+
+    # Download the PDF from Zotero
+    config = _get_config()
+    dl_result = zot_client.download_pdf(item_key, config.download_dir)
+    if not dl_result["success"]:
+        return [TextContent(type="text", text=(
+            f"No PDF available in Zotero for this record: {dl_result['error']}"
+        ))]
+
+    # Extract text
     try:
-        text = downloader.extract_text(result["container_path"])
-    except PDFTextExtractionError as e:
+        text = extract_text(dl_result["path"], config.max_pdf_text_chars)
+    except RuntimeError as e:
         return [TextContent(type="text", text=f"Text extraction failed: {e}")]
 
-    # Build header with metadata
+    # Build header with metadata from Zotero item
     header_parts = ["=" * 50, "ARTICLE TEXT", "=" * 50]
-    if metadata:
-        header_parts.append(f"Title: {metadata.get('title', 'Unknown')}")
-        authors = metadata.get("authors") or metadata.get("creators", [])
-        if authors:
-            author_strs = [a.split("$$")[0] for a in authors[:5]]
-            header_parts.append(f"Authors: {'; '.join(author_strs)}")
-        if metadata.get("date"):
-            header_parts.append(f"Date: {metadata['date']}")
-        if metadata.get("source"):
-            header_parts.append(f"Source: {metadata['source']}")
-        if metadata.get("doi"):
-            header_parts.append(f"DOI: {metadata['doi']}")
+    header_parts.append(f"Title: {zot_item.get('title', 'Unknown')}")
+    authors = zot_item.get("authors", [])
+    if authors:
+        header_parts.append(f"Authors: {'; '.join(authors[:5])}")
+    if zot_item.get("date"):
+        header_parts.append(f"Date: {zot_item['date']}")
+    if zot_item.get("publication"):
+        header_parts.append(f"Source: {zot_item['publication']}")
+    if zot_item.get("DOI"):
+        header_parts.append(f"DOI: {zot_item['DOI']}")
     header_parts.append("=" * 50)
     header_parts.append("")
 
