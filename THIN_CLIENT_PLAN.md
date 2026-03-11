@@ -206,33 +206,131 @@ Run alongside the LLM, adds negligible overhead:
 
 ## 5. Inference Engine Comparison
 
-For serving a 1.7B model to a single-user desktop app:
+### Full Comparison: Every Viable Option
 
-| Engine | Overhead | Structured Output | CPU-Only | Bundleable | Verdict |
-|--------|----------|-------------------|----------|------------|---------|
-| **Ollama** | Low (Go binary) | Native JSON schema (v0.5+) | Yes | Single binary | **Best choice** |
-| **llama.cpp server** | Lowest | GBNF grammars | Yes | Compile from source | Best if embedding in C++ app |
-| **vLLM** | High (Python, GPU) | Yes (via Outlines) | No | Difficult | **Overkill, don't use** |
-| **SGLang** | High | Yes | No | Difficult | **Overkill, don't use** |
-| **TGI** | Medium | Yes | Limited | Docker-only | Not for desktop |
+| Feature | Ollama | llama.cpp server | llamafile | LM Studio | Jan | GPT4All | KoboldCpp | LocalAI |
+|---|---|---|---|---|---|---|---|---|
+| **tok/s CPU ~2B** | 20-40 | 25-50 | 25-50 | 25-50 | 25-50 | 20-40 | 25-50 | 25-50 |
+| **Cold start** | 2-5s | 1-3s | 2-5s | 3-8s | 5-10s | 3-5s | 2-5s | 5-15s |
+| **RAM overhead** | 200-400 MB | 50-100 MB | 50-100 MB | 300-500 MB | 300-500 MB | 200-400 MB | 100-200 MB | 200-500 MB |
+| **JSON schema** | Yes (v0.5+) | Yes (best) | Yes | Yes (experimental) | No | No | Weak | Yes |
+| **OpenAI API** | Yes | Yes | Yes | Yes | Yes | Yes (Docker) | Yes | Yes |
+| **Cross-platform** | W/M/L | W/M/L | W/M/L/BSD | W/M/L | W/M/L | W/M/L | W/M/L+ | W/M/L |
+| **Has GUI** | No | No (web UI) | Web UI | Yes (polished) | Yes | Yes | Web UI | Web UI |
+| **Runs as service** | Yes (auto) | Manual | Manual | Yes | Limited | No | Manual | Yes |
+| **Bundleable** | Awkward | **Easy** | **Excellent** | No (proprietary) | Awkward | Via Python | AGPL risk | Heavy |
+| **License** | MIT | MIT | Apache 2.0 | Proprietary | Apache 2.0 | MIT | AGPL 3.0 | MIT |
+| **Model mgmt** | Excellent | None | None | Excellent | Good | Good | None | Config files |
+| **Hot-swap models** | Yes | No (restart) | No | Yes | Limited | No | No | Yes |
+| **Install steps** | 1-2 | 2-3 | **1** | 1 | 1 | 1 | 1 | 3-5+ |
 
-### Why Ollama Wins for This Use Case
+### Tier 1 — Best Fits for This Use Case
 
-- **Single binary** — `curl -fsSL https://ollama.com/install.sh | sh` (or Windows installer)
-- **Model management built in** — `ollama pull qwen3:1.7b` downloads and caches the model
-- **OpenAI-compatible API** — your Python code calls `http://localhost:11434/v1/chat/completions`
-- **Structured output** — pass a JSON schema via `format` parameter, get guaranteed valid JSON
-- **Hot-swappable models** — users can upgrade to a bigger model without changing any code
-- **CPU inference works** — no GPU needed for a 1.7B model
-- **Memory for Qwen3-1.7B Q4:** ~1.5 GB model + ~200 MB Ollama overhead
+#### Ollama (Recommended Default)
 
-### vLLM — When To Use It Instead
+**Why it's the default choice:**
+- Single installer, runs as a background service automatically
+- `ollama pull qwen3:1.7b` — one command to download a model
+- OpenAI-compatible API at `localhost:11434/v1`
+- Native JSON schema enforcement via constrained decoding (v0.5+)
+- Hot-swappable models — users upgrade without app changes
+- CPU inference works — no GPU needed for 1.7B models
+- Best documentation and community support of all options
 
-vLLM makes sense only for **multi-user server deployments** (Track B, Tier 2):
-- PagedAttention gives 19x throughput vs Ollama at 128+ concurrent users
-- GPU required (not suitable for student laptops)
-- Python ecosystem makes it easy to deploy on a department server
-- Supports structured output via Outlines integration
+**Why it's not perfect:**
+- 200-400 MB RAM overhead (Go runtime + llama.cpp runner)
+- Not easily embeddable — it's a separate service, not a library
+- 10-20% slower than raw llama.cpp due to wrapper overhead
+- Model management is great for users but adds complexity for bundling
+
+**Best for:** Default recommendation to users. "Install Ollama, pull the model, done."
+
+#### llama.cpp server (Best for Bundling)
+
+**Why it's the strongest technical choice:**
+- **Lowest overhead** — 50-100 MB RAM beyond the model (vs Ollama's 200-400 MB)
+- **Fastest inference** — no wrapper layer, pure C++ → 10-20% faster than Ollama
+- **Best structured output** — native GBNF grammar + `json_schema` parameter in OpenAI endpoint
+- **Tiny binary** — `llama-server` is ~5-15 MB, ships inside your installer
+- **MIT license** — redistribute freely
+- **Same OpenAI API** as Ollama — code works identically
+
+**Why it's not the default:**
+- No model management — you download GGUF files manually
+- No auto-start as a service — you manage the process yourself
+- No hot-swap — one model per instance (restart to change)
+- Less polished user experience without the Ollama wrapper
+
+**Best for:** Bundling inside your app installer. Ship `llama-server` + one GGUF model file. Your app manages the process lifecycle.
+
+#### llamafile (Best for Zero-Install Distribution)
+
+**Why it's remarkable:**
+- **ONE file = model + inference engine** — a 1.5 GB llamafile contains Qwen3-1.7B + the entire inference runtime
+- **Truly universal binary** — same file runs on Windows, Mac, Linux, BSD (Cosmopolitan Libc)
+- **Zero dependencies** — download, make executable, run
+- **Same performance** as llama.cpp (it IS llama.cpp with Cosmopolitan)
+- **Same structured output** — GBNF grammars, JSON schema
+- **Apache 2.0 license**
+
+**Why it's not the default:**
+- No model management (each llamafile is a model — download different files for different models)
+- No hot-swap (restart with different file)
+- Model baked into the binary means larger download even for model updates
+- Less mature ecosystem than Ollama
+
+**Best for:** "Download one file and it works" distribution. Ideal if you want the absolute simplest setup.
+
+### Tier 2 — Viable as "Bring Your Own Backend"
+
+| Engine | Why Someone Would Use It | Why Not Default |
+|--------|-------------------------|-----------------|
+| **LM Studio** | Polished GUI, great model browser, already installed by many AI enthusiasts | Proprietary — cannot bundle or redistribute |
+| **LocalAI** | Most complete OpenAI API compatibility, excellent structured output | Docker-focused, too heavy for desktop apps |
+| **vLLM** | 19x throughput at 128+ concurrent users | GPU-only, Python dependency, overkill for single-user |
+
+### Tier 3 — Not Recommended
+
+| Engine | Why Not |
+|--------|---------|
+| **Jan** | No structured output / JSON schema enforcement |
+| **GPT4All** | No structured output / JSON schema enforcement |
+| **KoboldCpp** | AGPL license (copyleft risk), weak structured output, wrong focus (creative writing) |
+| **Msty** | Proprietary ($149/yr), no API server, not an inference engine |
+| **Cortex.cpp** | **Dead project** — archived July 2025, team now contributes to llama.cpp |
+| **MLX** | Apple Silicon only, no Windows, no built-in structured output |
+| **ExLlamaV2** | GPU-only (CUDA), no GGUF support, not cross-platform |
+
+### Recommended Strategy: Ollama Default + Swappable
+
+```
+┌─────────────────────────────────────────────┐
+│           Your Search Application            │
+│                                             │
+│  ┌───────────────────────────────────────┐  │
+│  │  OpenAI Python SDK                    │  │
+│  │  client = OpenAI(base_url=CONFIG_URL) │  │
+│  └──────────────────┬────────────────────┘  │
+│                     │                       │
+│          ┌──────────▼──────────┐            │
+│          │  Settings:          │            │
+│          │  base_url: ________ │            │
+│          │  model: ________    │            │
+│          └──────────┬──────────┘            │
+│                     │                       │
+└─────────────────────┼───────────────────────┘
+                      │
+        ┌─────────────┼─────────────┐
+        │             │             │
+  ┌─────▼─────┐ ┌────▼─────┐ ┌────▼──────┐
+  │  Ollama   │ │ llama.cpp│ │ LM Studio │
+  │  :11434   │ │  :8080   │ │  :1234    │
+  │ (default) │ │ (bundled)│ │ (BYOB)    │
+  └───────────┘ └──────────┘ └───────────┘
+        All expose the same OpenAI-compatible API
+```
+
+**The user changes ONE setting (base_url) to swap backends. Zero code changes.**
 
 ---
 
@@ -244,12 +342,22 @@ This is what makes small models viable. Instead of hoping the model outputs vali
 
 At each token generation step, the engine masks all tokens that would create invalid JSON. The model can only generate tokens that conform to your schema. Result: **100% structurally valid output, always.**
 
-### Ollama's Built-in JSON Schema Mode
+### Backend-Agnostic Structured Output (The Swappable Way)
+
+Since all Tier 1 backends expose the same OpenAI-compatible API, structured output works the same everywhere:
 
 ```python
-import ollama
+from openai import OpenAI
+from pydantic import BaseModel
+import json, os
 
-# Define the search query schema
+# Backend-agnostic: reads from settings/env
+client = OpenAI(
+    base_url=os.getenv("LLM_BASE_URL", "http://localhost:11434/v1"),  # Ollama default
+    api_key=os.getenv("LLM_API_KEY", "unused")  # Local backends don't need keys
+)
+
+# Define the search query schema (works with Ollama, llama.cpp, LM Studio, llamafile)
 schema = {
     "type": "object",
     "properties": {
@@ -271,8 +379,8 @@ schema = {
     "required": ["terms", "material_type", "sort"]
 }
 
-response = ollama.chat(
-    model="qwen3:1.7b",
+response = client.chat.completions.create(
+    model=os.getenv("LLM_MODEL", "qwen3:1.7b"),
     messages=[{
         "role": "system",
         "content": "You are a library search query parser. Extract structured search parameters from the user's natural language query. Expand terms with synonyms and related concepts."
@@ -280,10 +388,73 @@ response = ollama.chat(
         "role": "user",
         "content": "find me recent articles about machine learning in healthcare"
     }],
-    format=schema  # Ollama enforces this schema via constrained decoding
+    response_format={
+        "type": "json_schema",
+        "json_schema": {"name": "search_query", "schema": schema}
+    }
 )
-# Output is GUARANTEED to match the schema
+# Output is GUARANTEED to match the schema on Ollama, llama.cpp, and LM Studio
 ```
+
+**To swap backends, the user changes TWO env vars:**
+```bash
+# Default (Ollama)
+LLM_BASE_URL=http://localhost:11434/v1
+LLM_MODEL=qwen3:1.7b
+
+# llama.cpp server
+LLM_BASE_URL=http://localhost:8080/v1
+LLM_MODEL=qwen3-1.7b
+
+# LM Studio
+LLM_BASE_URL=http://localhost:1234/v1
+LLM_MODEL=qwen3-1.7b-q4_k_m
+
+# Cloud fallback (if user wants)
+LLM_BASE_URL=https://api.openai.com/v1
+LLM_API_KEY=sk-...
+LLM_MODEL=gpt-4o-mini
+```
+
+### Optional: Instructor for Extra Reliability
+
+For maximum cross-backend reliability, add the `instructor` library. It wraps the OpenAI client with Pydantic validation and automatic retries:
+
+```python
+import instructor
+
+# Patches the client — adds validation + retry on malformed output
+client = instructor.from_openai(
+    OpenAI(base_url="http://localhost:11434/v1", api_key="unused"),
+    mode=instructor.Mode.JSON  # Works across all backends
+)
+
+class SearchQuery(BaseModel):
+    terms: list[str]
+    boolean_query: str
+    material_type: str = "any"
+    sort: str = "relevance"
+    expanded_terms: list[str] = []
+
+# Returns a validated Pydantic object, retries if model output is invalid
+result = client.chat.completions.create(
+    model="qwen3:1.7b",
+    response_model=SearchQuery,
+    messages=[{"role": "user", "content": "recent ML healthcare articles"}]
+)
+```
+
+### Abstraction Layer Comparison
+
+| Approach | Overhead | Structured Output | Backend Swap | When to Use |
+|----------|----------|-------------------|-------------|-------------|
+| **OpenAI SDK + base_url** | Zero | Via `response_format` | Change 1 URL | **Default — simplest, works** |
+| **+ Instructor** | Minimal | Pydantic validation + retries | Change 1 URL + maybe mode | If model frequently produces invalid fields |
+| **LiteLLM** | 8ms P95 | Known Ollama bugs | Change model string | If routing across cloud + local providers |
+| **LangChain** | Heavy | Inconsistent across backends | Change class | Only if using LangChain's other features |
+| **aisuite** | Minimal | **Not supported** | Change model string | **Don't use** — no structured output |
+
+**Recommendation:** Start with `OpenAI SDK + base_url` (zero dependencies beyond `openai`). Add `instructor` only if you find the model needs retries. Avoid LangChain and LiteLLM unless you need their other features.
 
 ### Reliability Data
 
@@ -294,7 +465,7 @@ response = ollama.chat(
 | Small model + fine-tuning + constraints | **100% valid** | **~85-95% correct fields** | SLOT paper (1B fine-tuned) |
 | Qwen3-1.7B + Ollama JSON schema (no fine-tuning) | **100% valid** | ~80-90% (native function calling training) | Qwen3 benchmarks |
 
-**Bottom line:** Qwen3-1.7B with Ollama's JSON schema mode should give you ~85%+ correct query translations out of the box. Fine-tuning on a few hundred examples of your specific query patterns would push this to ~95%+.
+**Bottom line:** Qwen3-1.7B with Ollama's JSON schema mode should give you ~85%+ correct query translations out of the box. Fine-tuning on a few hundred examples of your specific query patterns would push this to ~95%+. And if someone prefers llama.cpp or LM Studio, the same code works — just change the URL.
 
 ---
 
@@ -583,13 +754,18 @@ Since the LLM only does query parsing (not conversation), cloud API costs are mi
 | Ministral-3B | 2 GB | ~3 GB | Native | Apache 2.0 | Alternative to Qwen |
 | Qwen2.5-Coder-1.5B | 1.2 GB | ~1.8 GB | Community fine-tunes | Apache 2.0 | If structured output focus |
 
-### Serving Engines
+### Serving Engines (Detailed)
 
-| Engine | Use Case | RAM Overhead | GPU Needed | Structured Output |
-|--------|----------|-------------|------------|-------------------|
-| Ollama | Desktop (Track A) | ~200 MB | No | JSON schema mode |
-| llama.cpp | Embedded in app | ~100 MB | No | GBNF grammars |
-| vLLM | Multi-user server (Track B Tier 2) | ~2 GB | Yes | Outlines integration |
+| Engine | Use Case | RAM Overhead | GPU Needed | Structured Output | License | Bundleable |
+|--------|----------|-------------|------------|-------------------|---------|------------|
+| **Ollama** | Default for users | ~200-400 MB | No | JSON schema (v0.5+) | MIT | Awkward (separate service) |
+| **llama.cpp** | Bundle in installer | ~50-100 MB | No | GBNF + json_schema (best) | MIT | **Easy** (~5-15 MB binary) |
+| **llamafile** | Zero-install distro | ~50-100 MB | No | GBNF + json_schema | Apache 2.0 | **Excellent** (single file) |
+| **LM Studio** | BYOB power users | ~300-500 MB | No | Experimental | Proprietary | No |
+| **vLLM** | Multi-user server | ~2 GB | Yes | Outlines integration | Apache 2.0 | No |
+| **LocalAI** | Full OpenAI replica | ~200-500 MB | No | Constrained grammars | MIT | Heavy |
+
+**Dead/unsuitable:** Cortex.cpp (archived), GPT4All/Jan (no JSON schema), KoboldCpp (AGPL), Msty (proprietary, no API), MLX (Apple-only), ExLlamaV2 (GPU-only)
 
 ### Embedding Models for Reranking
 
@@ -609,7 +785,20 @@ Since the LLM only does query parsing (not conversation), cloud API costs are mi
 | [Outlines](https://github.com/dottxt-ai/outlines) | — | Structured generation library | If you need finer control than Ollama |
 | [Haystack](https://haystack.deepset.ai) | — | Modular RAG framework | Production pipeline patterns |
 
-## Appendix C: Key Sources
+## Appendix C: What Breaks When Swapping Backends
+
+| Issue | Ollama | llama.cpp | LM Studio | llamafile |
+|-------|--------|-----------|-----------|-----------|
+| Model naming | `qwen3:1.7b` | filename path | LM Studio's names | filename path |
+| JSON schema enforcement | Strong (v0.5+) | **Strongest** (GBNF) | Experimental | Strong |
+| `tool_choice` param | Not supported | Supported | Experimental | Limited |
+| Streaming SSE format | Minor diffs | Standard | Minor diffs | Standard |
+| Parallel tool calls | No | Yes | No | No |
+| Concurrent requests | Queues (1 at a time) | Configurable | Configurable | Single |
+
+**Key takeaway:** For the search engine use case (single JSON request, no streaming, no tool calling), ALL backends work identically. The differences only matter for the full MCP server (Track B).
+
+## Appendix D: Key Sources
 
 **Models & Inference:**
 - [Qwen3 Blog](https://qwenlm.github.io/blog/qwen3/)
@@ -634,6 +823,23 @@ Since the LLM only does query parsing (not conversation), cloud API costs are mi
 - [BC FIPPA](https://www.bclaws.gov.bc.ca/civix/document/id/complete/statreg/96165_00)
 - [OIPC "Getting Ahead of the Curve"](https://www.oipc.bc.ca/reports/special-reports/)
 - [OPC AI Principles (Canada)](https://www.priv.gc.ca/en/privacy-topics/technology/artificial-intelligence/)
+
+**Inference Engines:**
+- [Ollama](https://ollama.com/) — [Structured Outputs](https://docs.ollama.com/capabilities/structured-outputs) — [OpenAI Compatibility](https://ollama.com/blog/openai-compatibility)
+- [llama.cpp](https://github.com/ggml-org/llama.cpp) — [Server Docs](https://github.com/ggml-org/llama.cpp/tree/master/examples/server)
+- [llamafile](https://github.com/Mozilla-Ocho/llamafile) — [Mozilla Blog](https://hacks.mozilla.org/2023/11/introducing-llamafile/)
+- [LM Studio](https://lmstudio.ai/) — [Server Docs](https://lmstudio.ai/docs/developer)
+- [Ollama vs vLLM Benchmark (Red Hat)](https://developers.redhat.com/articles/2025/08/08/ollama-vs-vllm-deep-dive-performance-benchmarking)
+- [vLLM vs llama.cpp (Red Hat)](https://developers.redhat.com/articles/2025/09/30/vllm-or-llamacpp)
+- [llama.cpp vs Ollama vs vLLM (InsiderLLM)](https://insiderllm.com/guides/llamacpp-vs-ollama-vs-vllm/)
+
+**Abstraction & Structured Output:**
+- [OpenAI Python SDK](https://github.com/openai/openai-python)
+- [Instructor (structured extraction)](https://python.useinstructor.com/)
+- [Outlines (constrained decoding)](https://github.com/dottxt-ai/outlines)
+- [Constrained Decoding Guide](https://www.aidancooper.co.uk/constrained-decoding/)
+- [LiteLLM](https://docs.litellm.ai/) — [Ollama structured output issue](https://github.com/BerriAI/litellm/issues/5172)
+- [JSONSchemaBench](https://arxiv.org/html/2501.10868v3)
 
 **Desktop Frameworks:**
 - [Tauri](https://tauri.app/)
