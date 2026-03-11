@@ -623,11 +623,6 @@ TOOL_DEFINITIONS: list[Tool] = [
                     "type": "string",
                     "description": "Optional: parent collection name. When specified, the item's collection becomes a subcollection under this parent."
                 },
-                "attach_pdf": {
-                    "type": "boolean",
-                    "description": "Download and attach the PDF to the Zotero item (default: true)",
-                    "default": True
-                }
             },
             "required": ["record_id"]
         }
@@ -663,11 +658,6 @@ TOOL_DEFINITIONS: list[Tool] = [
                     "type": "string",
                     "description": "Optional: parent collection name. When specified, the collection becomes a subcollection under this parent."
                 },
-                "attach_pdfs": {
-                    "type": "boolean",
-                    "description": "Download and attach PDFs to each Zotero item (default: true)",
-                    "default": True
-                }
             },
             "required": ["record_ids", "collection_name"]
         }
@@ -1593,7 +1583,6 @@ async def _handle_save_to_zotero(args: dict, client) -> list[TextContent]:
     record_id = args.get("record_id", "")
     collection_name = args.get("collection_name", "")
     parent_collection = args.get("parent_collection", "")
-    attach_pdf = args.get("attach_pdf", True)
 
     sfu_authenticated = client.ensure_authenticated()
     if not sfu_authenticated:
@@ -1662,27 +1651,6 @@ async def _handle_save_to_zotero(args: dict, client) -> list[TextContent]:
     if collection_name:
         output.append(f"Collection: {collection_name}")
 
-    # Optionally attach PDF
-    if attach_pdf and features.get("pdf_download_enabled", True):
-        downloader = _get_downloader(client)
-        urls = downloader.resolve_all_pdf_urls(item)
-        if urls:
-            dl_result = None
-            for url in urls:
-                dl_result = downloader.download_pdf(url, record_id, metadata, copy_to_host=False)
-                if dl_result["success"]:
-                    break
-            if dl_result and dl_result["success"]:
-                try:
-                    zot_client.attach_pdf(item_key, dl_result["container_path"])
-                    output.append("PDF: Attached successfully")
-                except ZoteroError as e:
-                    output.append(f"PDF: Attachment failed ({e})")
-            else:
-                output.append(f"PDF: Download failed ({dl_result['error'] if dl_result else 'no result'})")
-        else:
-            output.append("PDF: No accessible PDF URL found")
-
     return [TextContent(type="text", text="\n".join(output))]
 
 
@@ -1719,7 +1687,6 @@ async def _handle_batch_save_to_zotero(args: dict, client) -> list[TextContent]:
     record_ids = args.get("record_ids", [])[:20]
     collection_name = args.get("collection_name", "")
     parent_collection = args.get("parent_collection", "")
-    attach_pdfs = args.get("attach_pdfs", True)
 
     if not record_ids:
         return [TextContent(type="text", text="No record IDs provided.")]
@@ -1733,7 +1700,6 @@ async def _handle_batch_save_to_zotero(args: dict, client) -> list[TextContent]:
         ))]
 
     zot_client = _get_zotero_client()
-    downloader = _get_downloader(client) if attach_pdfs and features.get("pdf_download_enabled", True) else None
 
     # Resolve parent collection first, then child collection
     collection_key = None
@@ -1787,27 +1753,7 @@ async def _handle_batch_save_to_zotero(args: dict, client) -> list[TextContent]:
             failed += 1
             continue
 
-        # Attach PDF
-        pdf_status = ""
-        if downloader:
-            urls = downloader.resolve_all_pdf_urls(item)
-            dl_result = None
-            for url in urls:
-                dl_result = downloader.download_pdf(url, rid, metadata, copy_to_host=False)
-                if dl_result["success"]:
-                    break
-            if dl_result and dl_result["success"]:
-                try:
-                    zot_client.attach_pdf(item_key, dl_result["container_path"])
-                    pdf_status = " + PDF"
-                except ZoteroError:
-                    pdf_status = " (PDF attach failed)"
-            else:
-                pdf_status = " (PDF download failed)"
-            # Humanized delay between batch PDF downloads
-            await asyncio.sleep(random.uniform(2.0, 5.0))
-
-        details.append(f"  {title_short}: SAVED{pdf_status}")
+        details.append(f"  {title_short}: SAVED")
         saved += 1
 
     output = [
