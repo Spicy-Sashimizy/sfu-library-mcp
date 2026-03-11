@@ -504,6 +504,27 @@ class ZoteroClient:
                 "error": str(e),
             }
 
+    def find_item_by_key(self, item_key: str) -> dict | None:
+        """Find a Zotero item directly by its Zotero key.
+
+        Args:
+            item_key: The 8-character Zotero item key.
+
+        Returns:
+            Formatted item dict or None if not found.
+        """
+        try:
+            item = self._call_zotero(
+                "get_item_by_key",
+                self.zot.item,
+                item_key,
+            )
+            if item:
+                return self._format_item(item)
+        except ZoteroError:
+            return None
+        return None
+
     def find_item_by_record_id(self, record_id: str) -> dict | None:
         """Find a Zotero item by its SFU Library record ID.
 

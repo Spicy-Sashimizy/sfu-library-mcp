@@ -11,6 +11,7 @@ import asyncio
 import json
 import logging
 import os
+import re
 import subprocess
 import time
 from typing import Any
@@ -1293,12 +1294,18 @@ async def _handle_read_article(args: dict, client) -> list[TextContent]:
 
     zot_client = _get_zotero_client()
 
-    # Find the item in Zotero by record ID
-    zot_item = zot_client.find_item_by_record_id(record_id)
+    # Try finding the item by Zotero key first (8-char alphanumeric),
+    # then fall back to SFU Library record ID lookup
+    zot_item = None
+    if re.match(r'^[A-Z0-9]{8}$', record_id):
+        zot_item = zot_client.find_item_by_key(record_id)
+    if not zot_item:
+        zot_item = zot_client.find_item_by_record_id(record_id)
     if not zot_item:
         return [TextContent(type="text", text=(
             f"No item found in Zotero for record ID: {record_id}. "
-            f"Save it to Zotero first using save_to_zotero."
+            f"Save it to Zotero first using save_to_zotero, "
+            f"or provide the Zotero item key (e.g., from get_zotero_collection_items)."
         ))]
 
     item_key = zot_item.get("key", "")
