@@ -1,18 +1,10 @@
-"""MCP tool definitions and handler dispatch.
-
-Extracted from the monolith with:
-- PERF-002: asyncio.gather() for batch operations
-- PERF-003: Semaphore-based request queuing
-- PERF-004: Metrics logging (request count, latency) per tool call
-- Input validation on all tools
-"""
+"""MCP tool definitions and handler dispatch."""
 
 import asyncio
 import json
 import logging
 import os
 import re
-import subprocess
 import time
 from typing import Any
 
@@ -37,47 +29,7 @@ from lib.zotero import ZoteroClient, ZoteroError
 logger = logging.getLogger("sfu_library_mcp")
 
 
-def extract_text(pdf_path: str, max_chars: int = 100_000) -> str:
-    """Extract text from a PDF using pdftotext (standalone, no downloader dependency).
-
-    Args:
-        pdf_path: Path to the PDF file.
-        max_chars: Maximum characters to return.
-
-    Returns:
-        Extracted text content.
-
-    Raises:
-        RuntimeError: If extraction fails.
-    """
-    if not os.path.exists(pdf_path):
-        raise RuntimeError(f"PDF file not found: {pdf_path}")
-
-    try:
-        result = subprocess.run(
-            ["pdftotext", "-layout", pdf_path, "-"],
-            capture_output=True,
-            text=True,
-            timeout=60,
-        )
-    except FileNotFoundError:
-        raise RuntimeError(
-            "pdftotext not found. Install poppler-utils: apt-get install poppler-utils"
-        )
-    except subprocess.TimeoutExpired:
-        raise RuntimeError("Text extraction timed out after 60s")
-
-    if result.returncode != 0:
-        raise RuntimeError(f"pdftotext failed: {result.stderr}")
-
-    text = result.stdout
-    if len(text) > max_chars:
-        text = text[:max_chars] + f"\n\n[... Text truncated at {max_chars:,} characters. Full PDF available at {pdf_path}]"
-
-    return text
-
-
-# PERF-003: Semaphore to limit concurrent API requests (bumped from 5 for fusion)
+# Semaphore to limit concurrent API requests
 _request_semaphore = asyncio.Semaphore(8)
 
 # Lazy-loaded config for feature flags
@@ -110,11 +62,7 @@ def _get_zotero_client() -> ZoteroClient:
 
 
 def _ensure_zotero_auth() -> list[TextContent] | None:
-    """Zotero-only auth pre-flight check. Returns error response or None if OK.
-
-    Independent of SFU Library auth — error messages explicitly note that
-    the other auth path is still available.
-    """
+    """Zotero-only auth pre-flight check. Returns error response or None if OK."""
     features = _get_features()
     if not features.get("zotero_enabled", True):
         return [TextContent(type="text", text="Zotero integration is disabled.")]
@@ -123,17 +71,17 @@ def _ensure_zotero_auth() -> list[TextContent] | None:
         if not zot.ensure_authenticated():
             return [TextContent(type="text", text=(
                 "Zotero authentication failed. Check SFU_ZOTERO_API_KEY and "
-                "SFU_ZOTERO_USER_ID. SFU Library search/download still available."
+                "SFU_ZOTERO_USER_ID."
             ))]
     except ZoteroError as e:
-        return [TextContent(type="text", text=f"Zotero auth error: {e}. SFU Library tools still available.")]
+        return [TextContent(type="text", text=f"Zotero auth error: {e}")]
     return None
 
 
-# PERF-004: Simple metrics counters
+# Simple metrics counters
 _metrics: dict[str, dict[str, Any]] = {}
 
-# Strategy B: Search result cache indexed by record ID.
+# Search result cache indexed by record ID.
 # Populated by every search call so that generate_citation / get_full_text_links
 # can fall back to cached PNX data when get_item_details fails for CDI records.
 _record_cache: dict[str, dict] = {}
@@ -161,7 +109,7 @@ def get_metrics() -> dict:
 
 
 def _cache_search_docs(docs: list[dict]) -> None:
-    """Strategy B: Cache docs from search results by record ID."""
+    """Cache docs from search results by record ID."""
     for doc in docs:
         pnx = doc.get("pnx", {})
         control = pnx.get("control", {})
@@ -176,7 +124,7 @@ def _cache_search_docs(docs: list[dict]) -> None:
 
 
 def _lookup_cached_record(record_id: str) -> dict | None:
-    """Strategy B: Look up a previously searched record from cache."""
+    """Look up a previously searched record from cache."""
     return _record_cache.get(record_id)
 
 
@@ -275,28 +223,6 @@ TOOL_DEFINITIONS: list[Tool] = [
         }
     ),
     Tool(
-        name="get_token_status",
-        description="Check the current authentication token status. Shows if authenticated, time remaining, and user information.",
-        inputSchema={
-            "type": "object",
-            "properties": {}
-        }
-    ),
-    Tool(
-        name="authenticate",
-        description="Authenticate with the SFU Library system. Usually done automatically, but can be called manually to refresh authentication or force re-authentication.",
-        inputSchema={
-            "type": "object",
-            "properties": {
-                "force": {
-                    "type": "boolean",
-                    "description": "Force re-authentication even if a valid token exists",
-                    "default": False
-                }
-            }
-        }
-    ),
-    Tool(
         name="search_by_author",
         description=(
             "Search for works by a specific author in the SFU Library. "
@@ -374,14 +300,6 @@ TOOL_DEFINITIONS: list[Tool] = [
                 }
             },
             "required": ["query"]
-        }
-    ),
-    Tool(
-        name="clear_cache",
-        description="Clear the cached authentication token. Useful if experiencing authentication issues.",
-        inputSchema={
-            "type": "object",
-            "properties": {}
         }
     ),
     Tool(
@@ -480,27 +398,9 @@ TOOL_DEFINITIONS: list[Tool] = [
         }
     ),
     Tool(
-        name="read_article",
-        description=(
-            "Retrieve a PDF from the user's Zotero library and extract its full text for analysis. "
-            "The article must first be saved to Zotero (use save_to_zotero). "
-            "Returns the article text content directly so you can read, summarize, or answer questions about it."
-        ),
-        inputSchema={
-            "type": "object",
-            "properties": {
-                "record_id": {
-                    "type": "string",
-                    "description": "The record ID of the item (obtained from search results)"
-                },
-            },
-            "required": ["record_id"]
-        }
-    ),
-    Tool(
         name="save_to_zotero",
         description=(
-            "Save a library item's metadata and PDF to the user's Zotero library. "
+            "Save a library item's metadata to the user's Zotero library. "
             "Automatically checks for duplicates before saving. "
             "Optionally specify a collection name to organize the item."
         ),
@@ -604,50 +504,13 @@ TOOL_DEFINITIONS: list[Tool] = [
         }
     ),
     Tool(
-        name="get_diagnostics",
-        description=(
-            "Get a comprehensive diagnostic report for the SFU Library MCP server. "
-            "Shows token status, cookie inventory, EZProxy session state, download tier "
-            "availability, circuit breaker and rate limiter state, log file info, "
-            "recent errors, and tool metrics."
-        ),
-        inputSchema={
-            "type": "object",
-            "properties": {
-                "include_recent_errors": {
-                    "type": "boolean",
-                    "description": "Include last 10 ERROR/WARNING lines from log file (default: true)",
-                    "default": True,
-                }
-            },
-        },
-    ),
-    Tool(
         name="get_zotero_status",
         description=(
-            "Check Zotero API connection, credentials, and permissions. "
-            "Independent of SFU Library authentication."
+            "Check Zotero API connection, credentials, and permissions."
         ),
         inputSchema={
             "type": "object",
             "properties": {},
-        },
-    ),
-    Tool(
-        name="zotero_authenticate",
-        description=(
-            "Verify or re-verify Zotero API credentials. "
-            "Independent of SFU Library authentication."
-        ),
-        inputSchema={
-            "type": "object",
-            "properties": {
-                "force": {
-                    "type": "boolean",
-                    "description": "Force re-verification even if already validated",
-                    "default": False,
-                }
-            },
         },
     ),
 ]
@@ -708,10 +571,6 @@ async def _dispatch_tool(
         return await _handle_search_library(arguments, lib_client)
     elif name == "get_item_details":
         return await _handle_get_item_details(arguments, lib_client)
-    elif name == "get_token_status":
-        return _handle_get_token_status(lib_client)
-    elif name == "authenticate":
-        return _handle_authenticate(arguments, lib_client)
     elif name == "search_by_author":
         return await _handle_search_by_author(arguments, lib_client)
     elif name == "search_by_subject":
@@ -720,8 +579,6 @@ async def _dispatch_tool(
         return await _handle_search_by_isbn(arguments, lib_client)
     elif name == "search_electronic_resources":
         return await _handle_search_electronic(arguments, lib_client)
-    elif name == "clear_cache":
-        return _handle_clear_cache(lib_client)
     elif name == "get_full_text_links":
         return await _handle_get_full_text_links(arguments, lib_client)
     elif name == "generate_citation":
@@ -732,8 +589,6 @@ async def _dispatch_tool(
         return await _handle_export_search(arguments, lib_client)
     elif name == "batch_isbn_lookup":
         return await _handle_batch_isbn(arguments, lib_client)
-    elif name == "read_article":
-        return await _handle_read_article(arguments, lib_client)
     elif name == "save_to_zotero":
         return await _handle_save_to_zotero(arguments, lib_client)
     elif name == "list_zotero_collections":
@@ -744,12 +599,8 @@ async def _dispatch_tool(
         return _handle_search_zotero(arguments)
     elif name == "get_zotero_collection_items":
         return _handle_get_zotero_collection_items(arguments)
-    elif name == "get_diagnostics":
-        return _handle_get_diagnostics(arguments, lib_client)
     elif name == "get_zotero_status":
         return _handle_get_zotero_status()
-    elif name == "zotero_authenticate":
-        return _handle_zotero_authenticate(arguments)
     else:
         return [TextContent(type="text", text=f"Unknown tool: {name}")]
 
@@ -792,13 +643,11 @@ def _reciprocal_rank_fusion(results_sets: list[dict | None], limit: int, k: int 
             pnx = doc.get("pnx", {})
             record_id = pnx.get("control", {}).get("recordid", [""])[0] if pnx.get("control", {}).get("recordid") else ""
             if not record_id:
-                # Use a fallback key based on title
                 record_id = f"_fallback_{pnx.get('display', {}).get('title', [''])[0][:50]}"
             scores[record_id] = scores.get(record_id, 0.0) + 1.0 / (k + rank)
             if record_id not in doc_map:
                 doc_map[record_id] = doc
 
-    # Sort by RRF score descending
     sorted_ids = sorted(scores.keys(), key=lambda rid: scores[rid], reverse=True)
     merged_docs = [doc_map[rid] for rid in sorted_ids[:limit]]
 
@@ -833,9 +682,6 @@ async def _handle_search_library(args: dict, client) -> list[TextContent]:
         tab = "course_tab"
         scope = "course_scope"
 
-    if not client.ensure_authenticated():
-        return [TextContent(type="text", text="Authentication failed. Please try again or check your credentials.")]
-
     features = _get_features()
 
     # Determine how many results to fetch (over-fetch for re-ranking)
@@ -851,17 +697,12 @@ async def _handle_search_library(args: dict, client) -> list[TextContent]:
             _single_search(client, search_query, fetch_limit, offset, field, sort, "online_only_tab", "ElectronicOnly_scope"),
         ]
         results_sets = await asyncio.gather(*search_tasks, return_exceptions=True)
-        # Filter out exceptions, treat them as None
         valid_results = [r if not isinstance(r, Exception) else None for r in results_sets]
         results = _reciprocal_rank_fusion(valid_results, fetch_limit)
     else:
         results = await _single_search(client, search_query, fetch_limit, offset, field, sort, tab, scope)
 
-        if results is None:
-            if client.ensure_authenticated(force=True):
-                results = await _single_search(client, search_query, fetch_limit, offset, field, sort, tab, scope)
-
-    # Strategy B: Cache all returned docs by record ID
+    # Cache all returned docs by record ID
     if results and results.get("docs"):
         _cache_search_docs(results["docs"])
 
@@ -869,7 +710,6 @@ async def _handle_search_library(args: dict, client) -> list[TextContent]:
     if rerank_enabled and results and results.get("docs"):
         results["docs"] = rerank_results(results["docs"], query, limit)
     elif results and results.get("docs") and len(results["docs"]) > limit:
-        # Trim to requested limit if we over-fetched but reranking is off
         results["docs"] = results["docs"][:limit]
 
     search_metadata = {"query": query, "field": field, "sort": sort, "resource_type": resource_type}
@@ -881,46 +721,15 @@ async def _handle_search_library(args: dict, client) -> list[TextContent]:
 
 async def _handle_get_item_details(args: dict, client) -> list[TextContent]:
     record_id = args.get("record_id", "")
-    if not client.ensure_authenticated():
-        return [TextContent(type="text", text="Authentication failed.")]
     async with _request_semaphore:
         item = client.get_item_details(record_id)
     formatted = format_item_details(item)
     return [TextContent(type="text", text=formatted)]
 
 
-def _handle_get_token_status(client) -> list[TextContent]:
-    status = client.get_token_status()
-    if status.get("valid"):
-        text = f"""Token Status: VALID
-User: {status.get('user', 'Unknown')} ({status.get('userId', '')})
-User Group: {status.get('userGroup', '')}
-Expires In: {status.get('expiresIn', '')}
-Expires At: {status.get('expiresAt', '')}"""
-    else:
-        text = f"Token Status: INVALID\nReason: {status.get('message', 'Unknown')}"
-    return [TextContent(type="text", text=text)]
-
-
-def _handle_authenticate(args: dict, client) -> list[TextContent]:
-    force = args.get("force", False)
-    success = client.ensure_authenticated(force=force)
-    if success:
-        status = client.get_token_status()
-        text = f"""Authentication successful!
-User: {status.get('user', 'Unknown')} ({status.get('userId', '')})
-User Group: {status.get('userGroup', '')}
-Token valid for: {status.get('expiresIn', '')}"""
-    else:
-        text = "Authentication failed. Please check your credentials and network connection."
-    return [TextContent(type="text", text=text)]
-
-
 async def _handle_search_by_author(args: dict, client) -> list[TextContent]:
     author = args.get("author", "")
     limit = args.get("limit", 10)
-    if not client.ensure_authenticated():
-        return [TextContent(type="text", text="Authentication failed.")]
     async with _request_semaphore:
         results = client.search(query=author, limit=limit, field="creator")
     if results and results.get("docs"):
@@ -933,8 +742,6 @@ async def _handle_search_by_author(args: dict, client) -> list[TextContent]:
 async def _handle_search_by_subject(args: dict, client) -> list[TextContent]:
     subject = args.get("subject", "")
     limit = args.get("limit", 10)
-    if not client.ensure_authenticated():
-        return [TextContent(type="text", text="Authentication failed.")]
     async with _request_semaphore:
         results = client.search(query=subject, limit=limit, field="sub")
     if results and results.get("docs"):
@@ -946,8 +753,6 @@ async def _handle_search_by_subject(args: dict, client) -> list[TextContent]:
 
 async def _handle_search_by_isbn(args: dict, client) -> list[TextContent]:
     isbn = args.get("isbn", "")
-    if not client.ensure_authenticated():
-        return [TextContent(type="text", text="Authentication failed.")]
     async with _request_semaphore:
         results = client.search(query=isbn, limit=5, field="isbn")
     if results and results.get("docs"):
@@ -960,8 +765,6 @@ async def _handle_search_by_isbn(args: dict, client) -> list[TextContent]:
 async def _handle_search_electronic(args: dict, client) -> list[TextContent]:
     query = args.get("query", "")
     limit = args.get("limit", 10)
-    if not client.ensure_authenticated():
-        return [TextContent(type="text", text="Authentication failed.")]
     async with _request_semaphore:
         results = client.search(
             query=query, limit=limit,
@@ -974,20 +777,12 @@ async def _handle_search_electronic(args: dict, client) -> list[TextContent]:
     return [TextContent(type="text", text=formatted)]
 
 
-def _handle_clear_cache(client) -> list[TextContent]:
-    client.clear_token_cache()
-    return [TextContent(type="text", text="Token cache cleared successfully.")]
-
-
 async def _handle_get_full_text_links(args: dict, client) -> list[TextContent]:
     record_id = args.get("record_id", "")
-    if not client.ensure_authenticated():
-        return [TextContent(type="text", text="Authentication failed.")]
 
     async with _request_semaphore:
         item = client.get_item_details(record_id)
     if not item:
-        # Strategy B: Try cached search result before expensive API fallback
         item = _lookup_cached_record(record_id)
     if not item:
         async with _request_semaphore:
@@ -1042,13 +837,9 @@ async def _handle_generate_citation(args: dict, client) -> list[TextContent]:
     record_id = args.get("record_id", "")
     citation_format = args.get("format", "apa").lower()
 
-    if not client.ensure_authenticated():
-        return [TextContent(type="text", text="Authentication failed.")]
-
     async with _request_semaphore:
         item = client.get_item_details(record_id)
     if not item:
-        # Strategy B: Try cached search result before expensive API fallback
         item = _lookup_cached_record(record_id)
     if not item:
         async with _request_semaphore:
@@ -1060,7 +851,6 @@ async def _handle_generate_citation(args: dict, client) -> list[TextContent]:
         return [TextContent(type="text", text=f"Could not find item with record ID: {record_id}")]
 
     metadata = extract_metadata(item)
-    # Strategy D: Enrich with CrossRef if key fields are missing
     metadata = enrich_metadata_from_crossref(metadata)
 
     format_names = {
@@ -1081,8 +871,6 @@ async def _handle_batch_citations(args: dict, client) -> list[TextContent]:
 
     if not record_ids:
         return [TextContent(type="text", text="No record IDs provided.")]
-    if not client.ensure_authenticated():
-        return [TextContent(type="text", text="Authentication failed.")]
 
     format_names = {
         "apa": "APA 7th Edition",
@@ -1092,12 +880,11 @@ async def _handle_batch_citations(args: dict, client) -> list[TextContent]:
     }
     format_name = format_names.get(citation_format, "APA 7th Edition")
 
-    # PERF-002: Fetch items concurrently
+    # Fetch items concurrently
     async def fetch_item(rid: str) -> tuple[str, dict | None]:
         async with _request_semaphore:
             item = client.get_item_details(rid)
         if not item:
-            # Strategy B: Try cached search result first
             item = _lookup_cached_record(rid)
         if not item:
             async with _request_semaphore:
@@ -1133,9 +920,6 @@ async def _handle_export_search(args: dict, client) -> list[TextContent]:
     query = args.get("query", "")
     export_format = args.get("format", "bibtex").lower()
     limit = min(args.get("limit", 10), 100)
-
-    if not client.ensure_authenticated():
-        return [TextContent(type="text", text="Authentication failed.")]
 
     async with _request_semaphore:
         results = client.search(query=query, limit=limit)
@@ -1219,12 +1003,10 @@ async def _handle_batch_isbn(args: dict, client) -> list[TextContent]:
 
     if not isbn_list:
         return [TextContent(type="text", text="No ISBN numbers provided.")]
-    if not client.ensure_authenticated():
-        return [TextContent(type="text", text="Authentication failed.")]
 
     output = ["=" * 50, f"BATCH ISBN LOOKUP ({len(isbn_list)} items)", "=" * 50 + "\n"]
 
-    # PERF-002: Concurrent ISBN lookups
+    # Concurrent ISBN lookups
     async def lookup_isbn(isbn: str) -> tuple[str, dict | None]:
         isbn_clean = isbn.replace("-", "").replace(" ", "")
         async with _request_semaphore:
@@ -1278,90 +1060,16 @@ async def _handle_batch_isbn(args: dict, client) -> list[TextContent]:
     return [TextContent(type="text", text="\n".join(output))]
 
 
-# ─── PDF retrieval + Zotero handlers ──────────────────────────
-
-async def _handle_read_article(args: dict, client) -> list[TextContent]:
-    features = _get_features()
-    if not features.get("zotero_pdf_retrieval_enabled", True):
-        return [TextContent(type="text", text="Zotero PDF retrieval is disabled.")]
-
-    record_id = args.get("record_id", "")
-
-    # Zotero auth check
-    zotero_auth_err = _ensure_zotero_auth()
-    if zotero_auth_err:
-        return zotero_auth_err
-
-    zot_client = _get_zotero_client()
-
-    # Try finding the item by Zotero key first (8-char alphanumeric),
-    # then fall back to SFU Library record ID lookup
-    zot_item = None
-    if re.match(r'^[A-Z0-9]{8}$', record_id):
-        zot_item = zot_client.find_item_by_key(record_id)
-    if not zot_item:
-        zot_item = zot_client.find_item_by_record_id(record_id)
-    if not zot_item:
-        return [TextContent(type="text", text=(
-            f"No item found in Zotero for record ID: {record_id}. "
-            f"Save it to Zotero first using save_to_zotero, "
-            f"or provide the Zotero item key (e.g., from get_zotero_collection_items)."
-        ))]
-
-    item_key = zot_item.get("key", "")
-    if not item_key:
-        return [TextContent(type="text", text="Could not determine Zotero item key.")]
-
-    # Download the PDF from Zotero
-    config = _get_config()
-    dl_result = zot_client.download_pdf(item_key, config.download_dir)
-    if not dl_result["success"]:
-        return [TextContent(type="text", text=(
-            f"No PDF available in Zotero for this record: {dl_result['error']}"
-        ))]
-
-    # Extract text
-    try:
-        text = extract_text(dl_result["path"], config.max_pdf_text_chars)
-    except RuntimeError as e:
-        return [TextContent(type="text", text=f"Text extraction failed: {e}")]
-
-    # Build header with metadata from Zotero item
-    header_parts = ["=" * 50, "ARTICLE TEXT", "=" * 50]
-    header_parts.append(f"Title: {zot_item.get('title', 'Unknown')}")
-    authors = zot_item.get("authors", [])
-    if authors:
-        header_parts.append(f"Authors: {'; '.join(authors[:5])}")
-    if zot_item.get("date"):
-        header_parts.append(f"Date: {zot_item['date']}")
-    if zot_item.get("publication"):
-        header_parts.append(f"Source: {zot_item['publication']}")
-    if zot_item.get("DOI"):
-        header_parts.append(f"DOI: {zot_item['DOI']}")
-    header_parts.append("=" * 50)
-    header_parts.append("")
-
-    return [TextContent(type="text", text="\n".join(header_parts) + text)]
-
+# ─── Zotero handlers ──────────────────────────────────────────
 
 async def _handle_save_to_zotero(args: dict, client) -> list[TextContent]:
-    # Independent auth checks — Zotero and SFU Library are separate paths
     zotero_auth_err = _ensure_zotero_auth()
     if zotero_auth_err:
-        # Zotero is down — tell user SFU Library still works
         return zotero_auth_err
 
     record_id = args.get("record_id", "")
     collection_name = args.get("collection_name", "")
     parent_collection = args.get("parent_collection", "")
-
-    sfu_authenticated = client.ensure_authenticated()
-    if not sfu_authenticated:
-        return [TextContent(type="text", text=(
-            "SFU Library authentication failed — cannot resolve record. "
-            "Zotero is connected. Use Zotero-only tools (search_zotero, "
-            "list_zotero_collections) which work independently."
-        ))]
 
     item = await _resolve_record(record_id, client)
     if not item:
@@ -1450,7 +1158,6 @@ def _handle_list_zotero_collections() -> list[TextContent]:
 
 
 async def _handle_batch_save_to_zotero(args: dict, client) -> list[TextContent]:
-    # Independent auth checks — Zotero and SFU Library are separate paths
     zotero_auth_err = _ensure_zotero_auth()
     if zotero_auth_err:
         return zotero_auth_err
@@ -1461,14 +1168,6 @@ async def _handle_batch_save_to_zotero(args: dict, client) -> list[TextContent]:
 
     if not record_ids:
         return [TextContent(type="text", text="No record IDs provided.")]
-
-    sfu_authenticated = client.ensure_authenticated()
-    if not sfu_authenticated:
-        return [TextContent(type="text", text=(
-            "SFU Library authentication failed — cannot resolve records. "
-            "Zotero is connected. Use Zotero-only tools (search_zotero, "
-            "list_zotero_collections) which work independently."
-        ))]
 
     zot_client = _get_zotero_client()
 
@@ -1612,8 +1311,6 @@ def _handle_get_zotero_collection_items(args: dict) -> list[TextContent]:
     return [TextContent(type="text", text="\n".join(output))]
 
 
-# ─── Zotero status handlers ──────────────────────────────────────
-
 def _handle_get_zotero_status() -> list[TextContent]:
     """Handle get_zotero_status tool — verify credentials and report status."""
     features = _get_features()
@@ -1641,155 +1338,4 @@ def _handle_get_zotero_status() -> list[TextContent]:
         output.append(f"\nCredentials: INVALID")
         output.append(f"Reason: {result.get('message', 'Unknown')}")
 
-    output.append(f"\nNote: Independent of SFU Library authentication.")
-    return [TextContent(type="text", text="\n".join(output))]
-
-
-def _handle_zotero_authenticate(args: dict) -> list[TextContent]:
-    """Handle zotero_authenticate tool — verify or re-verify credentials."""
-    features = _get_features()
-    if not features.get("zotero_enabled", True):
-        return [TextContent(type="text", text="Zotero integration is disabled.")]
-
-    force = args.get("force", False)
-
-    try:
-        zot = _get_zotero_client()
-        success = zot.ensure_authenticated(force=force)
-    except ZoteroError as e:
-        return [TextContent(type="text", text=f"Zotero auth error: {e}")]
-
-    if success:
-        status = zot.get_auth_status()
-        access = status.get("access", {})
-        output = [
-            "Zotero authentication successful!",
-            f"Username: {status.get('username', 'N/A')}",
-            f"User ID: {status.get('userID', 'N/A')}",
-            f"Write access: {access.get('write', False)}",
-            "",
-            "Note: Independent of SFU Library authentication.",
-        ]
-        return [TextContent(type="text", text="\n".join(output))]
-    else:
-        return [TextContent(type="text", text=(
-            "Zotero authentication failed. Check SFU_ZOTERO_API_KEY and "
-            "SFU_ZOTERO_USER_ID. SFU Library search/download still available."
-        ))]
-
-
-# ─── Diagnostics handler ────────────────────────────────────────
-
-def _handle_get_diagnostics(args: dict, client) -> list[TextContent]:
-    """Generate a comprehensive diagnostic report."""
-    import os
-    import datetime
-
-    include_errors = args.get("include_recent_errors", True)
-    output = ["=" * 60, "SFU LIBRARY MCP — DIAGNOSTIC REPORT", "=" * 60]
-
-    # 1. Token status
-    output.append("\n--- Token Status ---")
-    try:
-        status = client.get_token_status()
-        if status.get("valid"):
-            output.append("  Status: VALID")
-            output.append(f"  User: {status.get('user', 'Unknown')} ({status.get('userId', '')})")
-            output.append(f"  Group: {status.get('userGroup', '')}")
-            output.append(f"  Expires: {status.get('expiresIn', '')} ({status.get('expiresAt', '')})")
-        else:
-            output.append(f"  Status: INVALID — {status.get('message', 'Unknown')}")
-    except Exception as e:
-        output.append(f"  Error: {e}")
-
-    # 2. Zotero status (independent of SFU Library token)
-    output.append("\n--- Zotero Status ---")
-    try:
-        zot = _get_zotero_client()
-        zot_status = zot.get_auth_status()
-        output.append(f"  Credentials configured: {zot_status.get('credentials_configured', False)}")
-        output.append(f"  Validated: {zot_status.get('validated', False)}")
-        if zot_status.get("validated"):
-            output.append(f"  Username: {zot_status.get('username', 'N/A')}")
-            output.append(f"  User ID: {zot_status.get('userID', 'N/A')}")
-            access = zot_status.get("access", {})
-            output.append(f"  Write access: {access.get('write', False)}")
-        elif zot_status.get("message"):
-            output.append(f"  Status: {zot_status['message']}")
-    except Exception as e:
-        output.append(f"  Error: {e}")
-
-    # 3. Cookie inventory
-    output.append("\n--- Cookie Inventory ---")
-    cookies = getattr(client, "cookies", {})
-    output.append(f"  Total cookies: {len(cookies)}")
-    proxy_cookies = [n for n in cookies if "proxy" in n.lower() or "ezproxy" in n.lower()]
-    secure_cookies = [n for n in cookies if n.startswith("__Secure-") or n.startswith("__Host-")]
-    output.append(f"  Proxy cookies: {proxy_cookies if proxy_cookies else '(none)'}")
-    output.append(f"  __Secure-/__Host- cookies: {secure_cookies if secure_cookies else '(none)'}")
-    if cookies:
-        output.append(f"  All cookie names: {list(cookies.keys())}")
-
-    # 3. EZProxy session status
-    output.append("\n--- EZProxy Session ---")
-    if proxy_cookies:
-        output.append("  Status: Cookies present (session likely active)")
-    else:
-        output.append("  Status: NO proxy cookies — session not established")
-        output.append("  Action: Re-authenticate to establish EZProxy session")
-
-    # 4. Zotero PDF retrieval
-    output.append("\n--- PDF Retrieval ---")
-    features = _get_features()
-    output.append(f"  Method: Zotero PDF retrieval")
-    output.append(f"  Enabled: {features.get('zotero_pdf_retrieval_enabled', True)}")
-    output.append(f"  Direct download: REMOVED (use capture_server for direct downloads)")
-
-    # 5. Log file info
-    output.append("\n--- Log File ---")
-    log_path = getattr(client.config, "log_file", "") or "/tmp/sfu-library-mcp.log"
-    try:
-        if os.path.exists(log_path):
-            stat = os.stat(log_path)
-            size_kb = stat.st_size / 1024
-            modified = datetime.datetime.fromtimestamp(stat.st_mtime).isoformat()
-            output.append(f"  Path: {log_path}")
-            output.append(f"  Size: {size_kb:.1f} KB")
-            output.append(f"  Last modified: {modified}")
-        else:
-            output.append(f"  Path: {log_path} (not found)")
-    except Exception as e:
-        output.append(f"  Error: {e}")
-
-    # 8. Recent errors from log
-    if include_errors:
-        output.append("\n--- Recent Errors/Warnings (last 10) ---")
-        try:
-            if os.path.exists(log_path):
-                with open(log_path, "r") as f:
-                    lines = f.readlines()
-                error_lines = [
-                    line.rstrip() for line in lines
-                    if " ERROR " in line or " WARNING " in line
-                ]
-                for line in error_lines[-10:]:
-                    output.append(f"  {line[:200]}")
-                if not error_lines:
-                    output.append("  (no errors or warnings found)")
-            else:
-                output.append("  (log file not found)")
-        except Exception as e:
-            output.append(f"  Error reading log: {e}")
-
-    # 9. Tool metrics
-    output.append("\n--- Tool Metrics ---")
-    metrics = get_metrics()
-    if metrics:
-        for tool_name, m in sorted(metrics.items()):
-            avg_latency = m["total_latency"] / m["count"] if m["count"] > 0 else 0
-            output.append(f"  {tool_name}: {m['count']} calls, {m['errors']} errors, avg {avg_latency:.2f}s")
-    else:
-        output.append("  (no metrics recorded yet)")
-
-    output.append("\n" + "=" * 60)
     return [TextContent(type="text", text="\n".join(output))]
