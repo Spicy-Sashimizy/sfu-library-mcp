@@ -47,7 +47,7 @@ def get_client() -> SFULibraryClient:
     """Get or create the library client."""
     global _client
     if _client is None:
-        _client = SFULibraryClient(headless=True, config=config)
+        _client = SFULibraryClient(config=config)
     return _client
 
 

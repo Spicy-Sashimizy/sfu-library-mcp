@@ -1,7 +1,6 @@
 """
 SFU Library MCP Server
 Provides Claude Desktop access to the SFU Library database through the Primo API.
-Supports JWT token caching, authenticated searches, and detailed item retrieval.
 """
 
 import asyncio
@@ -36,7 +35,7 @@ def get_client() -> SFULibraryClient:
     """Get or create the library client."""
     global client
     if client is None:
-        client = SFULibraryClient(headless=True, config=config)
+        client = SFULibraryClient(config=config)
     return client
 
 
