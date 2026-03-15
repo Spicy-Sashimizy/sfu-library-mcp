@@ -127,78 +127,11 @@ def mock_search_response(sample_pnx_record, sample_article_record):
 @pytest.fixture
 def mock_config():
     """ServerConfig with test values."""
-    # Deferred import to avoid circular dependency during collection
     from lib.config import ServerConfig
 
     return ServerConfig(
-        sfu_username="testuser",
-        sfu_password="testpass",
-        mfa_secret="TESTSECRETBASE32A",
-        token_cache_file="/tmp/test_token_cache.json",
-        auth_timeout=5,
         search_timeout=10,
-        token_refresh_buffer=60,
         max_retries=2,
         log_level="DEBUG",
         features={"cache_enabled": True, "retry_enabled": True},
-    )
-
-
-@pytest.fixture
-def tmp_cache_file():
-    """Temporary file for token cache tests."""
-    fd, path = tempfile.mkstemp(suffix=".json")
-    os.close(fd)
-    yield path
-    if os.path.exists(path):
-        os.remove(path)
-
-
-@pytest.fixture
-def sample_jwt_payload():
-    """Sample decoded JWT payload."""
-    import time
-
-    return {
-        "user": "testuser",
-        "userName": "Test User",
-        "userGroup": "STUDENT",
-        "exp": int(time.time()) + 3600,
-        "iat": int(time.time()),
-    }
-
-
-@pytest.fixture
-def make_jwt_token():
-    """Factory fixture to create JWT tokens with custom payloads."""
-    import base64
-
-    def _make(payload: dict) -> str:
-        header = base64.urlsafe_b64encode(
-            json.dumps({"alg": "HS256", "typ": "JWT"}).encode()
-        ).rstrip(b"=").decode()
-        body = base64.urlsafe_b64encode(
-            json.dumps(payload).encode()
-        ).rstrip(b"=").decode()
-        sig = base64.urlsafe_b64encode(b"fakesig").rstrip(b"=").decode()
-        return f"{header}.{body}.{sig}"
-
-    return _make
-
-
-@pytest.fixture
-def dl_config_tiered():
-    """ServerConfig with all download tiers enabled."""
-    from lib.config import ServerConfig
-
-    return ServerConfig(
-        download_dir="/tmp/test-dl-cache-tiered",
-        host_download_dir="/tmp/test-host-downloads",
-        download_timeout=30,
-        max_pdf_text_chars=1000,
-        ezproxy_prefix="https://proxy.lib.sfu.ca/login?url=",
-        ezproxy_login_url="https://login.proxy.lib.sfu.ca/login?qurl=",
-        ezproxy_proxy_base="proxy.lib.sfu.ca",
-        download_tiers=["curl_cffi", "playwright", "requests"],
-        playwright_timeout=10,
     )
