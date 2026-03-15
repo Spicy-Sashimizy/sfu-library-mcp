@@ -1,7 +1,6 @@
 mcp>=1.0.0
-selenium>=4.15.0
 requests>=2.31.0
-pyotp>=2.9.0
+pyzotero>=1.5.0
 pytest>=7.0.0
 pytest-asyncio>=0.21.0
-pyzotero>=1.5.0
+rank_bm25>=0.2.2

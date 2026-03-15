@@ -1,6 +1,11 @@
 .pommel/
 .pommel
 
+# Python bytecode
+__pycache__/
+*.pyc
+*.pyo
+
 # Python virtual environment
 .venv/
 
