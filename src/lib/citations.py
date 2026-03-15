@@ -14,7 +14,7 @@ logger = logging.getLogger("sfu_library_mcp")
 
 
 def enrich_metadata_from_crossref(metadata: dict) -> dict:
-    """Strategy D: Fill in missing citation fields using CrossRef API.
+    """Fill in missing citation fields using CrossRef API.
 
     Only called when key fields (authors, date, source) are missing
     and a DOI is available. Returns the same metadata dict, enriched.

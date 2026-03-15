@@ -1,7 +1,4 @@
-"""Retry logic with exponential backoff and circuit breaker.
-
-Implements ERR-001, ERR-002, ERR-006, ERR-008.
-"""
+"""Retry logic with exponential backoff and circuit breaker."""
 
 import asyncio
 import functools

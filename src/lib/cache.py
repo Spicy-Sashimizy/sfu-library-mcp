@@ -1,7 +1,4 @@
-"""Response caching with TTL-based LRU eviction and memory bounds.
-
-Implements PERF-001, PERF-005.
-"""
+"""Response caching with TTL-based LRU eviction and memory bounds."""
 
 import json
 import logging
