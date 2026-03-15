@@ -1,18 +1,19 @@
-# ClaudeBox Project: sfu-library-mcp
-name: claudebox-sfu-library-mcp
+# ClaudeBox Project: sfu-library-mcp-clone (isolated clone, no conflicts with original)
+name: claudebox-sfu-library-mcp-clone
 
 services:
   app:
-    container_name: claudebox-sfu-library-mcp-app
+    container_name: claudebox-sfu-library-mcp-clone-app
     build:
       context: .
       dockerfile: Dockerfile
     volumes:
-      - ..:/workspaces/sfu-library-mcp:cached
+      - ..:/workspaces/sfu-library-mcp-clone:cached
       - claude-config:/home/vscode/.claude:cached
       - pommel_data:/home/vscode/.pommel-data:cached
       - gh-cli-config:/home/vscode/.config/gh:cached
       - ${USERPROFILE}/.claudebox\mcp-servers\pommel\devcontainer-server.py:/usr/local/bin/pommel-mcp-server.py:ro
+      - ${USERPROFILE}/.claudebox\mcp-servers\lsp\lsp-mcp-server.py:/usr/local/bin/lsp-mcp-server.py:ro
       - ${USERPROFILE}/.ssh:/home/vscode/.ssh
       - ./entrypoint.sh:/usr/local/bin/claudebox-entrypoint.sh:ro
       - ${USERPROFILE}/.claudebox/git-credentials/.git-credentials:/mnt/claudebox-git-creds/.git-credentials:ro
@@ -27,22 +28,22 @@ services:
     environment:
       - DATABASE_URL=postgresql://${DB_USER:-dev}:${DB_PASSWORD:-dev}@postgres:5432/${DB_NAME:-app_dev}
       - REDIS_URL=redis://:${REDIS_PASSWORD:-dev}@redis:6379/0
-      - PYTHONPATH=/workspaces/sfu-library-mcp
+      - PYTHONPATH=/workspaces/sfu-library-mcp-clone
       - CLAUDE_CONFIG_DIR=/home/vscode/.claude
       - CLAUDE_BACKEND=${CLAUDE_BACKEND:-anthropic}
       - CLAUDEBOX_CREDENTIALS_FILE=/home/vscode/.claudebox-credentials/credentials.json
       - OLLAMA_HOST=http://host.docker.internal:11434
       - POMMEL_DATA_DIR=/home/vscode/.pommel-data
-      - PROJECT_NAME=sfu-library-mcp
-      - POMMEL_HOST=claudebox-sfu-library-mcp-pommel
+      - PROJECT_NAME=sfu-library-mcp-clone
+      - POMMEL_HOST=claudebox-sfu-library-mcp-clone-pommel
       - POMMEL_PORT=7420
     networks:
-      - claudebox-sfu-library-mcp-net
+      - claudebox-sfu-library-mcp-clone-net
       - claudebox-shared
     extra_hosts:
       - "host.docker.internal:host-gateway"
     labels:
-      - "com.claudebox.project=sfu-library-mcp"
+      - "com.claudebox.project=sfu-library-mcp-clone"
       - "com.claudebox.service=app"
       - "com.claudebox.managed=true"
     depends_on:
@@ -52,7 +53,7 @@ services:
         condition: service_healthy
 
   cloudflared:
-    container_name: claudebox-sfu-library-mcp-tunnel
+    container_name: claudebox-sfu-library-mcp-clone-tunnel
     image: cloudflare/cloudflared:latest
     restart: unless-stopped
     env_file:
@@ -61,16 +62,16 @@ services:
     depends_on:
       - app
     networks:
-      - claudebox-sfu-library-mcp-net
+      - claudebox-sfu-library-mcp-clone-net
     labels:
-      - "com.claudebox.project=sfu-library-mcp"
+      - "com.claudebox.project=sfu-library-mcp-clone"
       - "com.claudebox.service=tunnel"
       - "com.claudebox.managed=true"
     profiles:
       - tunnel
 
   postgres:
-    container_name: claudebox-sfu-library-mcp-db
+    container_name: claudebox-sfu-library-mcp-clone-db
     image: postgres:16
     restart: unless-stopped
     environment:
@@ -80,9 +81,9 @@ services:
     volumes:
       - postgres_data:/var/lib/postgresql/data
     networks:
-      - claudebox-sfu-library-mcp-net
+      - claudebox-sfu-library-mcp-clone-net
     labels:
-      - "com.claudebox.project=sfu-library-mcp"
+      - "com.claudebox.project=sfu-library-mcp-clone"
       - "com.claudebox.service=database"
       - "com.claudebox.managed=true"
     healthcheck:
@@ -92,16 +93,16 @@ services:
       retries: 5
 
   redis:
-    container_name: claudebox-sfu-library-mcp-redis
+    container_name: claudebox-sfu-library-mcp-clone-redis
     image: redis:7-alpine
     command: ["redis-server", "--requirepass", "${REDIS_PASSWORD:-dev}"]
     restart: unless-stopped
     volumes:
       - redis_data:/data
     networks:
-      - claudebox-sfu-library-mcp-net
+      - claudebox-sfu-library-mcp-clone-net
     labels:
-      - "com.claudebox.project=sfu-library-mcp"
+      - "com.claudebox.project=sfu-library-mcp-clone"
       - "com.claudebox.service=cache"
       - "com.claudebox.managed=true"
     healthcheck:
@@ -111,11 +112,11 @@ services:
       retries: 5
 
 networks:
-  claudebox-sfu-library-mcp-net:
-    name: claudebox-sfu-library-mcp-net
+  claudebox-sfu-library-mcp-clone-net:
+    name: claudebox-sfu-library-mcp-clone-net
     driver: bridge
     labels:
-      - "com.claudebox.project=sfu-library-mcp"
+      - "com.claudebox.project=sfu-library-mcp-clone"
       - "com.claudebox.managed=true"
   claudebox-shared:
     external: true
@@ -123,30 +124,30 @@ networks:
 
 volumes:
   postgres_data:
-    name: claudebox-sfu-library-mcp-postgres
+    name: claudebox-sfu-library-mcp-clone-postgres
     labels:
-      com.claudebox.project: sfu-library-mcp
+      com.claudebox.project: sfu-library-mcp-clone
       com.claudebox.managed: "true"
   redis_data:
-    name: claudebox-sfu-library-mcp-redis
+    name: claudebox-sfu-library-mcp-clone-redis
     labels:
-      com.claudebox.project: sfu-library-mcp
+      com.claudebox.project: sfu-library-mcp-clone
       com.claudebox.managed: "true"
   pommel_data:
-    name: claudebox-sfu-library-mcp-pommel
+    name: claudebox-sfu-library-mcp-clone-pommel
     labels:
-      com.claudebox.project: sfu-library-mcp
+      com.claudebox.project: sfu-library-mcp-clone
       com.claudebox.managed: "true"
   gh-cli-config:
-    name: claudebox-sfu-library-mcp-gh-cli
+    name: claudebox-sfu-library-mcp-clone-gh-cli
     labels:
-      com.claudebox.project: sfu-library-mcp
+      com.claudebox.project: sfu-library-mcp-clone
       com.claudebox.managed: "true"
   claude-config:
     name: claudebox-shared-config
     external: true
   claude-local:
-    name: claudebox-sfu-library-mcp-local
+    name: claudebox-sfu-library-mcp-clone-local
     labels:
-      com.claudebox.project: sfu-library-mcp
+      com.claudebox.project: sfu-library-mcp-clone
       com.claudebox.managed: "true"

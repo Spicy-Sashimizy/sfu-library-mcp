@@ -19,8 +19,13 @@ RUN apt-get update && export DEBIAN_FRONTEND=noninteractive \
     && apt-get clean -y \
     && rm -rf /var/lib/apt/lists/*
 
-# Create supervisor config directory
-RUN mkdir -p /etc/supervisor/conf.d /var/log/supervisor
+# Create supervisor config directory and log directories
+# /var/log/supervisor and /var/log/claudebox need to be writable by BOTH root
+# and vscode because: docker-in-docker feature starts supervisord as root
+# during container init, but postStartCommand runs as vscode (remoteUser).
+# Using 1777 (sticky + world-writable) prevents the permission race.
+RUN mkdir -p /etc/supervisor/conf.d /var/log/supervisor /var/log/claudebox \
+    && chmod 1777 /var/log/supervisor /var/log/claudebox
 
 # Copy supervisor configuration and startup script
 COPY supervisord.conf /etc/supervisor/supervisord.conf
@@ -28,8 +33,11 @@ COPY start-services.sh /usr/local/bin/start-services.sh
 COPY update-libraries.sh /usr/local/bin/update-libraries.sh
 COPY lsp-healthcheck.sh /usr/local/bin/lsp-healthcheck.sh
 COPY lsp-symbol-bridge.sh /usr/local/bin/lsp-symbol-bridge.sh
-RUN chmod +x /usr/local/bin/start-services.sh /usr/local/bin/update-libraries.sh /usr/local/bin/lsp-healthcheck.sh /usr/local/bin/lsp-symbol-bridge.sh \
-    && sed -i 's/\r$//' /usr/local/bin/start-services.sh /usr/local/bin/update-libraries.sh /usr/local/bin/lsp-healthcheck.sh /usr/local/bin/lsp-symbol-bridge.sh
+COPY ollama-healthcheck.sh /usr/local/bin/ollama-healthcheck.sh
+COPY lsp-mcp-server.py /usr/local/bin/lsp-mcp-server.py
+COPY lsp-diagnostics-hook.sh /usr/local/bin/lsp-diagnostics-hook.sh
+RUN chmod +x /usr/local/bin/start-services.sh /usr/local/bin/update-libraries.sh /usr/local/bin/lsp-healthcheck.sh /usr/local/bin/lsp-symbol-bridge.sh /usr/local/bin/ollama-healthcheck.sh /usr/local/bin/lsp-mcp-server.py /usr/local/bin/lsp-diagnostics-hook.sh \
+    && sed -i 's/\r$//' /usr/local/bin/start-services.sh /usr/local/bin/update-libraries.sh /usr/local/bin/lsp-healthcheck.sh /usr/local/bin/lsp-symbol-bridge.sh /usr/local/bin/ollama-healthcheck.sh /usr/local/bin/lsp-mcp-server.py /usr/local/bin/lsp-diagnostics-hook.sh
 
 # Install Node.js 20 (for Claude Code)
 RUN curl -fsSL https://deb.nodesource.com/setup_20.x | bash - \
@@ -46,6 +54,9 @@ RUN echo "{\"version\":\"pending\",\"installedAt\":\"pending\",\"installerType\"
 RUN apt-get update && apt-get install -y python3-full python3-pip python3-venv \
     && python3 -m pip install --break-system-packages ruff mypy \
     && apt-get clean -y && rm -rf /var/lib/apt/lists/*
+
+# Install MCP Python package (required for LSP MCP server)
+RUN python3 -m pip install --break-system-packages mcp
 
 # Language Servers for Claude Code LSP integration
 # Covers all languages with runtimes in this container
@@ -72,30 +83,6 @@ RUN curl -fsSL https://cli.github.com/packages/githubcli-archive-keyring.gpg | d
     && apt-get install -y gh \
     && apt-get clean -y \
     && rm -rf /var/lib/apt/lists/*
-
-# Install Google Chrome + ChromeDriver for Selenium authentication pipeline
-# Chrome is required for: CAS login, MFA handling, JWT token extraction, EZProxy session
-RUN apt-get update && apt-get install -y --no-install-recommends fonts-liberation libnss3 libatk-bridge2.0-0 \
-        libdrm2 libxcomposite1 libxdamage1 libxrandr2 libgbm1 libasound2 libpango-1.0-0 \
-        libcairo2 libcups2 libxss1 libgtk-3-0 xdg-utils \
-    && curl -fsSL -o /tmp/google-chrome.deb https://dl.google.com/linux/direct/google-chrome-stable_current_amd64.deb \
-    && apt-get install -y /tmp/google-chrome.deb \
-    && rm /tmp/google-chrome.deb \
-    && CHROME_VERSION=$(google-chrome --version | grep -oP '\d+\.\d+\.\d+') \
-    && DRIVER_URL="https://storage.googleapis.com/chrome-for-testing-public/${CHROME_VERSION}.0/linux64/chromedriver-linux64.zip" \
-    && echo "Attempting ChromeDriver from: ${DRIVER_URL}" \
-    && (curl -fsSL -o /tmp/chromedriver.zip "${DRIVER_URL}" 2>/dev/null \
-        || curl -fsSL -o /tmp/chromedriver.zip \
-           "https://edgedl.me.gvt1.com/edgedl/chrome/chrome-for-testing/${CHROME_VERSION}.0/linux64/chromedriver-linux64.zip") \
-    && unzip -o /tmp/chromedriver.zip -d /tmp/chromedriver \
-    && mv /tmp/chromedriver/chromedriver-linux64/chromedriver /usr/local/bin/chromedriver \
-    && chmod +x /usr/local/bin/chromedriver \
-    && rm -rf /tmp/chromedriver /tmp/chromedriver.zip \
-    && apt-get clean -y && rm -rf /var/lib/apt/lists/*
-
-# Install poppler-utils for pdftotext (PDF text extraction pipeline)
-RUN apt-get update && apt-get install -y --no-install-recommends poppler-utils \
-    && apt-get clean -y && rm -rf /var/lib/apt/lists/*
 
 # Install Gitleaks for pre-commit secret scanning (industry standard, 800+ rules)
 # SHA256 verified against official checksums.txt from GitHub releases

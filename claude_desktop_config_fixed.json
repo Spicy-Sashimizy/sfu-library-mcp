@@ -6,15 +6,10 @@
         "${USERPROFILE}/OneDrive\\Desktop\\random ass scripts\\cataloging the buiness plan\\archived_sites\\fm4actioncoach\\fm4_data_export\\scripts\\business_plan_mcp.py"
       ]
     },
-    "sfu-library": {
-      "command": "docker",
-      "args": [
-        "exec",
-        "-i",
-        "claudebox-sfu-library-mcp-app",
-        "/usr/bin/python3",
-        "/workspaces/sfu-library-mcp/src/sfu_library_mcp_server.py"
-      ]
+    "sfu-library-DISABLED-CLONE": {
+      "_note": "DISABLED: This is a clone - do not register this MCP server to avoid conflicting with the original sfu-library-mcp",
+      "command": "echo",
+      "args": ["disabled"]
     },
     "pommel": {
       "command": "C:\\Program Files\\Python314\\python.exe",

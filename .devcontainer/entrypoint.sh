@@ -326,12 +326,10 @@ VEOF
 # Socat Ollama Proxy (for Pommel)
 # ========================================
 start_ollama_proxy() {
-    if ! pgrep -f "socat.*11434" > /dev/null 2>&1; then
-        if command -v socat >/dev/null 2>&1; then
-            echo "[entrypoint] Starting Ollama proxy..."
-            nohup socat TCP-LISTEN:11434,fork,reuseaddr TCP:host.docker.internal:11434 > /tmp/socat-ollama.log 2>&1 &
-        fi
-    fi
+    # Ollama proxy lifecycle is managed by supervisord (program:ollama-proxy)
+    # with hardened timeouts (-T30, keepalive) and health monitoring.
+    # This function is a no-op; kept for compatibility.
+    echo "[entrypoint] Ollama proxy managed by supervisord (skipping manual start)"
 }
 
 # ========================================
@@ -347,6 +345,40 @@ fix_public_branch_scripts() {
             echo "[entrypoint] WARNING: Fix the source file on the Windows host: sed -i 's/\\r\$//' <file>"
         fi
     done
+}
+
+# ========================================
+# Start Supervisord
+# ========================================
+# Ensures background services run even without VS Code (postStartCommand).
+# start-services.sh has "already running" guards, so this is safe to call first.
+start_supervisord() {
+    if ! command -v supervisord &>/dev/null; then
+        echo "[entrypoint] supervisord not installed, skipping"
+        return
+    fi
+
+    # Clean stale files from unclean shutdown
+    if [ -f /tmp/supervisord.pid ]; then
+        OLD_PID=$(cat /tmp/supervisord.pid 2>/dev/null)
+        if [ -n "$OLD_PID" ] && ! kill -0 "$OLD_PID" 2>/dev/null; then
+            echo "[entrypoint] Cleaning stale supervisor files (PID $OLD_PID dead)..."
+            rm -f /tmp/supervisor.sock /tmp/supervisord.pid
+        fi
+    fi
+
+    if pgrep -x supervisord > /dev/null 2>&1; then
+        echo "[entrypoint] supervisord already running"
+    else
+        echo "[entrypoint] Starting supervisord..."
+        supervisord -c /etc/supervisor/supervisord.conf 2>&1 || true
+        sleep 1
+        if pgrep -x supervisord > /dev/null 2>&1; then
+            echo "[entrypoint] supervisord started successfully"
+        else
+            echo "[entrypoint] WARNING: supervisord failed to start"
+        fi
+    fi
 }
 
 # ========================================
@@ -372,6 +404,13 @@ main() {
 
     # Test connection (non-blocking)
     test_github_connection || true
+
+    # Start supervisord if not already running
+    # This ensures background services (LSP healthcheck, Pommel, ollama proxy)
+    # work even when the container starts without VS Code (e.g., docker compose up).
+    # start-services.sh (postStartCommand) has guards for "already running" so
+    # starting here won't conflict when VS Code attaches later.
+    start_supervisord
 
     echo "[entrypoint] Startup complete"
     echo ""
