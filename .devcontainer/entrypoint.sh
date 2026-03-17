@@ -323,15 +323,55 @@ VEOF
 }
 
 # ========================================
+# Playwright Chromium Safety Net
+# ========================================
+# DO NOT REMOVE — this is layer 3 of a 3-layer fix for persistent
+# Chromium disappearance on container rebuilds.
+# Layer 1: Dockerfile bakes Chromium into the image
+# Layer 2: Docker volume persists ~/.cache/ms-playwright
+# Layer 3: This check runs on every container start as a safety net
+ensure_playwright_browsers() {
+    local WORKSPACE="/workspaces/${PROJECT_NAME:-project}"
+    local VENV_PY="$WORKSPACE/.venv/bin/python3"
+    local PW_CACHE="/home/vscode/.cache/ms-playwright"
+
+    # Quick check: does the browser binary exist?
+    if ls "$PW_CACHE"/chromium-*/chrome-linux64/chrome 2>/dev/null || \
+       ls "$PW_CACHE"/chromium_headless_shell-*/chrome-headless-shell-linux64/chrome-headless-shell 2>/dev/null; then
+        echo "[entrypoint] Playwright Chromium: present"
+        # Ensure vscode owns the cache (volume may be root-owned)
+        chown -R vscode:vscode "$PW_CACHE" 2>/dev/null || true
+        return
+    fi
+
+    echo "[entrypoint] Playwright Chromium: MISSING — installing..."
+
+    # Try venv playwright first, fall back to system
+    if [ -x "$VENV_PY" ] && "$VENV_PY" -c "import playwright" 2>/dev/null; then
+        "$VENV_PY" -m playwright install chromium --with-deps 2>&1 | tail -3
+    elif command -v playwright >/dev/null 2>&1; then
+        playwright install chromium --with-deps 2>&1 | tail -3
+    else
+        python3 -m pip install --break-system-packages playwright 2>/dev/null
+        python3 -m playwright install chromium --with-deps 2>&1 | tail -3
+    fi
+
+    # Playwright installs to /root when run as root — copy to vscode
+    if [ -d "/root/.cache/ms-playwright" ] && [ ! -d "$PW_CACHE/chromium-"* ] 2>/dev/null; then
+        cp -r /root/.cache/ms-playwright/* "$PW_CACHE/" 2>/dev/null || true
+    fi
+    chown -R vscode:vscode "$PW_CACHE" 2>/dev/null || true
+    echo "[entrypoint] Playwright Chromium: installed"
+}
+
+# ========================================
 # Socat Ollama Proxy (for Pommel)
 # ========================================
 start_ollama_proxy() {
-    if ! pgrep -f "socat.*11434" > /dev/null 2>&1; then
-        if command -v socat >/dev/null 2>&1; then
-            echo "[entrypoint] Starting Ollama proxy..."
-            nohup socat TCP-LISTEN:11434,fork,reuseaddr TCP:host.docker.internal:11434 > /tmp/socat-ollama.log 2>&1 &
-        fi
-    fi
+    # Ollama proxy lifecycle is managed by supervisord (program:ollama-proxy)
+    # with hardened timeouts (-T30, keepalive) and health monitoring.
+    # This function is a no-op; kept for compatibility.
+    echo "[entrypoint] Ollama proxy managed by supervisord (skipping manual start)"
 }
 
 # ========================================
@@ -347,6 +387,40 @@ fix_public_branch_scripts() {
             echo "[entrypoint] WARNING: Fix the source file on the Windows host: sed -i 's/\\r\$//' <file>"
         fi
     done
+}
+
+# ========================================
+# Start Supervisord
+# ========================================
+# Ensures background services run even without VS Code (postStartCommand).
+# start-services.sh has "already running" guards, so this is safe to call first.
+start_supervisord() {
+    if ! command -v supervisord &>/dev/null; then
+        echo "[entrypoint] supervisord not installed, skipping"
+        return
+    fi
+
+    # Clean stale files from unclean shutdown
+    if [ -f /tmp/supervisord.pid ]; then
+        OLD_PID=$(cat /tmp/supervisord.pid 2>/dev/null)
+        if [ -n "$OLD_PID" ] && ! kill -0 "$OLD_PID" 2>/dev/null; then
+            echo "[entrypoint] Cleaning stale supervisor files (PID $OLD_PID dead)..."
+            rm -f /tmp/supervisor.sock /tmp/supervisord.pid
+        fi
+    fi
+
+    if pgrep -x supervisord > /dev/null 2>&1; then
+        echo "[entrypoint] supervisord already running"
+    else
+        echo "[entrypoint] Starting supervisord..."
+        supervisord -c /etc/supervisor/supervisord.conf 2>&1 || true
+        sleep 1
+        if pgrep -x supervisord > /dev/null 2>&1; then
+            echo "[entrypoint] supervisord started successfully"
+        else
+            echo "[entrypoint] WARNING: supervisord failed to start"
+        fi
+    fi
 }
 
 # ========================================
@@ -368,10 +442,18 @@ main() {
     configure_git_credentials
     configure_gh_cli
     install_or_update_claude_code
+    ensure_playwright_browsers
     start_ollama_proxy
 
     # Test connection (non-blocking)
     test_github_connection || true
+
+    # Start supervisord if not already running
+    # This ensures background services (LSP healthcheck, Pommel, ollama proxy)
+    # work even when the container starts without VS Code (e.g., docker compose up).
+    # start-services.sh (postStartCommand) has guards for "already running" so
+    # starting here won't conflict when VS Code attaches later.
+    start_supervisord
 
     echo "[entrypoint] Startup complete"
     echo ""
