@@ -9,12 +9,10 @@ SHARED_CREDENTIALS="/home/vscode/.claude/credentials.json"
 CREDENTIALS_DIR="/home/vscode/.claudebox-credentials"
 CREDENTIALS_FILE="${CREDENTIALS_DIR}/credentials.json"
 
-if [ -f "$CREDENTIALS_FILE" ]; then
-    echo "Credentials file already present (bind mount)"
-elif [ -f "$SHARED_CREDENTIALS" ]; then
+if [ -f "$SHARED_CREDENTIALS" ]; then
     echo "Setting up credentials file..."
     mkdir -p "$CREDENTIALS_DIR"
-    cp "$SHARED_CREDENTIALS" "$CREDENTIALS_FILE" 2>/dev/null || echo "Warning: could not copy credentials (read-only mount?)"
+    cp "$SHARED_CREDENTIALS" "$CREDENTIALS_FILE"
     chown -R vscode:vscode "$CREDENTIALS_DIR" 2>/dev/null || true
     echo "âœ“ Credentials file copied from shared volume"
 else
@@ -276,6 +274,13 @@ echo "  MCP servers configured"
 echo ""
 echo "Setting up LSP language servers for Claude Code..."
 
+# Source PATH additions from devcontainer features (Go, Rust)
+# post-create runs as non-login shell, so /etc/profile.d/ isn't sourced
+export PATH="/usr/local/go/bin:${GOPATH:-/home/vscode/go}/bin:/home/vscode/.cargo/bin:${PATH}"
+for f in /etc/profile.d/*.sh; do
+    [ -r "$f" ] && . "$f" 2>/dev/null || true
+done
+
 LSP_SERVERS=""
 
 # --- Python: pyright (may already be from Dockerfile) ---
@@ -319,23 +324,69 @@ fi
 
 echo "  Available LSP servers:${LSP_SERVERS:-" none"}"
 
-# --- Configure settings.json: ENABLE_LSP_TOOL + enabledPlugins ---
+# --- LSP MCP Server Setup (replaces no-op ENABLE_LSP_TOOL) ---
+if [ -f "/usr/local/bin/lsp-mcp-server.py" ]; then
+    cp "/usr/local/bin/lsp-mcp-server.py" "$MCP_SERVER_DIR/lsp-mcp-server.py"
+    chmod +x "$MCP_SERVER_DIR/lsp-mcp-server.py"
+    echo "  - Copied LSP MCP server script from shared location"
+elif [ -f "/workspaces/${PROJECT_NAME}/.devcontainer/lsp-mcp-server.py" ]; then
+    cp "/workspaces/${PROJECT_NAME}/.devcontainer/lsp-mcp-server.py" "$MCP_SERVER_DIR/lsp-mcp-server.py"
+    chmod +x "$MCP_SERVER_DIR/lsp-mcp-server.py"
+    echo "  - Copied LSP MCP server script from project template"
+fi
+
+# Register LSP MCP in settings.json (alongside Pommel)
 if [ -f "$SETTINGS_FILE" ] && command -v jq >/dev/null 2>&1; then
+    if ! jq -e '.mcpServers.lsp' "$SETTINGS_FILE" >/dev/null 2>&1; then
+        LOCK="/home/vscode/.claude/.settings.lock"
+        (
+          flock -w 10 200 || exit 0
+          jq --arg dir "$MCP_SERVER_DIR" --arg proj "${PROJECT_NAME}" \
+            '.mcpServers = (.mcpServers // {}) + {
+                "lsp": {
+                    "command": "python3",
+                    "args": [$dir + "/lsp-mcp-server.py"],
+                    "env": {"PROJECT_NAME": $proj, "WORKSPACE_PATH": "/workspaces/" + $proj}
+                }
+            }' "$SETTINGS_FILE" > "${SETTINGS_FILE}.tmp" && mv "${SETTINGS_FILE}.tmp" "$SETTINGS_FILE"
+        ) 200>"$LOCK"
+        echo "  LSP MCP server registered in settings.json"
+    else
+        echo "  LSP MCP already configured in settings.json"
+    fi
+
+    # Clean up legacy no-op ENABLE_LSP_TOOL and enabledPlugins if present
     LOCK="/home/vscode/.claude/.settings.lock"
-    ALL_PLUGINS='{
-      "pyright-lsp@claude-plugins-official": true,
-      "typescript-lsp@claude-plugins-official": true,
-      "gopls-lsp@claude-plugins-official": true,
-      "rust-analyzer-lsp@claude-plugins-official": true,
-      "clangd-lsp@claude-plugins-official": true
-    }'
     (
       flock -w 10 200 || exit 0
-      jq --argjson plugins "$ALL_PLUGINS" \
-        '.env = (.env // {}) + {"ENABLE_LSP_TOOL": "1"} | .enabledPlugins = (.enabledPlugins // {}) + $plugins' \
+      jq 'if .env then .env |= del(.ENABLE_LSP_TOOL) else . end | del(.enabledPlugins)' \
         "$SETTINGS_FILE" > "${SETTINGS_FILE}.tmp" && mv "${SETTINGS_FILE}.tmp" "$SETTINGS_FILE"
     ) 200>"$LOCK"
-    echo "  LSP enabled in settings.json (ENABLE_LSP_TOOL=1, 5 plugins)"
+fi
+
+# --- Ensure LSP MCP permissions in project settings.local.json ---
+LOCAL_SETTINGS="/workspaces/${PROJECT_NAME}/.claude/settings.local.json"
+if [ -d "/workspaces/${PROJECT_NAME}" ]; then
+    mkdir -p "/workspaces/${PROJECT_NAME}/.claude"
+    if [ -f "$LOCAL_SETTINGS" ] && command -v jq >/dev/null 2>&1; then
+        # Add mcp__lsp__* permissions if not already present
+        if ! jq -e '.permissions.allow[] | select(startswith("mcp__lsp__"))' "$LOCAL_SETTINGS" >/dev/null 2>&1; then
+            jq '.permissions.allow += [
+                "mcp__lsp__lsp_diagnostics",
+                "mcp__lsp__lsp_hover",
+                "mcp__lsp__lsp_definition",
+                "mcp__lsp__lsp_references",
+                "mcp__lsp__lsp_document_symbols",
+                "mcp__lsp__lsp_rename_preview",
+                "mcp__lsp__lsp_completions"
+            ]' "$LOCAL_SETTINGS" > "${LOCAL_SETTINGS}.tmp" && mv "${LOCAL_SETTINGS}.tmp" "$LOCAL_SETTINGS"
+            echo "  Added mcp__lsp__* permissions to settings.local.json"
+        else
+            echo "  LSP MCP permissions already in settings.local.json"
+        fi
+    elif [ ! -f "$LOCAL_SETTINGS" ]; then
+        echo "  No settings.local.json yet (will be created on first Claude Code run)"
+    fi
 fi
 
 # --- Write per-project LSP metadata (local, not shared volume) ---
@@ -345,22 +396,12 @@ cat > "$LSP_META_DIR/${PROJECT_NAME:-project}.json" <<LSPMETA
 {
   "project": "${PROJECT_NAME:-project}",
   "availableServers": [$(echo "$LSP_SERVERS" | sed 's/^ //;s/ /", "/g;s/^/"/;s/$/"/')],
+  "mcpRegistered": true,
   "configuredAt": "$(date -u +%Y-%m-%dT%H:%M:%SZ)"
 }
 LSPMETA
 chown -R vscode:vscode "$LSP_META_DIR" 2>/dev/null || true
 echo "  LSP metadata written to $LSP_META_DIR/${PROJECT_NAME:-project}.json"
-
-# --- Best-effort plugin CLI installation ---
-CLAUDE_BIN="/home/vscode/.local/bin/claude"
-if [ -x "$CLAUDE_BIN" ]; then
-    su - vscode -c "$CLAUDE_BIN plugin marketplace update claude-plugins-official" 2>/dev/null || true
-    for plugin in pyright-lsp typescript-lsp gopls-lsp rust-analyzer-lsp clangd-lsp; do
-        su - vscode -c "$CLAUDE_BIN plugin install $plugin" 2>/dev/null || true
-        su - vscode -c "$CLAUDE_BIN plugin enable $plugin" 2>/dev/null || true
-    done
-    echo "  Plugin CLI install attempted (best-effort)"
-fi
 
 echo "  LSP setup complete"
 
@@ -444,32 +485,7 @@ fi
 BASHRC_VENV_EOF
     fi
 
-    # Install Playwright browsers if playwright is in the venv
-    if .venv/bin/python3 -c "import playwright" 2>/dev/null; then
-        echo "Installing Playwright Chromium browser..."
-        # Try with --with-deps first (installs system libs), fall back to without
-        .venv/bin/playwright install --with-deps chromium || .venv/bin/playwright install chromium || echo "WARNING: Playwright browser install failed"
-        # Copy to vscode user cache so it works when running as vscode
-        if [ -d /root/.cache/ms-playwright ]; then
-            mkdir -p /home/vscode/.cache
-            cp -r /root/.cache/ms-playwright /home/vscode/.cache/ms-playwright 2>/dev/null || true
-        fi
-        # Verify the install succeeded
-        if .venv/bin/python3 -c "
-from playwright.sync_api import sync_playwright
-with sync_playwright() as p:
-    b = p.chromium.launch(headless=True, args=['--no-sandbox'])
-    b.close()
-    print('Playwright browser verification: OK')
-" 2>/dev/null; then
-            echo "✓ Playwright Chromium installed and verified"
-        else
-            echo "WARNING: Playwright installed but browser launch failed — downloads may fall back to curl_cffi/requests"
-        fi
-    fi
-
     chown -R vscode:vscode .venv
-    chown -R vscode:vscode /home/vscode/.cache 2>/dev/null || true
     echo "Python virtual environment ready at .venv/"
 fi
 
@@ -536,16 +552,10 @@ if ! command_exists socat; then
         sudo apt-get update -qq && sudo apt-get install -y -qq socat >/dev/null 2>&1
 fi
 
-# Set up socat proxy to forward localhost:11434 to host Ollama
-# This is a workaround for Pommel not reading the Ollama URL from config
-if ! pgrep -f "socat.*11434" > /dev/null 2>&1; then
-    echo "Starting Ollama proxy (localhost:11434 -> host.docker.internal:11434)..."
-    nohup socat TCP-LISTEN:11434,fork,reuseaddr TCP:host.docker.internal:11434 > /tmp/socat-ollama.log 2>&1 &
-    sleep 1
-    echo "âœ“ Ollama proxy started"
-else
-    echo "âœ“ Ollama proxy already running"
-fi
+# Ollama proxy lifecycle is managed by supervisord (program:ollama-proxy)
+# with hardened timeouts and health monitoring (ollama-healthcheck).
+# No manual socat startup needed here.
+echo “Ollama proxy managed by supervisord”
 
 # ========================================
 # Install Pommel CLI
@@ -1297,6 +1307,29 @@ POSTCOMMIT_EOF
 
 chmod +x "$POST_COMMIT_HOOK"
 echo "  Post-commit hook installed (public branch auto-regeneration)"
+
+# ==========================================================
+# Playwright Chromium Browser Installation
+# ==========================================================
+# Required for: SFU auth module (Selenium) and download tier 2 (Playwright)
+# This is a persistent issue on container rebuilds - browsers must be installed
+# after the venv and Playwright package are available.
+echo ""
+echo "Installing Playwright Chromium browsers..."
+WORKSPACE_VENV="/workspaces/${PROJECT_NAME:-sfu-library-mcp}/.venv"
+if [ -f "$WORKSPACE_VENV/bin/python3" ] && "$WORKSPACE_VENV/bin/python3" -c "import playwright" 2>/dev/null; then
+    # Install Chromium with system dependencies
+    sudo "$WORKSPACE_VENV/bin/python3" -m playwright install chromium --with-deps 2>&1 | tail -5
+    # Copy browsers to vscode user cache (playwright install with sudo puts them in /root/)
+    if [ -d "/root/.cache/ms-playwright" ]; then
+        sudo cp -r /root/.cache/ms-playwright /home/vscode/.cache/ms-playwright 2>/dev/null || true
+        sudo chown -R vscode:vscode /home/vscode/.cache/ms-playwright 2>/dev/null || true
+        echo "  ✓ Playwright Chromium installed for vscode user"
+    fi
+else
+    echo "  ⚠ Playwright not found in venv, skipping browser install"
+    echo "  Run: $WORKSPACE_VENV/bin/python3 -m playwright install chromium --with-deps"
+fi
 
 echo ""
 echo "=========================================="
