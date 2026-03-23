@@ -69,6 +69,15 @@ RUN python3 -m pip install --break-system-packages playwright \
     && cp -r /root/.cache/ms-playwright /home/vscode/.cache/ms-playwright \
     && chown -R 1000:1000 /home/vscode/.cache/ms-playwright
 
+# ─── poppler-utils / pdftotext (PERMANENT FIX) ────────────────────────
+# DO NOT REMOVE — lost once already in commit 237beb5 when the Chromium
+# section was rewritten. Required by: read_article text extraction pipeline.
+# Two layers ensure persistence:
+#   1. This Dockerfile step (bakes into image)
+#   2. entrypoint.sh safety-net check (catches edge cases)
+RUN apt-get update && apt-get install -y --no-install-recommends poppler-utils \
+    && apt-get clean -y && rm -rf /var/lib/apt/lists/*
+
 # Install MCP Python package (required for LSP MCP server)
 RUN python3 -m pip install --break-system-packages mcp
 

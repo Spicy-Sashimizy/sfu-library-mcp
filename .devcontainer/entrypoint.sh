@@ -365,6 +365,25 @@ ensure_playwright_browsers() {
 }
 
 # ========================================
+# poppler-utils / pdftotext Safety Net
+# ========================================
+# DO NOT REMOVE — pdftotext was lost once already (commit 237beb5)
+# when the Dockerfile was rewritten for the Chromium fix.
+# Required by: read_article text extraction pipeline.
+ensure_pdftotext() {
+    if command -v pdftotext &>/dev/null; then
+        echo "[entrypoint] pdftotext: present"
+        return
+    fi
+
+    echo "[entrypoint] pdftotext: MISSING — installing poppler-utils..."
+    apt-get update && apt-get install -y --no-install-recommends poppler-utils \
+        && apt-get clean -y && rm -rf /var/lib/apt/lists/* \
+        && echo "[entrypoint] pdftotext: installed" \
+        || echo "[entrypoint] WARNING: failed to install poppler-utils"
+}
+
+# ========================================
 # Socat Ollama Proxy (for Pommel)
 # ========================================
 start_ollama_proxy() {
@@ -443,6 +462,7 @@ main() {
     configure_gh_cli
     install_or_update_claude_code
     ensure_playwright_browsers
+    ensure_pdftotext
     start_ollama_proxy
 
     # Test connection (non-blocking)
