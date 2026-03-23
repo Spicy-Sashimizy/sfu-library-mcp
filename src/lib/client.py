@@ -333,8 +333,12 @@ class SFULibraryClient:
             return True
         return self.authenticate()
 
-    def _check_chrome_binary(self) -> bool:
-        """SEL-004: Check if Chrome binary exists before launching."""
+    def _check_chrome_binary(self) -> str | None:
+        """SEL-004: Check if Chrome binary exists before launching.
+
+        Returns the path to the Chrome binary, or None if not found.
+        Checks system paths first, then Playwright's cached Chromium.
+        """
         chrome_paths = [
             shutil.which("google-chrome"),
             shutil.which("google-chrome-stable"),
@@ -346,9 +350,25 @@ class SFULibraryClient:
         for path in chrome_paths:
             if path and os.path.isfile(path):
                 logger.debug("Found Chrome at: %s", path)
-                return True
-        logger.error("Chrome binary not found in any standard location")
-        return False
+                return path
+
+        # Check Playwright's cached Chromium installations
+        pw_cache_dirs = [
+            Path.home() / ".cache" / "ms-playwright",
+            Path("/root/.cache/ms-playwright"),
+            Path("/ms-playwright"),
+        ]
+        for cache_dir in pw_cache_dirs:
+            if not cache_dir.is_dir():
+                continue
+            # Look for chrome binary in chromium-* directories
+            for chrome_bin in sorted(cache_dir.glob("chromium-*/chrome-linux64/chrome"), reverse=True):
+                if chrome_bin.is_file():
+                    logger.debug("Found Playwright Chromium at: %s", chrome_bin)
+                    return str(chrome_bin)
+
+        logger.error("Chrome binary not found in any standard or Playwright location")
+        return None
 
     def _log_driver_versions(self, driver) -> None:
         """SEL-005: Log Chrome and ChromeDriver versions."""
@@ -402,7 +422,8 @@ class SFULibraryClient:
     def authenticate(self) -> bool:
         """Authenticate and obtain JWT token via Selenium."""
         # SEL-004: Check Chrome exists
-        if not self._check_chrome_binary():
+        chrome_binary = self._check_chrome_binary()
+        if not chrome_binary:
             logger.error("Cannot authenticate: Chrome not found")
             return False
 
@@ -410,6 +431,7 @@ class SFULibraryClient:
         try:
             from selenium import webdriver
             from selenium.webdriver.chrome.options import Options
+            from selenium.webdriver.chrome.service import Service
             from selenium.webdriver.common.by import By
             from selenium.webdriver.support.ui import WebDriverWait
             from selenium.webdriver.support import expected_conditions as EC
@@ -419,6 +441,7 @@ class SFULibraryClient:
             return False
 
         chrome_options = Options()
+        chrome_options.binary_location = chrome_binary
         chrome_options.add_argument("--headless=new")
         chrome_options.add_argument("--window-size=1920,1080")
         chrome_options.add_argument("--disable-gpu")
