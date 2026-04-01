@@ -68,6 +68,55 @@ BROWSER_HEADERS = {
 # Semantic Scholar enforces ~1 req/s for unauthenticated callers
 SEMSCHOLAR_DELAY = 1.1  # seconds between requests
 
+# Primo rate limiting — be gentle to avoid triggering circuit breaker
+PRIMO_DELAY = 1.5  # seconds between Primo requests
+
+
+# ---------------------------------------------------------------------------
+# Circuit breaker (mirrors lib/retry.py for Primo resilience)
+# ---------------------------------------------------------------------------
+class CircuitBreaker:
+    """Simple circuit breaker: CLOSED -> OPEN after threshold failures, resets after timeout."""
+    CLOSED, OPEN, HALF_OPEN = "closed", "open", "half_open"
+
+    def __init__(self, threshold: int = 5, timeout: float = 60.0):
+        self.threshold = threshold
+        self.timeout = timeout
+        self.failure_count = 0
+        self.state = self.CLOSED
+        self.last_failure_time: float = 0.0
+
+    def record_success(self):
+        self.failure_count = 0
+        self.state = self.CLOSED
+
+    def record_failure(self):
+        self.failure_count += 1
+        self.last_failure_time = time.time()
+        if self.failure_count >= self.threshold:
+            self.state = self.OPEN
+            logger.warning("Primo circuit breaker OPEN after %d failures", self.failure_count)
+
+    def can_proceed(self) -> bool:
+        if self.state == self.CLOSED:
+            return True
+        if self.state == self.OPEN:
+            if time.time() - self.last_failure_time >= self.timeout:
+                self.state = self.HALF_OPEN
+                logger.info("Primo circuit breaker HALF_OPEN, allowing test request")
+                return True
+            return False
+        return True  # HALF_OPEN
+
+    def reset(self):
+        self.failure_count = 0
+        self.state = self.CLOSED
+        self.last_failure_time = 0.0
+
+
+# Global circuit breaker for Primo
+primo_breaker = CircuitBreaker(threshold=5, timeout=60.0)
+
 # 25 SFU-specific academic queries
 QUERIES: list[str] = [
     # CS / Engineering (3)
@@ -143,9 +192,15 @@ class QueryComparison:
 # ---------------------------------------------------------------------------
 # API callers (async with aiohttp)
 # ---------------------------------------------------------------------------
-async def fetch_primo_async(session: "aiohttp.ClientSession", query: str) -> SourceResult:
-    """Call Primo REST API for a query."""
+async def fetch_primo_async(session: "aiohttp.ClientSession", query: str, max_retries: int = 3) -> SourceResult:
+    """Call Primo REST API with circuit breaker + retry/backoff."""
     result = SourceResult(source="primo", query=query)
+
+    if not primo_breaker.can_proceed():
+        result.error = "Circuit breaker OPEN — skipping Primo"
+        logger.warning("Primo circuit breaker OPEN, skipping query '%s'", query[:40])
+        return result
+
     params = {
         "q": f"any,contains,{query}",
         "vid": "SFUL",
@@ -164,17 +219,48 @@ async def fetch_primo_async(session: "aiohttp.ClientSession", query: str) -> Sou
         "newspapersActive": "true",
         "newspapersSearch": "false",
     }
-    try:
-        async with session.get(PRIMO_SEARCH, params=params, headers=BROWSER_HEADERS, timeout=aiohttp.ClientTimeout(total=30)) as resp:
-            if resp.status != 200:
-                result.error = f"HTTP {resp.status}"
-                logger.warning("Primo returned %d for query '%s'", resp.status, query[:40])
-                return result
-            data = await resp.json(content_type=None)
-            result.raw_response = data
-    except Exception as exc:
-        result.error = str(exc)
-        logger.error("Primo error for '%s': %s", query[:40], exc)
+
+    last_error = None
+    for attempt in range(max_retries + 1):
+        try:
+            async with session.get(PRIMO_SEARCH, params=params, headers=BROWSER_HEADERS, timeout=aiohttp.ClientTimeout(total=30)) as resp:
+                if resp.status == 429:
+                    # Rate limited — back off aggressively
+                    delay = min(4.0 * (2 ** attempt), 60.0)
+                    logger.warning("Primo rate-limited (429), backing off %.1fs (attempt %d)", delay, attempt + 1)
+                    primo_breaker.record_failure()
+                    last_error = "Rate limited (429)"
+                    await asyncio.sleep(delay)
+                    continue
+                if resp.status != 200:
+                    primo_breaker.record_failure()
+                    last_error = f"HTTP {resp.status}"
+                    if attempt < max_retries:
+                        delay = min(1.0 * (2 ** attempt), 30.0)
+                        logger.warning("Primo returned %d, retrying in %.1fs (attempt %d)", resp.status, delay, attempt + 1)
+                        await asyncio.sleep(delay)
+                        continue
+                    result.error = last_error
+                    return result
+
+                data = await resp.json(content_type=None)
+                result.raw_response = data
+                primo_breaker.record_success()
+                break  # Success
+        except Exception as exc:
+            primo_breaker.record_failure()
+            last_error = str(exc)
+            if attempt < max_retries:
+                delay = min(1.0 * (2 ** attempt), 30.0)
+                logger.warning("Primo error for '%s' (attempt %d): %s — retrying in %.1fs", query[:40], attempt + 1, exc, delay)
+                await asyncio.sleep(delay)
+                continue
+            result.error = last_error
+            logger.error("Primo failed after %d attempts for '%s': %s", max_retries + 1, query[:40], exc)
+            return result
+    else:
+        # All retries exhausted
+        result.error = last_error or "Max retries exceeded"
         return result
 
     docs = data.get("docs", [])
@@ -373,9 +459,15 @@ async def fetch_semscholar_async(
 # ---------------------------------------------------------------------------
 # Synchronous fallback callers (when aiohttp unavailable)
 # ---------------------------------------------------------------------------
-def fetch_primo_sync(query: str) -> SourceResult:
-    """Synchronous Primo fetch using requests."""
+def fetch_primo_sync(query: str, max_retries: int = 3) -> SourceResult:
+    """Synchronous Primo fetch with circuit breaker + retry/backoff."""
     result = SourceResult(source="primo", query=query)
+
+    if not primo_breaker.can_proceed():
+        result.error = "Circuit breaker OPEN — skipping Primo"
+        logger.warning("Primo circuit breaker OPEN, skipping query '%s'", query[:40])
+        return result
+
     params = {
         "q": f"any,contains,{query}",
         "vid": "SFUL",
@@ -394,14 +486,44 @@ def fetch_primo_sync(query: str) -> SourceResult:
         "newspapersActive": "true",
         "newspapersSearch": "false",
     }
-    try:
-        resp = requests.get(PRIMO_SEARCH, params=params, headers=BROWSER_HEADERS, timeout=30)
-        if resp.status_code != 200:
-            result.error = f"HTTP {resp.status_code}"
+
+    last_error = None
+    data = None
+    for attempt in range(max_retries + 1):
+        try:
+            resp = requests.get(PRIMO_SEARCH, params=params, headers=BROWSER_HEADERS, timeout=30)
+            if resp.status_code == 429:
+                delay = min(4.0 * (2 ** attempt), 60.0)
+                logger.warning("Primo rate-limited (429), backing off %.1fs", delay)
+                primo_breaker.record_failure()
+                last_error = "Rate limited (429)"
+                time.sleep(delay)
+                continue
+            if resp.status_code != 200:
+                primo_breaker.record_failure()
+                last_error = f"HTTP {resp.status_code}"
+                if attempt < max_retries:
+                    time.sleep(min(1.0 * (2 ** attempt), 30.0))
+                    continue
+                result.error = last_error
+                return result
+            data = resp.json()
+            primo_breaker.record_success()
+            break
+        except Exception as exc:
+            primo_breaker.record_failure()
+            last_error = str(exc)
+            if attempt < max_retries:
+                time.sleep(min(1.0 * (2 ** attempt), 30.0))
+                continue
+            result.error = last_error
             return result
-        data = resp.json()
-    except Exception as exc:
-        result.error = str(exc)
+    else:
+        result.error = last_error or "Max retries exceeded"
+        return result
+
+    if data is None:
+        result.error = last_error or "No data received"
         return result
 
     docs = data.get("docs", [])
@@ -764,6 +886,10 @@ async def run_async(queries: list[str]) -> list[QueryComparison]:
         for i, query in enumerate(queries):
             logger.info("[%d/%d] Querying: %s", i + 1, len(queries), query)
 
+            # Delay between Primo requests to avoid rate-limiting
+            if i > 0:
+                await asyncio.sleep(PRIMO_DELAY)
+
             # Fire Primo and OpenAlex concurrently; Semantic Scholar sequentially
             primo_task = asyncio.create_task(fetch_primo_async(session, query))
             oa_task = asyncio.create_task(fetch_openalex_async(session, query))
@@ -792,6 +918,10 @@ def run_sync(queries: list[str]) -> list[QueryComparison]:
     comparisons: list[QueryComparison] = []
     for i, query in enumerate(queries):
         logger.info("[%d/%d] Querying: %s", i + 1, len(queries), query)
+
+        # Delay between Primo requests to avoid rate-limiting
+        if i > 0:
+            time.sleep(PRIMO_DELAY)
 
         primo_result = fetch_primo_sync(query)
         oa_result = fetch_openalex_sync(query)

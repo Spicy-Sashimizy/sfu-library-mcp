@@ -32,12 +32,15 @@ from typing import Any, Optional
 
 ANTHROPIC_MODEL = "claude-haiku-4-5-20251001"
 ANTHROPIC_API_URL = "https://api.anthropic.com/v1/messages"
+OLLAMA_BASE_URL = "http://host.docker.internal:11434"
+OLLAMA_MODEL = "qwen3:1.7b"
 OPENALEX_BASE = "https://api.openalex.org/works"
 OPENALEX_MAILTO = "test@sfu.ca"
 OPENALEX_PER_PAGE = 20
 
 # Rate-limit tokens (calls per second)
 CLAUDE_RATE_LIMIT = 5  # max 5 calls/sec
+OLLAMA_RATE_LIMIT = 2  # max 2 calls/sec (local model, avoid overload)
 OPENALEX_RATE_LIMIT = 10  # max 10 calls/sec
 
 RESULTS_DIR = Path(__file__).resolve().parent / "results"
@@ -136,9 +139,12 @@ class ComparisonMetrics:
 class QueryResult:
     original_query: str = ""
     expansion: Optional[QueryExpansion] = None
+    ollama_expansion: Optional[QueryExpansion] = None
     raw_search: Optional[SearchOutcome] = None
     expanded_search: Optional[SearchOutcome] = None
+    ollama_expanded_search: Optional[SearchOutcome] = None
     metrics: Optional[ComparisonMetrics] = None
+    ollama_metrics: Optional[ComparisonMetrics] = None
 
 
 # ---------------------------------------------------------------------------
@@ -163,6 +169,7 @@ class RateLimiter:
 
 
 claude_limiter = RateLimiter(CLAUDE_RATE_LIMIT)
+ollama_limiter = RateLimiter(OLLAMA_RATE_LIMIT)
 openalex_limiter = RateLimiter(OPENALEX_RATE_LIMIT)
 
 # ---------------------------------------------------------------------------
@@ -322,6 +329,76 @@ async def expand_query_claude(query: str, api_key: str) -> QueryExpansion:
     except (json.JSONDecodeError, KeyError, IndexError) as e:
         expansion.error = f"Parse error: {e}"
         log.warning("Claude parse error for %r: %s", query[:40], e)
+
+    return expansion
+
+
+# ---------------------------------------------------------------------------
+# Ollama query expansion (local Qwen3)
+# ---------------------------------------------------------------------------
+
+def _check_ollama_available() -> bool:
+    """Check if Ollama is reachable and the model is available."""
+    try:
+        status, body = _http_request(f"{OLLAMA_BASE_URL}/api/tags", timeout=5)
+        if status != 200:
+            return False
+        data = json.loads(body)
+        models = [m.get("name", "") for m in data.get("models", [])]
+        return any(OLLAMA_MODEL in m for m in models)
+    except Exception:
+        return False
+
+
+async def expand_query_ollama(query: str) -> QueryExpansion:
+    """Call local Ollama (Qwen3) to expand a search query."""
+    await ollama_limiter.acquire()
+
+    expansion = QueryExpansion()
+    headers = {"Content-Type": "application/json"}
+    payload = json.dumps({
+        "model": OLLAMA_MODEL,
+        "messages": [
+            {"role": "user", "content": f"Query: {query}\n\n{EXPANSION_PROMPT}"}
+        ],
+        "stream": False,
+        "options": {"temperature": 0.3, "num_predict": 512},
+    }).encode("utf-8")
+
+    t0 = time.monotonic()
+    status, body = await _async_http(
+        f"{OLLAMA_BASE_URL}/api/chat", method="POST", headers=headers, body=payload, timeout=120
+    )
+    expansion.elapsed_sec = round(time.monotonic() - t0, 3)
+
+    if status != 200:
+        expansion.error = f"Ollama HTTP {status}: {body[:300]}"
+        log.warning("Ollama error for %r: %s", query[:40], expansion.error[:120])
+        return expansion
+
+    try:
+        resp_data = json.loads(body)
+        text = resp_data.get("message", {}).get("content", "")
+        expansion.raw_response = text
+
+        # Strip markdown fences and thinking tags if present
+        cleaned = text.strip()
+        # Remove <think>...</think> blocks (Qwen3 thinking mode)
+        import re
+        cleaned = re.sub(r"<think>.*?</think>", "", cleaned, flags=re.DOTALL).strip()
+        if cleaned.startswith("```"):
+            lines = cleaned.split("\n")
+            lines = [l for l in lines if not l.strip().startswith("```")]
+            cleaned = "\n".join(lines)
+
+        parsed = json.loads(cleaned)
+        expansion.terms = parsed.get("terms", [])
+        expansion.boolean_query = parsed.get("boolean_query", "")
+        expansion.synonyms = parsed.get("synonyms", [])
+        expansion.academic_phrasing = parsed.get("academic_phrasing", "")
+    except (json.JSONDecodeError, KeyError, IndexError) as e:
+        expansion.error = f"Parse error: {e}"
+        log.warning("Ollama parse error for %r: %s (raw: %s)", query[:40], e, text[:200] if text else "empty")
 
     return expansion
 
@@ -502,9 +579,10 @@ def print_summary(results: list[QueryResult]):
 async def process_query(
     query: str,
     api_key: Optional[str],
+    use_ollama: bool,
     dry_run: bool,
 ) -> QueryResult:
-    """Process a single query: expand (if key available), search both paths, compute metrics."""
+    """Process a single query: expand (if key/ollama available), search all paths, compute metrics."""
     qr = QueryResult(original_query=query)
 
     if dry_run:
@@ -517,32 +595,52 @@ async def process_query(
 
     # Claude expansion + expanded search
     if api_key:
-        log.info("Expanding: %s", query[:50])
+        log.info("Claude expanding: %s", query[:50])
         qr.expansion = await expand_query_claude(query, api_key)
 
         if qr.expansion.boolean_query and not qr.expansion.error:
-            log.info("Expanded search: %s", qr.expansion.boolean_query[:60])
+            log.info("Claude expanded search: %s", qr.expansion.boolean_query[:60])
             qr.expanded_search = await search_openalex(qr.expansion.boolean_query)
         elif qr.expansion.error:
-            log.warning("Skipping expanded search due to expansion error")
+            log.warning("Skipping Claude expanded search due to expansion error")
             qr.expanded_search = SearchOutcome(error="Skipped — expansion failed")
         else:
-            # boolean_query was empty; fall back to academic_phrasing or terms
             fallback = qr.expansion.academic_phrasing or " ".join(qr.expansion.terms)
             if fallback:
-                log.info("Expanded search (fallback): %s", fallback[:60])
+                log.info("Claude expanded search (fallback): %s", fallback[:60])
                 qr.expanded_search = await search_openalex(fallback)
             else:
                 qr.expanded_search = SearchOutcome(error="No expanded query produced")
 
+    # Ollama (Qwen3) expansion + expanded search
+    if use_ollama:
+        log.info("Ollama expanding: %s", query[:50])
+        qr.ollama_expansion = await expand_query_ollama(query)
+
+        if qr.ollama_expansion.boolean_query and not qr.ollama_expansion.error:
+            log.info("Ollama expanded search: %s", qr.ollama_expansion.boolean_query[:60])
+            qr.ollama_expanded_search = await search_openalex(qr.ollama_expansion.boolean_query)
+        elif qr.ollama_expansion.error:
+            log.warning("Skipping Ollama expanded search due to expansion error")
+            qr.ollama_expanded_search = SearchOutcome(error="Skipped — expansion failed")
+        else:
+            fallback = qr.ollama_expansion.academic_phrasing or " ".join(qr.ollama_expansion.terms)
+            if fallback:
+                log.info("Ollama expanded search (fallback): %s", fallback[:60])
+                qr.ollama_expanded_search = await search_openalex(fallback)
+            else:
+                qr.ollama_expanded_search = SearchOutcome(error="No expanded query produced")
+
     # Compute metrics
     if qr.raw_search:
         qr.metrics = compute_metrics(query, qr.raw_search, qr.expanded_search)
+        if qr.ollama_expanded_search:
+            qr.ollama_metrics = compute_metrics(query, qr.raw_search, qr.ollama_expanded_search)
 
     return qr
 
 
-async def run_all(queries: list[str], api_key: Optional[str], dry_run: bool) -> list[QueryResult]:
+async def run_all(queries: list[str], api_key: Optional[str], use_ollama: bool, dry_run: bool) -> list[QueryResult]:
     """Run all queries with controlled concurrency."""
     # Process queries with limited concurrency to respect rate limits.
     # We use a semaphore to limit parallel in-flight tasks.
@@ -550,7 +648,7 @@ async def run_all(queries: list[str], api_key: Optional[str], dry_run: bool) -> 
 
     async def bounded(q: str) -> QueryResult:
         async with sem:
-            return await process_query(q, api_key, dry_run)
+            return await process_query(q, api_key, use_ollama, dry_run)
 
     tasks = [bounded(q) for q in queries]
     results = await asyncio.gather(*tasks, return_exceptions=True)
@@ -597,20 +695,32 @@ def save_results(results: list[QueryResult]):
 def main():
     parser = argparse.ArgumentParser(description="Compare LLM query expansion vs raw keyword search")
     parser.add_argument("--dry-run", action="store_true", help="Show queries without making API calls")
+    parser.add_argument("--no-ollama", action="store_true", help="Skip Ollama/Qwen3 expansion")
+    parser.add_argument("--no-claude", action="store_true", help="Skip Claude expansion")
     args = parser.parse_args()
 
-    api_key = os.environ.get("ANTHROPIC_API_KEY")
-    if not api_key:
+    api_key = os.environ.get("ANTHROPIC_API_KEY") if not args.no_claude else None
+    if not api_key and not args.no_claude:
         log.warning(
             "ANTHROPIC_API_KEY not set. Claude expansion tests will be SKIPPED. "
-            "Only raw keyword searches will run."
+            "Only raw keyword and Ollama searches will run."
         )
+
+    # Check Ollama availability
+    use_ollama = False
+    if not args.no_ollama:
+        use_ollama = _check_ollama_available()
+        if use_ollama:
+            log.info("Ollama detected with model %s — Ollama expansion ENABLED", OLLAMA_MODEL)
+        else:
+            log.warning("Ollama not available at %s with model %s — Ollama expansion DISABLED", OLLAMA_BASE_URL, OLLAMA_MODEL)
 
     print()
     print_separator("*")
     print("  LLM Query Expansion vs Raw Keyword Search — Comparison Test")
-    print(f"  Queries: {len(TEST_QUERIES)}   Model: {ANTHROPIC_MODEL}")
-    print(f"  Claude expansion: {'ENABLED' if api_key else 'DISABLED (no API key)'}")
+    print(f"  Queries: {len(TEST_QUERIES)}")
+    print(f"  Claude expansion:  {'ENABLED (' + ANTHROPIC_MODEL + ')' if api_key else 'DISABLED (no API key)'}")
+    print(f"  Ollama expansion:  {'ENABLED (' + OLLAMA_MODEL + ')' if use_ollama else 'DISABLED'}")
     print(f"  Mode: {'DRY RUN' if args.dry_run else 'LIVE'}")
     print_separator("*")
     print()
@@ -622,7 +732,7 @@ def main():
         return
 
     t_start = time.monotonic()
-    results = asyncio.run(run_all(TEST_QUERIES, api_key, args.dry_run))
+    results = asyncio.run(run_all(TEST_QUERIES, api_key, use_ollama, args.dry_run))
     total_time = time.monotonic() - t_start
 
     # Display per-query results
@@ -631,6 +741,33 @@ def main():
 
     # Summary
     print_summary(results)
+
+    # Ollama summary (if applicable)
+    if use_ollama:
+        print_separator("=")
+        print("  OLLAMA (Qwen3) EXPANSION SUMMARY")
+        print_separator("=")
+        valid_ollama = [r for r in results if r.ollama_metrics]
+        if valid_ollama:
+            n = len(valid_ollama)
+            print(f"  Queries with Ollama results: {n}")
+            avg_citations = _avg([r.ollama_metrics.expanded_avg_citations for r in valid_ollama])
+            avg_year = _avg([r.ollama_metrics.expanded_avg_year for r in valid_ollama])
+            avg_title_match = _avg([r.ollama_metrics.expanded_title_keyword_match_pct for r in valid_ollama])
+            avg_oa = _avg([r.ollama_metrics.expanded_oa_rate for r in valid_ollama])
+            avg_overlap = _avg([r.ollama_metrics.doi_overlap for r in valid_ollama])
+            expand_times = [r.ollama_expansion.elapsed_sec for r in valid_ollama if r.ollama_expansion]
+            print(f"  Avg citations (expanded top 10):   {avg_citations:.1f}")
+            print(f"  Avg pub year (expanded top 10):    {avg_year:.1f}")
+            print(f"  Avg title keyword match %:         {avg_title_match:.1f}")
+            print(f"  Avg OA rate %:                     {avg_oa:.1f}")
+            print(f"  Avg DOI overlap with raw (top 10): {avg_overlap:.1f}")
+            if expand_times:
+                print(f"  Avg Ollama expansion time:         {_avg(expand_times)}s")
+        else:
+            print("  No valid Ollama results.")
+        print()
+
     print(f"  Total wall-clock time: {total_time:.1f}s")
     print()
 
