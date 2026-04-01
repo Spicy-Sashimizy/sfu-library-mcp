@@ -316,11 +316,16 @@ def fetch_openalex_articles() -> list[dict]:
             source = location.get("source") or {}
             host_venue = work.get("host_venue") or {}
 
+            # Safely extract publisher, handling empty authorships/institutions lists
+            _fallback_pub = ""
+            if work.get("authorships"):
+                _auths = work["authorships"]
+                if _auths and _auths[0].get("institutions"):
+                    _fallback_pub = _auths[0]["institutions"][0].get("display_name", "")
             publisher = (
                 source.get("host_organization_name")
                 or host_venue.get("publisher")
-                or work.get("authorships", [{}])[0].get("institutions", [{}])[0].get("display_name", "")
-                if work.get("authorships") else ""
+                or _fallback_pub
             )
             if not publisher:
                 publisher = ""
