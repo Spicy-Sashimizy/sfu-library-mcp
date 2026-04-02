@@ -1,0 +1,4717 @@
+{
+  "timestamp": "2026-04-01T18:55:45.455582+00:00",
+  "total_articles": 370,
+  "resolution_counts": {
+    "oa": 188,
+    "solr_domain": 182
+  },
+  "resolution_percentages": {
+    "oa": 50.81,
+    "solr_domain": 49.19
+  },
+  "overall_resolved": 370,
+  "overall_resolved_pct": 100.0,
+  "solr_matched": 182,
+  "solr_proxy_needed": 182,
+  "solr_direct": 0,
+  "top_publishers": [
+    {
+      "name": "Elsevier BV",
+      "count": 72
+    },
+    {
+      "name": "Nature Portfolio",
+      "count": 34
+    },
+    {
+      "name": "Wiley",
+      "count": 23
+    },
+    {
+      "name": "Springer Science+Business Media",
+      "count": 20
+    },
+    {
+      "name": "(unknown)",
+      "count": 15
+    },
+    {
+      "name": "American Physical Society",
+      "count": 14
+    },
+    {
+      "name": "Taylor & Francis",
+      "count": 14
+    },
+    {
+      "name": "American Association for the Advancement of Science",
+      "count": 11
+    },
+    {
+      "name": "Oxford University Press",
+      "count": 10
+    },
+    {
+      "name": "SAGE Publishing",
+      "count": 9
+    },
+    {
+      "name": "Cornell University",
+      "count": 8
+    },
+    {
+      "name": "National Academy of Sciences",
+      "count": 7
+    },
+    {
+      "name": "Institute of Electrical and Electronics Engineers",
+      "count": 7
+    },
+    {
+      "name": "American Medical Association",
+      "count": 7
+    },
+    {
+      "name": "Emerald Publishing Limited",
+      "count": 6
+    },
+    {
+      "name": "Multidisciplinary Digital Publishing Institute",
+      "count": 6
+    },
+    {
+      "name": "Cambridge University Press",
+      "count": 4
+    },
+    {
+      "name": "Annual Reviews",
+      "count": 4
+    },
+    {
+      "name": "American Chemical Society",
+      "count": 4
+    },
+    {
+      "name": "Springer Nature",
+      "count": 4
+    }
+  ],
+  "articles": [
+    {
+      "doi": "10.48550/arxiv.1201.0490",
+      "title": "Scikit-learn: Machine Learning in Python",
+      "publisher": "Cornell University",
+      "is_oa": true,
+      "resolution": "oa",
+      "resolution_detail": {
+        "source": "openalex",
+        "oa_url": "https://arxiv.org/pdf/1201.0490"
+      }
+    },
+    {
+      "doi": "10.5860/choice.27-0936",
+      "title": "Genetic algorithms in search, optimization, and machine learning",
+      "publisher": "Association of College and Research Libraries",
+      "is_oa": false,
+      "resolution": "solr_domain",
+      "resolution_detail": {
+        "source": "solr_domain",
+        "matched_domain": "doi.org",
+        "solr_db_name": "International Tables for Crystallography (2006 Edition)",
+        "solr_db_id": "61245145010003610",
+        "proxy_needed": true
+      }
+    },
+    {
+      "doi": "10.1016/c2009-0-19715-5",
+      "title": "Data Mining: Practical Machine Learning Tools and Techniques",
+      "publisher": "Elsevier BV",
+      "is_oa": true,
+      "resolution": "oa",
+      "resolution_detail": {
+        "source": "openalex",
+        "oa_url": "http://www.gbv.de/dms/bowker/toc/9780123748560.pdf"
+      }
+    },
+    {
+      "doi": "10.1117/1.2819119",
+      "title": "Pattern Recognition and Machine Learning",
+      "publisher": "SPIE",
+      "is_oa": false,
+      "resolution": "solr_domain",
+      "resolution_detail": {
+        "source": "solr_domain",
+        "matched_domain": "doi.org",
+        "solr_db_name": "International Tables for Crystallography (2006 Edition)",
+        "solr_db_id": "61245145010003610",
+        "proxy_needed": true
+      }
+    },
+    {
+      "doi": "10.1145/1273496",
+      "title": "Proceedings of the 24th international conference on Machine learning",
+      "publisher": "",
+      "is_oa": false,
+      "resolution": "solr_domain",
+      "resolution_detail": {
+        "source": "solr_domain",
+        "matched_domain": "doi.org",
+        "solr_db_name": "International Tables for Crystallography (2006 Edition)",
+        "solr_db_id": "61245145010003610",
+        "proxy_needed": true
+      }
+    },
+    {
+      "doi": "10.7551/mitpress/3206.001.0001",
+      "title": "Gaussian Processes for Machine Learning",
+      "publisher": "The MIT Press",
+      "is_oa": false,
+      "resolution": "solr_domain",
+      "resolution_detail": {
+        "source": "solr_domain",
+        "matched_domain": "doi.org",
+        "solr_db_name": "International Tables for Crystallography (2006 Edition)",
+        "solr_db_id": "61245145010003610",
+        "proxy_needed": true
+      }
+    },
+    {
+      "doi": "10.1126/science.aaa8415",
+      "title": "Machine learning: Trends, perspectives, and prospects",
+      "publisher": "American Association for the Advancement of Science",
+      "is_oa": false,
+      "resolution": "solr_domain",
+      "resolution_detail": {
+        "source": "solr_domain",
+        "matched_domain": "doi.org",
+        "solr_db_name": "International Tables for Crystallography (2006 Edition)",
+        "solr_db_id": "61245145010003610",
+        "proxy_needed": true
+      }
+    },
+    {
+      "doi": "10.1007/978-0-387-45528-0",
+      "title": "Pattern Recognition and Machine Learning",
+      "publisher": "",
+      "is_oa": false,
+      "resolution": "solr_domain",
+      "resolution_detail": {
+        "source": "solr_domain",
+        "matched_domain": "doi.org",
+        "solr_db_name": "International Tables for Crystallography (2006 Edition)",
+        "solr_db_id": "61245145010003610",
+        "proxy_needed": true
+      }
+    },
+    {
+      "doi": "10.5555/1953048.2078195",
+      "title": "Scikit-learn: Machine Learning in Python",
+      "publisher": "The MIT Press",
+      "is_oa": false,
+      "resolution": "solr_domain",
+      "resolution_detail": {
+        "source": "solr_domain",
+        "matched_domain": "dl.acm.org",
+        "solr_db_name": "ACM Digital Library",
+        "solr_db_id": "61245131870003610",
+        "proxy_needed": true
+      }
+    },
+    {
+      "doi": "10.1145/505282.505283",
+      "title": "Machine learning in automated text categorization",
+      "publisher": "Association for Computing Machinery",
+      "is_oa": true,
+      "resolution": "oa",
+      "resolution_detail": {
+        "source": "openalex",
+        "oa_url": "https://arxiv.org/pdf/cs/0110053"
+      }
+    },
+    {
+      "doi": "10.48550/arxiv.1605.08695",
+      "title": "TensorFlow: A system for large-scale machine learning",
+      "publisher": "Cornell University",
+      "is_oa": true,
+      "resolution": "oa",
+      "resolution_detail": {
+        "source": "openalex",
+        "oa_url": "https://arxiv.org/pdf/1605.08695"
+      }
+    },
+    {
+      "doi": "10.48550/arxiv.1603.04467",
+      "title": "TensorFlow: Large-Scale Machine Learning on Heterogeneous Distributed Systems",
+      "publisher": "Cornell University",
+      "is_oa": true,
+      "resolution": "oa",
+      "resolution_detail": {
+        "source": "openalex",
+        "oa_url": "https://arxiv.org/pdf/1603.04467"
+      }
+    },
+    {
+      "doi": "10.1108/03684920710743466",
+      "title": "Pattern Recognition and Machine Learning",
+      "publisher": "Emerald Publishing Limited",
+      "is_oa": false,
+      "resolution": "solr_domain",
+      "resolution_detail": {
+        "source": "solr_domain",
+        "matched_domain": "doi.org",
+        "solr_db_name": "International Tables for Crystallography (2006 Edition)",
+        "solr_db_id": "61245145010003610",
+        "proxy_needed": true
+      }
+    },
+    {
+      "doi": "10.1038/s42254-021-00314-5",
+      "title": "Physics-informed machine learning",
+      "publisher": "Nature Portfolio",
+      "is_oa": true,
+      "resolution": "oa",
+      "resolution_detail": {
+        "source": "openalex",
+        "oa_url": "https://www.osti.gov/servlets/purl/2282016"
+      }
+    },
+    {
+      "doi": "10.1080/23311916.2016.1167990",
+      "title": "A review of renewable energy sources, sustainability issues and climate change mitigation",
+      "publisher": "Cogent OA",
+      "is_oa": true,
+      "resolution": "oa",
+      "resolution_detail": {
+        "source": "openalex",
+        "oa_url": "https://doi.org/10.1080/23311916.2016.1167990"
+      }
+    },
+    {
+      "doi": "10.1038/nclimate1970",
+      "title": "The role of coastal plant communities for climate change mitigation and adaptation",
+      "publisher": "Nature Portfolio",
+      "is_oa": false,
+      "resolution": "solr_domain",
+      "resolution_detail": {
+        "source": "solr_domain",
+        "matched_domain": "doi.org",
+        "solr_db_name": "International Tables for Crystallography (2006 Edition)",
+        "solr_db_id": "61245145010003610",
+        "proxy_needed": true
+      }
+    },
+    {
+      "doi": "10.58079/o8wx",
+      "title": "IPCC Special Report on Renewable Energy Sources and Climate Change Mitigation",
+      "publisher": "",
+      "is_oa": true,
+      "resolution": "oa",
+      "resolution_detail": {
+        "source": "openalex",
+        "oa_url": "https://doi.org/10.58079/o8wx"
+      }
+    },
+    {
+      "doi": "10.1037/a0023566",
+      "title": "The dragons of inaction: Psychological barriers that limit climate change mitigation and adaptation.",
+      "publisher": "American Psychological Association",
+      "is_oa": false,
+      "resolution": "solr_domain",
+      "resolution_detail": {
+        "source": "solr_domain",
+        "matched_domain": "doi.org",
+        "solr_db_name": "International Tables for Crystallography (2006 Edition)",
+        "solr_db_id": "61245145010003610",
+        "proxy_needed": true
+      }
+    },
+    {
+      "doi": "10.1017/cbo9781139151153",
+      "title": "Renewable Energy Sources and Climate Change Mitigation",
+      "publisher": "Cambridge University Press",
+      "is_oa": true,
+      "resolution": "oa",
+      "resolution_detail": {
+        "source": "openalex",
+        "oa_url": "https://digital.library.unt.edu/ark:/67531/metadc950281/m2/1/high_res_d/SRREN_Full_Report.pdf"
+      }
+    },
+    {
+      "doi": "10.1126/science.1155458",
+      "title": "Managing Forests for Climate Change Mitigation",
+      "publisher": "American Association for the Advancement of Science",
+      "is_oa": false,
+      "resolution": "solr_domain",
+      "resolution_detail": {
+        "source": "solr_domain",
+        "matched_domain": "doi.org",
+        "solr_db_name": "International Tables for Crystallography (2006 Edition)",
+        "solr_db_id": "61245145010003610",
+        "proxy_needed": true
+      }
+    },
+    {
+      "doi": "10.1038/s41561-021-00852-8",
+      "title": "Biochar in climate change mitigation",
+      "publisher": "Nature Portfolio",
+      "is_oa": false,
+      "resolution": "solr_domain",
+      "resolution_detail": {
+        "source": "solr_domain",
+        "matched_domain": "doi.org",
+        "solr_db_name": "International Tables for Crystallography (2006 Edition)",
+        "solr_db_id": "61245145010003610",
+        "proxy_needed": true
+      }
+    },
+    {
+      "doi": "10.1111/gcbb.12205",
+      "title": "Bioenergy and climate change mitigation: an assessment",
+      "publisher": "Wiley",
+      "is_oa": true,
+      "resolution": "oa",
+      "resolution_detail": {
+        "source": "openalex",
+        "oa_url": "https://onlinelibrary.wiley.com/doi/pdfdirect/10.1111/gcbb.12205"
+      }
+    },
+    {
+      "doi": "10.1038/s41467-019-12176-8",
+      "title": "Australian vegetated coastal ecosystems as global hotspots for climate change mitigation",
+      "publisher": "Nature Portfolio",
+      "is_oa": true,
+      "resolution": "oa",
+      "resolution_detail": {
+        "source": "openalex",
+        "oa_url": "https://www.nature.com/articles/s41467-019-12176-8.pdf"
+      }
+    },
+    {
+      "doi": "10.5751/es-08373-210239",
+      "title": "Nature-based solutions to climate change mitigation and adaptation in urban areas: perspectives on indicators, knowledge",
+      "publisher": "Resilience Alliance",
+      "is_oa": true,
+      "resolution": "oa",
+      "resolution_detail": {
+        "source": "openalex",
+        "oa_url": "https://www.ecologyandsociety.org/vol21/iss2/art39/ES-2016-8373.pdf"
+      }
+    },
+    {
+      "doi": "10.1038/nclimate2292",
+      "title": "Limited potential of no-till agriculture for climate change mitigation",
+      "publisher": "Nature Portfolio",
+      "is_oa": false,
+      "resolution": "solr_domain",
+      "resolution_detail": {
+        "source": "solr_domain",
+        "matched_domain": "doi.org",
+        "solr_db_name": "International Tables for Crystallography (2006 Edition)",
+        "solr_db_id": "61245145010003610",
+        "proxy_needed": true
+      }
+    },
+    {
+      "doi": "10.1016/j.apenergy.2019.114107",
+      "title": "Embodied GHG emissions of buildings \u2013 The hidden challenge for effective climate change mitigation",
+      "publisher": "Elsevier BV",
+      "is_oa": true,
+      "resolution": "oa",
+      "resolution_detail": {
+        "source": "openalex",
+        "oa_url": "https://www.sciencedirect.com/science/article/am/pii/S0306261919317945?via%3Dihub"
+      }
+    },
+    {
+      "doi": "10.4324/9781315657646-21",
+      "title": "Climate change mitigation",
+      "publisher": "",
+      "is_oa": false,
+      "resolution": "solr_domain",
+      "resolution_detail": {
+        "source": "solr_domain",
+        "matched_domain": "doi.org",
+        "solr_db_name": "International Tables for Crystallography (2006 Edition)",
+        "solr_db_id": "61245145010003610",
+        "proxy_needed": true
+      }
+    },
+    {
+      "doi": "10.1038/s41467-018-03406-6",
+      "title": "The underappreciated potential of peatlands in global climate change mitigation strategies",
+      "publisher": "Nature Portfolio",
+      "is_oa": true,
+      "resolution": "oa",
+      "resolution_detail": {
+        "source": "openalex",
+        "oa_url": "https://www.nature.com/articles/s41467-018-03406-6.pdf"
+      }
+    },
+    {
+      "doi": "10.1007/s11027-007-9099-0",
+      "title": "The value of indigenous knowledge in climate change mitigation and adaptation strategies in the African Sahel",
+      "publisher": "Springer Science+Business Media",
+      "is_oa": false,
+      "resolution": "solr_domain",
+      "resolution_detail": {
+        "source": "solr_domain",
+        "matched_domain": "doi.org",
+        "solr_db_name": "International Tables for Crystallography (2006 Edition)",
+        "solr_db_id": "61245145010003610",
+        "proxy_needed": true
+      }
+    },
+    {
+      "doi": "10.1038/nclimate2734",
+      "title": "The potential of Indonesian mangrove forests for global climate change mitigation",
+      "publisher": "Nature Portfolio",
+      "is_oa": false,
+      "resolution": "solr_domain",
+      "resolution_detail": {
+        "source": "solr_domain",
+        "matched_domain": "doi.org",
+        "solr_db_name": "International Tables for Crystallography (2006 Edition)",
+        "solr_db_id": "61245145010003610",
+        "proxy_needed": true
+      }
+    },
+    {
+      "doi": "10.1017/cbo9781107415416",
+      "title": "Climate Change 2014: Mitigation of Climate Change",
+      "publisher": "Cambridge University Press",
+      "is_oa": false,
+      "resolution": "solr_domain",
+      "resolution_detail": {
+        "source": "solr_domain",
+        "matched_domain": "doi.org",
+        "solr_db_name": "International Tables for Crystallography (2006 Edition)",
+        "solr_db_id": "61245145010003610",
+        "proxy_needed": true
+      }
+    },
+    {
+      "doi": "10.1073/pnas.1308044111",
+      "title": "Climate change mitigation through livestock system transitions",
+      "publisher": "National Academy of Sciences",
+      "is_oa": true,
+      "resolution": "oa",
+      "resolution_detail": {
+        "source": "openalex",
+        "oa_url": "https://www.pnas.org/content/pnas/111/10/3709.full.pdf"
+      }
+    },
+    {
+      "doi": "10.1017/9781009157926",
+      "title": "Climate Change 2022 - Mitigation of Climate Change",
+      "publisher": "Cambridge University Press",
+      "is_oa": true,
+      "resolution": "oa",
+      "resolution_detail": {
+        "source": "openalex",
+        "oa_url": "https://www.cambridge.org/core/services/aop-cambridge-core/content/view/2929481A59B59C57C743A79420A2F9FF/9781009157933AR.pdf/Climate_Change_2022_-_Mitigation_of_Climate_Change.pdf?event-type=FTLA"
+      }
+    },
+    {
+      "doi": "10.1073/pnas.0913048107",
+      "title": "Role of Brazilian Amazon protected areas in climate change mitigation",
+      "publisher": "National Academy of Sciences",
+      "is_oa": true,
+      "resolution": "oa",
+      "resolution_detail": {
+        "source": "openalex",
+        "oa_url": "https://www.ncbi.nlm.nih.gov/pmc/articles/2890753"
+      }
+    },
+    {
+      "doi": "10.1038/nature.2016.20988",
+      "title": "CRISPR gene-editing tested in a person for the first time",
+      "publisher": "Nature Portfolio",
+      "is_oa": false,
+      "resolution": "solr_domain",
+      "resolution_detail": {
+        "source": "solr_domain",
+        "matched_domain": "doi.org",
+        "solr_db_name": "International Tables for Crystallography (2006 Edition)",
+        "solr_db_id": "61245145010003610",
+        "proxy_needed": true
+      }
+    },
+    {
+      "doi": "10.1038/s41467-018-05843-9",
+      "title": "Cas9 immunity creates challenges for CRISPR gene editing therapies",
+      "publisher": "Nature Portfolio",
+      "is_oa": true,
+      "resolution": "oa",
+      "resolution_detail": {
+        "source": "openalex",
+        "oa_url": "https://www.nature.com/articles/s41467-018-05843-9.pdf"
+      }
+    },
+    {
+      "doi": "10.1038/s41565-020-0669-6",
+      "title": "Selective organ targeting (SORT) nanoparticles for tissue-specific mRNA delivery and CRISPR\u2013Cas gene editing",
+      "publisher": "Nature Portfolio",
+      "is_oa": true,
+      "resolution": "oa",
+      "resolution_detail": {
+        "source": "openalex",
+        "oa_url": "https://www.ncbi.nlm.nih.gov/pmc/articles/7735425"
+      }
+    },
+    {
+      "doi": "10.1016/j.ymthe.2020.04.017",
+      "title": "AAV-CRISPR Gene Editing Is Negated by Pre-existing Immunity to Cas9",
+      "publisher": "Elsevier BV",
+      "is_oa": true,
+      "resolution": "oa",
+      "resolution_detail": {
+        "source": "openalex",
+        "oa_url": "http://www.cell.com/article/S1525001620301982/pdf"
+      }
+    },
+    {
+      "doi": "10.1007/s13238-015-0153-5",
+      "title": "CRISPR/Cas9-mediated gene editing in human tripronuclear zygotes",
+      "publisher": "Springer Science+Business Media",
+      "is_oa": true,
+      "resolution": "oa",
+      "resolution_detail": {
+        "source": "openalex",
+        "oa_url": "https://link.springer.com/content/pdf/10.1007/s13238-015-0153-5.pdf"
+      }
+    },
+    {
+      "doi": "10.1056/nejmoa2107454",
+      "title": "CRISPR-Cas9 In Vivo Gene Editing for Transthyretin Amyloidosis",
+      "publisher": "Massachusetts Medical Society",
+      "is_oa": true,
+      "resolution": "oa",
+      "resolution_detail": {
+        "source": "openalex",
+        "oa_url": "https://www.nejm.org/doi/pdf/10.1056/NEJMoa2107454?articleTools=true"
+      }
+    },
+    {
+      "doi": "10.1056/nejmoa2031054",
+      "title": "CRISPR-Cas9 Gene Editing for Sickle Cell Disease and \u03b2-Thalassemia",
+      "publisher": "Massachusetts Medical Society",
+      "is_oa": true,
+      "resolution": "oa",
+      "resolution_detail": {
+        "source": "openalex",
+        "oa_url": "https://www.nejm.org/doi/pdf/10.1056/NEJMoa2031054?articleTools=true"
+      }
+    },
+    {
+      "doi": "10.1186/s13059-015-0823-x",
+      "title": "Resources for the design of CRISPR gene editing experiments",
+      "publisher": "BioMed Central",
+      "is_oa": true,
+      "resolution": "oa",
+      "resolution_detail": {
+        "source": "openalex",
+        "oa_url": "https://genomebiology.biomedcentral.com/track/pdf/10.1186/s13059-015-0823-x"
+      }
+    },
+    {
+      "doi": "10.1038/nbt.3737",
+      "title": "Multiplex gene editing by CRISPR\u2013Cpf1 using a single crRNA array",
+      "publisher": "Nature Portfolio",
+      "is_oa": true,
+      "resolution": "oa",
+      "resolution_detail": {
+        "source": "openalex",
+        "oa_url": "https://www.nature.com/articles/nbt.3737.pdf"
+      }
+    },
+    {
+      "doi": "10.1038/nbt.3199",
+      "title": "Epigenome editing by a CRISPR-Cas9-based acetyltransferase activates genes from promoters and enhancers",
+      "publisher": "Nature Portfolio",
+      "is_oa": true,
+      "resolution": "oa",
+      "resolution_detail": {
+        "source": "openalex",
+        "oa_url": "https://www.ncbi.nlm.nih.gov/pmc/articles/4430400"
+      }
+    },
+    {
+      "doi": "10.1172/jci136873",
+      "title": "Correction of muscular dystrophies by CRISPR gene editing",
+      "publisher": "American Society for Clinical Investigation",
+      "is_oa": true,
+      "resolution": "oa",
+      "resolution_detail": {
+        "source": "openalex",
+        "oa_url": "http://www.jci.org/articles/view/136873/files/pdf"
+      }
+    },
+    {
+      "doi": "10.1053/j.ajkd.2018.02.347",
+      "title": "CRISPR Gene Editing in the Kidney",
+      "publisher": "Elsevier BV",
+      "is_oa": true,
+      "resolution": "oa",
+      "resolution_detail": {
+        "source": "openalex",
+        "oa_url": "https://www.ncbi.nlm.nih.gov/pmc/articles/6029248"
+      }
+    },
+    {
+      "doi": "10.1038/531156a",
+      "title": "CRISPR: gene editing is just the beginning",
+      "publisher": "Nature Portfolio",
+      "is_oa": true,
+      "resolution": "oa",
+      "resolution_detail": {
+        "source": "openalex",
+        "oa_url": "https://www.nature.com/news/polopoly_fs/1.19510!/menu/main/topColumns/topLeftColumn/pdf/531156a.pdf"
+      }
+    },
+    {
+      "doi": "10.1038/nbt.3198",
+      "title": "Increasing the efficiency of homology-directed repair for CRISPR-Cas9-induced precise gene editing in mammalian cells",
+      "publisher": "Nature Portfolio",
+      "is_oa": false,
+      "resolution": "solr_domain",
+      "resolution_detail": {
+        "source": "solr_domain",
+        "matched_domain": "doi.org",
+        "solr_db_name": "International Tables for Crystallography (2006 Edition)",
+        "solr_db_id": "61245145010003610",
+        "proxy_needed": true
+      }
+    },
+    {
+      "doi": "10.1038/d41586-020-02765-9",
+      "title": "Pioneers of revolutionary CRISPR gene editing win chemistry Nobel",
+      "publisher": "Nature Portfolio",
+      "is_oa": false,
+      "resolution": "solr_domain",
+      "resolution_detail": {
+        "source": "solr_domain",
+        "matched_domain": "doi.org",
+        "solr_db_name": "International Tables for Crystallography (2006 Edition)",
+        "solr_db_id": "61245145010003610",
+        "proxy_needed": true
+      }
+    },
+    {
+      "doi": "10.2174/1566523217666171121165935",
+      "title": "First-in-human Phase 1 CRISPR Gene Editing Cancer Trials: Are We Ready?",
+      "publisher": "Bentham Science Publishers",
+      "is_oa": false,
+      "resolution": "solr_domain",
+      "resolution_detail": {
+        "source": "solr_domain",
+        "matched_domain": "doi.org",
+        "solr_db_name": "International Tables for Crystallography (2006 Edition)",
+        "solr_db_id": "61245145010003610",
+        "proxy_needed": true
+      }
+    },
+    {
+      "doi": "10.1371/journal.pgen.1009680",
+      "title": "Genome mapping coupled with CRISPR gene editing reveals a P450 gene confers avermectin resistance in the beet armyworm",
+      "publisher": "Public Library of Science",
+      "is_oa": true,
+      "resolution": "oa",
+      "resolution_detail": {
+        "source": "openalex",
+        "oa_url": "https://journals.plos.org/plosgenetics/article/file?id=10.1371/journal.pgen.1009680&type=printable"
+      }
+    },
+    {
+      "doi": "10.1038/nbt.3680",
+      "title": "Bypassing GMO regulations with CRISPR gene editing",
+      "publisher": "Nature Portfolio",
+      "is_oa": false,
+      "resolution": "solr_domain",
+      "resolution_detail": {
+        "source": "solr_domain",
+        "matched_domain": "doi.org",
+        "solr_db_name": "International Tables for Crystallography (2006 Edition)",
+        "solr_db_id": "61245145010003610",
+        "proxy_needed": true
+      }
+    },
+    {
+      "doi": "10.3389/fgeed.2022.830178",
+      "title": "Advances in Delivery Mechanisms of CRISPR Gene-Editing Reagents in Plants",
+      "publisher": "Frontiers Media",
+      "is_oa": true,
+      "resolution": "oa",
+      "resolution_detail": {
+        "source": "openalex",
+        "oa_url": "https://www.frontiersin.org/articles/10.3389/fgeed.2022.830178/pdf"
+      }
+    },
+    {
+      "doi": "10.1038/s41467-020-17154-z",
+      "title": "A second generation leishmanization vaccine with a markerless attenuated Leishmania major strain using CRISPR gene editi",
+      "publisher": "Nature Portfolio",
+      "is_oa": true,
+      "resolution": "oa",
+      "resolution_detail": {
+        "source": "openalex",
+        "oa_url": "https://www.nature.com/articles/s41467-020-17154-z.pdf"
+      }
+    },
+    {
+      "doi": "10.1002/wcms.1580",
+      "title": "Emerging quantum computing algorithms for quantum chemistry",
+      "publisher": "Wiley",
+      "is_oa": true,
+      "resolution": "oa",
+      "resolution_detail": {
+        "source": "openalex",
+        "oa_url": "https://arxiv.org/pdf/2109.02873"
+      }
+    },
+    {
+      "doi": "10.1007/978-1-4612-1390-1",
+      "title": "An Introduction to Quantum Computing Algorithms",
+      "publisher": "University of Maryland, Baltimore County",
+      "is_oa": true,
+      "resolution": "oa",
+      "resolution_detail": {
+        "source": "openalex",
+        "oa_url": "https://link.springer.com/content/pdf/bfm:978-1-4612-1390-1/1?pdf=chapter%20toc"
+      }
+    },
+    {
+      "doi": "10.1103/physrevlett.91.187903",
+      "title": "Experimental Application of Decoherence-Free Subspaces in an Optical Quantum-Computing Algorithm",
+      "publisher": "American Physical Society",
+      "is_oa": true,
+      "resolution": "oa",
+      "resolution_detail": {
+        "source": "openalex",
+        "oa_url": "https://arxiv.org/pdf/quant-ph/0212134"
+      }
+    },
+    {
+      "doi": "10.1103/physrevd.103.076020",
+      "title": "Towards a quantum computing algorithm for helicity amplitudes and parton showers",
+      "publisher": "American Physical Society",
+      "is_oa": true,
+      "resolution": "oa",
+      "resolution_detail": {
+        "source": "openalex",
+        "oa_url": "http://link.aps.org/pdf/10.1103/PhysRevD.103.076020"
+      }
+    },
+    {
+      "doi": "10.1007/s11128-012-0426-3",
+      "title": "Efficiency of open quantum walk implementation of dissipative quantum computing algorithms",
+      "publisher": "Springer Science+Business Media",
+      "is_oa": true,
+      "resolution": "oa",
+      "resolution_detail": {
+        "source": "openalex",
+        "oa_url": "https://arxiv.org/pdf/1401.6658"
+      }
+    },
+    {
+      "doi": "10.1093/bib/bbac437",
+      "title": "Quantum computing algorithms: getting closer to critical problems in computational biology",
+      "publisher": "Oxford University Press",
+      "is_oa": true,
+      "resolution": "oa",
+      "resolution_detail": {
+        "source": "openalex",
+        "oa_url": "https://academic.oup.com/bib/article-pdf/23/6/bbac437/49567401/bbac437.pdf"
+      }
+    },
+    {
+      "doi": "10.1007/s11128-009-0133-x",
+      "title": "Quantum computing algorithm for electromagnetic field simulation",
+      "publisher": "Springer Science+Business Media",
+      "is_oa": false,
+      "resolution": "solr_domain",
+      "resolution_detail": {
+        "source": "solr_domain",
+        "matched_domain": "doi.org",
+        "solr_db_name": "International Tables for Crystallography (2006 Edition)",
+        "solr_db_id": "61245145010003610",
+        "proxy_needed": true
+      }
+    },
+    {
+      "doi": "10.1016/0022-2836(81)90087-5",
+      "title": "Identification of common molecular subsequences",
+      "publisher": "Elsevier BV",
+      "is_oa": false,
+      "resolution": "solr_domain",
+      "resolution_detail": {
+        "source": "solr_domain",
+        "matched_domain": "doi.org",
+        "solr_db_name": "International Tables for Crystallography (2006 Edition)",
+        "solr_db_id": "61245145010003610",
+        "proxy_needed": true
+      }
+    },
+    {
+      "doi": "10.1103/physrevlett.89.188301",
+      "title": "Quantum Computing by an Optimal Control Algorithm for Unitary Transformations",
+      "publisher": "American Physical Society",
+      "is_oa": true,
+      "resolution": "oa",
+      "resolution_detail": {
+        "source": "openalex",
+        "oa_url": "https://arxiv.org/pdf/quant-ph/0204101"
+      }
+    },
+    {
+      "doi": "10.22331/q-2023-07-25-1066",
+      "title": "Real-Time Krylov Theory for Quantum Computing Algorithms",
+      "publisher": "Verein zur F\u00f6rderung des Open Access Publizierens in den Quantenwissenschaften",
+      "is_oa": true,
+      "resolution": "oa",
+      "resolution_detail": {
+        "source": "openalex",
+        "oa_url": "https://quantum-journal.org/papers/q-2023-07-25-1066/pdf/"
+      }
+    },
+    {
+      "doi": "10.1103/physrevlett.122.060504",
+      "title": "Quantum Algorithms for Systems of Linear Equations Inspired by Adiabatic Quantum Computing",
+      "publisher": "American Physical Society",
+      "is_oa": true,
+      "resolution": "oa",
+      "resolution_detail": {
+        "source": "openalex",
+        "oa_url": "https://arxiv.org/pdf/1805.10549"
+      }
+    },
+    {
+      "doi": "10.1109/sose50414.2020.9130525",
+      "title": "Towards Security of Cyber-Physical Systems using Quantum Computing Algorithms",
+      "publisher": "The University of Texas at El Paso",
+      "is_oa": false,
+      "resolution": "solr_domain",
+      "resolution_detail": {
+        "source": "solr_domain",
+        "matched_domain": "doi.org",
+        "solr_db_name": "International Tables for Crystallography (2006 Edition)",
+        "solr_db_id": "61245145010003610",
+        "proxy_needed": true
+      }
+    },
+    {
+      "doi": "10.1016/j.actaastro.2005.03.023",
+      "title": "Using quantum computing algorithms in future satellite communication",
+      "publisher": "Elsevier BV",
+      "is_oa": false,
+      "resolution": "solr_domain",
+      "resolution_detail": {
+        "source": "solr_domain",
+        "matched_domain": "doi.org",
+        "solr_db_name": "International Tables for Crystallography (2006 Edition)",
+        "solr_db_id": "61245145010003610",
+        "proxy_needed": true
+      }
+    },
+    {
+      "doi": "10.1103/physrevlett.127.040505",
+      "title": "Rodeo Algorithm for Quantum Computing",
+      "publisher": "American Physical Society",
+      "is_oa": true,
+      "resolution": "oa",
+      "resolution_detail": {
+        "source": "openalex",
+        "oa_url": "https://arxiv.org/pdf/2009.04092"
+      }
+    },
+    {
+      "doi": "10.1038/s41586-019-1666-5",
+      "title": "Quantum supremacy using a programmable superconducting processor",
+      "publisher": "Nature Portfolio",
+      "is_oa": true,
+      "resolution": "oa",
+      "resolution_detail": {
+        "source": "openalex",
+        "oa_url": "https://www.nature.com/articles/s41586-019-1666-5.pdf"
+      }
+    },
+    {
+      "doi": "10.1051/e3sconf/202339904041",
+      "title": "Quantum Computing: Algorithms,Architectures, and Applications",
+      "publisher": "EDP Sciences",
+      "is_oa": true,
+      "resolution": "oa",
+      "resolution_detail": {
+        "source": "openalex",
+        "oa_url": "https://www.e3s-conferences.org/articles/e3sconf/pdf/2023/36/e3sconf_iconnect2023_04041.pdf"
+      }
+    },
+    {
+      "doi": "10.1016/j.eswa.2023.121219",
+      "title": "Dung beetle optimization algorithm based on quantum computing and multi-strategy fusion for solving engineering problems",
+      "publisher": "Elsevier BV",
+      "is_oa": false,
+      "resolution": "solr_domain",
+      "resolution_detail": {
+        "source": "solr_domain",
+        "matched_domain": "doi.org",
+        "solr_db_name": "International Tables for Crystallography (2006 Edition)",
+        "solr_db_id": "61245145010003610",
+        "proxy_needed": true
+      }
+    },
+    {
+      "doi": "10.48550/arxiv.quant-ph/0510146",
+      "title": "Quantum Analogical Modeling: A General Quantum Computing Algorithm for Predicting Language Behavior",
+      "publisher": "Cornell University",
+      "is_oa": true,
+      "resolution": "oa",
+      "resolution_detail": {
+        "source": "openalex",
+        "oa_url": "https://arxiv.org/pdf/quant-ph/0510146"
+      }
+    },
+    {
+      "doi": "10.1137/s0097539795293172",
+      "title": "Polynomial-Time Algorithms for Prime Factorization and Discrete Logarithms on a Quantum Computer",
+      "publisher": "Society for Industrial and Applied Mathematics",
+      "is_oa": false,
+      "resolution": "solr_domain",
+      "resolution_detail": {
+        "source": "solr_domain",
+        "matched_domain": "doi.org",
+        "solr_db_name": "International Tables for Crystallography (2006 Edition)",
+        "solr_db_id": "61245145010003610",
+        "proxy_needed": true
+      }
+    },
+    {
+      "doi": "10.1109/iccca49541.2020.9250806",
+      "title": "An Efficient Quantum Computing technique for cracking RSA using Shor\u2019s Algorithm",
+      "publisher": "Chitkara University",
+      "is_oa": false,
+      "resolution": "solr_domain",
+      "resolution_detail": {
+        "source": "solr_domain",
+        "matched_domain": "doi.org",
+        "solr_db_name": "International Tables for Crystallography (2006 Edition)",
+        "solr_db_id": "61245145010003610",
+        "proxy_needed": true
+      }
+    },
+    {
+      "doi": "10.1016/j.jwb.2005.10.005",
+      "title": "Indigenous land rights, entrepreneurship, and economic development in Canada: \u201cOpting-in\u201d to the global economy",
+      "publisher": "Elsevier BV",
+      "is_oa": false,
+      "resolution": "solr_domain",
+      "resolution_detail": {
+        "source": "solr_domain",
+        "matched_domain": "doi.org",
+        "solr_db_name": "International Tables for Crystallography (2006 Edition)",
+        "solr_db_id": "61245145010003610",
+        "proxy_needed": true
+      }
+    },
+    {
+      "doi": "10.1111/j.1548-1425.2008.01103.x",
+      "title": "Differentiating indigenous citizenship: Seeking multiplicity in rights, identity, and sovereignty in Canada",
+      "publisher": "Wiley",
+      "is_oa": false,
+      "resolution": "solr_domain",
+      "resolution_detail": {
+        "source": "solr_domain",
+        "matched_domain": "doi.org",
+        "solr_db_name": "International Tables for Crystallography (2006 Edition)",
+        "solr_db_id": "61245145010003610",
+        "proxy_needed": true
+      }
+    },
+    {
+      "doi": "10.1080/19460171.2014.912960",
+      "title": "Bounded recognition: urban planning and the textual mediation of Indigenous rights in Canada and Australia",
+      "publisher": "Taylor & Francis",
+      "is_oa": false,
+      "resolution": "solr_domain",
+      "resolution_detail": {
+        "source": "solr_domain",
+        "matched_domain": "doi.org",
+        "solr_db_name": "International Tables for Crystallography (2006 Edition)",
+        "solr_db_id": "61245145010003610",
+        "proxy_needed": true
+      }
+    },
+    {
+      "doi": "10.1016/j.marpol.2016.09.007",
+      "title": "Recommendations for marine herring policy change in Canada: Aligning with Indigenous legal and inherent rights",
+      "publisher": "Elsevier BV",
+      "is_oa": false,
+      "resolution": "solr_domain",
+      "resolution_detail": {
+        "source": "solr_domain",
+        "matched_domain": "doi.org",
+        "solr_db_name": "International Tables for Crystallography (2006 Edition)",
+        "solr_db_id": "61245145010003610",
+        "proxy_needed": true
+      }
+    },
+    {
+      "doi": "10.1080/13642987.2021.1910809",
+      "title": "Transformative justice in a settler colonial transition: implementing the UN Declaration on the Rights of Indigenous Peo",
+      "publisher": "Routledge",
+      "is_oa": false,
+      "resolution": "solr_domain",
+      "resolution_detail": {
+        "source": "solr_domain",
+        "matched_domain": "doi.org",
+        "solr_db_name": "International Tables for Crystallography (2006 Edition)",
+        "solr_db_id": "61245145010003610",
+        "proxy_needed": true
+      }
+    },
+    {
+      "doi": "10.5860/choice.37-1695",
+      "title": "Indigenous peoples' rights in Australia, Canada, &amp; New Zealand",
+      "publisher": "Association of College and Research Libraries",
+      "is_oa": false,
+      "resolution": "solr_domain",
+      "resolution_detail": {
+        "source": "solr_domain",
+        "matched_domain": "doi.org",
+        "solr_db_name": "International Tables for Crystallography (2006 Edition)",
+        "solr_db_id": "61245145010003610",
+        "proxy_needed": true
+      }
+    },
+    {
+      "doi": "10.1177/0032318710370584",
+      "title": "Emerging international indigenous rights norms and \u2018over-compliance\u2019 in New Zealand and Canada",
+      "publisher": "SAGE Publishing",
+      "is_oa": false,
+      "resolution": "solr_domain",
+      "resolution_detail": {
+        "source": "solr_domain",
+        "matched_domain": "doi.org",
+        "solr_db_name": "International Tables for Crystallography (2006 Edition)",
+        "solr_db_id": "61245145010003610",
+        "proxy_needed": true
+      }
+    },
+    {
+      "doi": "10.5860/choice.36-0288",
+      "title": "Linking social and ecological systems: management practices and social mechanisms for building resilience",
+      "publisher": "Association of College and Research Libraries",
+      "is_oa": false,
+      "resolution": "solr_domain",
+      "resolution_detail": {
+        "source": "solr_domain",
+        "matched_domain": "doi.org",
+        "solr_db_name": "International Tables for Crystallography (2006 Edition)",
+        "solr_db_id": "61245145010003610",
+        "proxy_needed": true
+      }
+    },
+    {
+      "doi": "10.29173/alr2519",
+      "title": "Cannabis, Reconciliation, and the Rights of Indigenous Peoples: Prospects and Challenges for Cannabis Legalization in Ca",
+      "publisher": "University of Alberta Library",
+      "is_oa": true,
+      "resolution": "oa",
+      "resolution_detail": {
+        "source": "openalex",
+        "oa_url": "http://albertalawreview.com/index.php/ALR/article/download/2519/2497"
+      }
+    },
+    {
+      "doi": "10.5663/aps.v1i1.10134",
+      "title": "The United Nations Declaration on the Rights of Indigenous Peoples and Urban Aboriginal Self- Determination in Canada: A",
+      "publisher": "University of Alberta",
+      "is_oa": true,
+      "resolution": "oa",
+      "resolution_detail": {
+        "source": "openalex",
+        "oa_url": "https://journals.library.ualberta.ca/aps/index.php/aps/article/download/10134/7952"
+      }
+    },
+    {
+      "doi": "10.1111/reel.12240",
+      "title": "A rights\u2010based approach to indigenous women and gender inequities in resource development in northern Canada",
+      "publisher": "Wiley",
+      "is_oa": false,
+      "resolution": "solr_domain",
+      "resolution_detail": {
+        "source": "solr_domain",
+        "matched_domain": "doi.org",
+        "solr_db_name": "International Tables for Crystallography (2006 Edition)",
+        "solr_db_id": "61245145010003610",
+        "proxy_needed": true
+      }
+    },
+    {
+      "doi": "10.1080/2201473x.2016.1241209",
+      "title": "Tracing the spirals of unsettlement: Euro-Canadian narratives of coming to grips with Indigenous sovereignty, title, and",
+      "publisher": "Taylor & Francis",
+      "is_oa": false,
+      "resolution": "solr_domain",
+      "resolution_detail": {
+        "source": "solr_domain",
+        "matched_domain": "doi.org",
+        "solr_db_name": "International Tables for Crystallography (2006 Edition)",
+        "solr_db_id": "61245145010003610",
+        "proxy_needed": true
+      }
+    },
+    {
+      "doi": "10.1093/obo/9780199756223-0028",
+      "title": "Indigenous Rights and Governance in Canada, Australia, and New Zealand",
+      "publisher": "SAGE Publishing",
+      "is_oa": false,
+      "resolution": "solr_domain",
+      "resolution_detail": {
+        "source": "solr_domain",
+        "matched_domain": "doi.org",
+        "solr_db_name": "International Tables for Crystallography (2006 Edition)",
+        "solr_db_id": "61245145010003610",
+        "proxy_needed": true
+      }
+    },
+    {
+      "doi": "10.2307/j.ctv186grnt.6",
+      "title": "The Declaration on the Rights of Indigenous Peoples",
+      "publisher": "ANU Press",
+      "is_oa": false,
+      "resolution": "solr_domain",
+      "resolution_detail": {
+        "source": "solr_domain",
+        "matched_domain": "doi.org",
+        "solr_db_name": "International Tables for Crystallography (2006 Edition)",
+        "solr_db_id": "61245145010003610",
+        "proxy_needed": true
+      }
+    },
+    {
+      "doi": "10.1163/15718115-02401001",
+      "title": "Recognition of Indigenous Land Rights in Norway and Canada",
+      "publisher": "Brill",
+      "is_oa": false,
+      "resolution": "solr_domain",
+      "resolution_detail": {
+        "source": "solr_domain",
+        "matched_domain": "doi.org",
+        "solr_db_name": "International Tables for Crystallography (2006 Edition)",
+        "solr_db_id": "61245145010003610",
+        "proxy_needed": true
+      }
+    },
+    {
+      "doi": "10.1128/mmbr.00016-10",
+      "title": "Origins and Evolution of Antibiotic Resistance",
+      "publisher": "American Society for Microbiology",
+      "is_oa": false,
+      "resolution": "solr_domain",
+      "resolution_detail": {
+        "source": "solr_domain",
+        "matched_domain": "doi.org",
+        "solr_db_name": "International Tables for Crystallography (2006 Edition)",
+        "solr_db_id": "61245145010003610",
+        "proxy_needed": true
+      }
+    },
+    {
+      "doi": "10.15620/cdc:82532",
+      "title": "Antibiotic resistance threats in the United States, 2019",
+      "publisher": "",
+      "is_oa": true,
+      "resolution": "oa",
+      "resolution_detail": {
+        "source": "openalex",
+        "oa_url": "https://stacks.cdc.gov/view/cdc/82532/cdc_82532_DS1.pdf"
+      }
+    },
+    {
+      "doi": "10.1016/s0140-6736(01)05321-1",
+      "title": "Antibiotic resistance of bacteria in biofilms",
+      "publisher": "Elsevier BV",
+      "is_oa": false,
+      "resolution": "solr_domain",
+      "resolution_detail": {
+        "source": "solr_domain",
+        "matched_domain": "doi.org",
+        "solr_db_name": "International Tables for Crystallography (2006 Edition)",
+        "solr_db_id": "61245145010003610",
+        "proxy_needed": true
+      }
+    },
+    {
+      "doi": "10.1016/s1473-3099(13)70318-9",
+      "title": "Antibiotic resistance\u2014the need for global solutions",
+      "publisher": "Elsevier BV",
+      "is_oa": true,
+      "resolution": "oa",
+      "resolution_detail": {
+        "source": "openalex",
+        "oa_url": "http://www.thelancet.com/article/S1473309913703189/pdf"
+      }
+    },
+    {
+      "doi": "10.1038/nrmicro3380",
+      "title": "Molecular mechanisms of antibiotic resistance",
+      "publisher": "Nature Portfolio",
+      "is_oa": false,
+      "resolution": "solr_domain",
+      "resolution_detail": {
+        "source": "solr_domain",
+        "matched_domain": "doi.org",
+        "solr_db_name": "International Tables for Crystallography (2006 Edition)",
+        "solr_db_id": "61245145010003610",
+        "proxy_needed": true
+      }
+    },
+    {
+      "doi": "10.1038/s41579-021-00649-x",
+      "title": "Antibiotic resistance in the environment",
+      "publisher": "Nature Portfolio",
+      "is_oa": true,
+      "resolution": "oa",
+      "resolution_detail": {
+        "source": "openalex",
+        "oa_url": "https://www.nature.com/articles/s41579-021-00649-x.pdf"
+      }
+    },
+    {
+      "doi": "10.1038/nature10388",
+      "title": "Antibiotic resistance is ancient",
+      "publisher": "Nature Portfolio",
+      "is_oa": false,
+      "resolution": "solr_domain",
+      "resolution_detail": {
+        "source": "solr_domain",
+        "matched_domain": "doi.org",
+        "solr_db_name": "International Tables for Crystallography (2006 Edition)",
+        "solr_db_id": "61245145010003610",
+        "proxy_needed": true
+      }
+    },
+    {
+      "doi": "10.1126/science.257.5073.1064",
+      "title": "The Crisis in Antibiotic Resistance",
+      "publisher": "American Association for the Advancement of Science",
+      "is_oa": false,
+      "resolution": "solr_domain",
+      "resolution_detail": {
+        "source": "solr_domain",
+        "matched_domain": "doi.org",
+        "solr_db_name": "International Tables for Crystallography (2006 Edition)",
+        "solr_db_id": "61245145010003610",
+        "proxy_needed": true
+      }
+    },
+    {
+      "doi": "10.1128/microbiolspec.vmbf-0016-2015",
+      "title": "Mechanisms of Antibiotic Resistance",
+      "publisher": "American Society for Microbiology",
+      "is_oa": true,
+      "resolution": "oa",
+      "resolution_detail": {
+        "source": "openalex",
+        "oa_url": "https://www.ncbi.nlm.nih.gov/pmc/articles/4888801"
+      }
+    },
+    {
+      "doi": "10.1016/j.ijantimicag.2009.12.011",
+      "title": "Antibiotic resistance of bacterial biofilms",
+      "publisher": "Elsevier BV",
+      "is_oa": true,
+      "resolution": "oa",
+      "resolution_detail": {
+        "source": "openalex",
+        "oa_url": "https://hal.archives-ouvertes.fr/hal-00567285"
+      }
+    },
+    {
+      "doi": "10.1093/nar/gkz935",
+      "title": "CARD 2020: antibiotic resistome surveillance with the comprehensive antibiotic resistance database",
+      "publisher": "Oxford University Press",
+      "is_oa": true,
+      "resolution": "oa",
+      "resolution_detail": {
+        "source": "openalex",
+        "oa_url": "https://academic.oup.com/nar/article-pdf/48/D1/D517/31697411/gkz935.pdf"
+      }
+    },
+    {
+      "doi": "10.1128/aac.00419-13",
+      "title": "The Comprehensive Antibiotic Resistance Database",
+      "publisher": "American Society for Microbiology",
+      "is_oa": true,
+      "resolution": "oa",
+      "resolution_detail": {
+        "source": "openalex",
+        "oa_url": "https://aac.asm.org/content/aac/57/7/3348.full.pdf"
+      }
+    },
+    {
+      "doi": "10.1038/nrmicro3439",
+      "title": "Tackling antibiotic resistance: the environmental framework",
+      "publisher": "Nature Portfolio",
+      "is_oa": false,
+      "resolution": "solr_domain",
+      "resolution_detail": {
+        "source": "solr_domain",
+        "matched_domain": "doi.org",
+        "solr_db_name": "International Tables for Crystallography (2006 Edition)",
+        "solr_db_id": "61245145010003610",
+        "proxy_needed": true
+      }
+    },
+    {
+      "doi": "10.1038/nrmicro2319",
+      "title": "Antibiotic resistance and its cost: is it possible to reverse resistance?",
+      "publisher": "Nature Portfolio",
+      "is_oa": true,
+      "resolution": "oa",
+      "resolution_detail": {
+        "source": "openalex",
+        "oa_url": "https://zenodo.org/record/3426264"
+      }
+    },
+    {
+      "doi": "10.1016/j.copbio.2008.05.006",
+      "title": "Antibiotics and antibiotic resistance in water environments",
+      "publisher": "Elsevier BV",
+      "is_oa": false,
+      "resolution": "solr_domain",
+      "resolution_detail": {
+        "source": "solr_domain",
+        "matched_domain": "doi.org",
+        "solr_db_name": "International Tables for Crystallography (2006 Edition)",
+        "solr_db_id": "61245145010003610",
+        "proxy_needed": true
+      }
+    },
+    {
+      "doi": "10.2147/idr.s173867",
+      "title": "Antibiotic resistance: a rundown of a global crisis",
+      "publisher": "Dove Medical Press",
+      "is_oa": true,
+      "resolution": "oa",
+      "resolution_detail": {
+        "source": "openalex",
+        "oa_url": "https://www.dovepress.com/getfile.php?fileID=45249"
+      }
+    },
+    {
+      "doi": "10.1038/nrmicro2312",
+      "title": "Call of the wild: antibiotic resistance genes in natural environments",
+      "publisher": "Nature Portfolio",
+      "is_oa": false,
+      "resolution": "solr_domain",
+      "resolution_detail": {
+        "source": "solr_domain",
+        "matched_domain": "doi.org",
+        "solr_db_name": "International Tables for Crystallography (2006 Edition)",
+        "solr_db_id": "61245145010003610",
+        "proxy_needed": true
+      }
+    },
+    {
+      "doi": "10.1016/j.envpol.2009.05.051",
+      "title": "Environmental pollution by antibiotics and by antibiotic resistance determinants",
+      "publisher": "Elsevier BV",
+      "is_oa": false,
+      "resolution": "solr_domain",
+      "resolution_detail": {
+        "source": "solr_domain",
+        "matched_domain": "doi.org",
+        "solr_db_name": "International Tables for Crystallography (2006 Edition)",
+        "solr_db_id": "61245145010003610",
+        "proxy_needed": true
+      }
+    },
+    {
+      "doi": "10.3389/fmicb.2012.00001",
+      "title": "Natural Antibiotic Resistance and Contamination by Antibiotic Resistance Determinants: The Two Ages in the Evolution of ",
+      "publisher": "Frontiers Media",
+      "is_oa": true,
+      "resolution": "oa",
+      "resolution_detail": {
+        "source": "openalex",
+        "oa_url": "https://www.frontiersin.org/articles/10.3389/fmicb.2012.00001/pdf"
+      }
+    },
+    {
+      "doi": "10.1109/mci.2018.2840738",
+      "title": "Recent Trends in Deep Learning Based Natural Language Processing [Review Article]",
+      "publisher": "Institute of Electrical and Electronics Engineers",
+      "is_oa": false,
+      "resolution": "solr_domain",
+      "resolution_detail": {
+        "source": "solr_domain",
+        "matched_domain": "doi.org",
+        "solr_db_name": "International Tables for Crystallography (2006 Edition)",
+        "solr_db_id": "61245145010003610",
+        "proxy_needed": true
+      }
+    },
+    {
+      "doi": "10.48550/arxiv.1708.02709",
+      "title": "Recent Trends in Deep Learning Based Natural Language Processing",
+      "publisher": "Cornell University",
+      "is_oa": true,
+      "resolution": "oa",
+      "resolution_detail": {
+        "source": "openalex",
+        "oa_url": "https://arxiv.org/pdf/1708.02709"
+      }
+    },
+    {
+      "doi": "10.1016/j.neucom.2021.05.103",
+      "title": "An introduction to Deep Learning in Natural Language Processing: Models, techniques, and tools",
+      "publisher": "Elsevier BV",
+      "is_oa": false,
+      "resolution": "solr_domain",
+      "resolution_detail": {
+        "source": "solr_domain",
+        "matched_domain": "doi.org",
+        "solr_db_name": "International Tables for Crystallography (2006 Edition)",
+        "solr_db_id": "61245145010003610",
+        "proxy_needed": true
+      }
+    },
+    {
+      "doi": "10.1109/infocomwkshps51825.2021.9484500",
+      "title": "Security Vulnerability Detection Using Deep Learning Natural Language Processing",
+      "publisher": "Ball State University",
+      "is_oa": false,
+      "resolution": "solr_domain",
+      "resolution_detail": {
+        "source": "solr_domain",
+        "matched_domain": "doi.org",
+        "solr_db_name": "International Tables for Crystallography (2006 Edition)",
+        "solr_db_id": "61245145010003610",
+        "proxy_needed": true
+      }
+    },
+    {
+      "doi": "10.1016/s1470-2045(20)30615-x",
+      "title": "Deep-learning natural language processing for oncological applications",
+      "publisher": "Elsevier BV",
+      "is_oa": false,
+      "resolution": "solr_domain",
+      "resolution_detail": {
+        "source": "solr_domain",
+        "matched_domain": "doi.org",
+        "solr_db_name": "International Tables for Crystallography (2006 Edition)",
+        "solr_db_id": "61245145010003610",
+        "proxy_needed": true
+      }
+    },
+    {
+      "doi": "10.1007/978-981-10-5209-5",
+      "title": "Deep Learning in Natural Language Processing",
+      "publisher": "Citadel",
+      "is_oa": false,
+      "resolution": "solr_domain",
+      "resolution_detail": {
+        "source": "solr_domain",
+        "matched_domain": "doi.org",
+        "solr_db_name": "International Tables for Crystallography (2006 Edition)",
+        "solr_db_id": "61245145010003610",
+        "proxy_needed": true
+      }
+    },
+    {
+      "doi": "10.1093/jamia/ocz200",
+      "title": "Deep learning in clinical natural language processing: a methodical review",
+      "publisher": "Oxford University Press",
+      "is_oa": true,
+      "resolution": "oa",
+      "resolution_detail": {
+        "source": "openalex",
+        "oa_url": "https://www.ncbi.nlm.nih.gov/pmc/articles/7025365"
+      }
+    },
+    {
+      "doi": "10.1016/j.jbi.2022.104265",
+      "title": "Developing a deep learning natural language processing algorithm for automated reporting of adverse drug reactions",
+      "publisher": "Elsevier BV",
+      "is_oa": false,
+      "resolution": "solr_domain",
+      "resolution_detail": {
+        "source": "solr_domain",
+        "matched_domain": "doi.org",
+        "solr_db_name": "International Tables for Crystallography (2006 Edition)",
+        "solr_db_id": "61245145010003610",
+        "proxy_needed": true
+      }
+    },
+    {
+      "doi": "10.1080/17538947.2018.1563219",
+      "title": "Identifying disaster-related tweets and their semantic, spatial and temporal context using deep learning, natural langua",
+      "publisher": "Taylor & Francis",
+      "is_oa": true,
+      "resolution": "oa",
+      "resolution_detail": {
+        "source": "openalex",
+        "oa_url": "https://doaj.org/article/acbf8378e8f04127822f4e67fb863014"
+      }
+    },
+    {
+      "doi": "10.1145/3374217",
+      "title": "Adversarial Attacks on Deep-learning Models in Natural Language Processing",
+      "publisher": "Association for Computing Machinery",
+      "is_oa": false,
+      "resolution": "solr_domain",
+      "resolution_detail": {
+        "source": "solr_domain",
+        "matched_domain": "doi.org",
+        "solr_db_name": "International Tables for Crystallography (2006 Edition)",
+        "solr_db_id": "61245145010003610",
+        "proxy_needed": true
+      }
+    },
+    {
+      "doi": "10.1161/strokeaha.118.024124",
+      "title": "Deep Learning Natural Language Processing Successfully Predicts the Cerebrovascular Cause of Transient Ischemic Attack-L",
+      "publisher": "Lippincott Williams & Wilkins",
+      "is_oa": true,
+      "resolution": "oa",
+      "resolution_detail": {
+        "source": "openalex",
+        "oa_url": "https://www.ahajournals.org/doi/pdf/10.1161/STROKEAHA.118.024124"
+      }
+    },
+    {
+      "doi": "10.1093/nsr/nwx110",
+      "title": "Deep learning for natural language processing: advantages and challenges",
+      "publisher": "Oxford University Press",
+      "is_oa": true,
+      "resolution": "oa",
+      "resolution_detail": {
+        "source": "openalex",
+        "oa_url": "https://academic.oup.com/nsr/article-pdf/5/1/24/24164446/nwx110.pdf"
+      }
+    },
+    {
+      "doi": "10.1038/s41598-020-77258-w",
+      "title": "Validation of deep learning natural language processing algorithm for keyword extraction from pathology reports in elect",
+      "publisher": "Nature Portfolio",
+      "is_oa": true,
+      "resolution": "oa",
+      "resolution_detail": {
+        "source": "openalex",
+        "oa_url": "https://www.nature.com/articles/s41598-020-77258-w.pdf"
+      }
+    },
+    {
+      "doi": "10.48550/arxiv.2003.01200",
+      "title": "Natural Language Processing Advancements By Deep Learning: A Survey",
+      "publisher": "Cornell University",
+      "is_oa": true,
+      "resolution": "oa",
+      "resolution_detail": {
+        "source": "openalex",
+        "oa_url": "https://arxiv.org/pdf/2003.01200"
+      }
+    },
+    {
+      "doi": "10.1109/access.2023.3277868",
+      "title": "Text Mining and Emotion Classification on Monkeypox Twitter Dataset: A Deep Learning-Natural Language Processing (NLP) A",
+      "publisher": "Institute of Electrical and Electronics Engineers",
+      "is_oa": true,
+      "resolution": "oa",
+      "resolution_detail": {
+        "source": "openalex",
+        "oa_url": "https://ieeexplore.ieee.org/ielx7/6287639/10005208/10129946.pdf"
+      }
+    },
+    {
+      "doi": "10.1109/tnnls.2020.2979670",
+      "title": "A Survey of the Usages of Deep Learning for Natural Language Processing",
+      "publisher": "Institute of Electrical and Electronics Engineers",
+      "is_oa": true,
+      "resolution": "oa",
+      "resolution_detail": {
+        "source": "openalex",
+        "oa_url": "https://arxiv.org/pdf/1807.10854"
+      }
+    },
+    {
+      "doi": "10.1109/access.2020.2974101",
+      "title": "Feature Extraction and Analysis of Natural Language Processing for Deep Learning English Language",
+      "publisher": "Institute of Electrical and Electronics Engineers",
+      "is_oa": true,
+      "resolution": "oa",
+      "resolution_detail": {
+        "source": "openalex",
+        "oa_url": "https://ieeexplore.ieee.org/ielx7/6287639/8948470/08999624.pdf"
+      }
+    },
+    {
+      "doi": "10.1016/bs.host.2018.05.001",
+      "title": "Deep Learning for Natural Language Processing",
+      "publisher": "Elsevier BV",
+      "is_oa": false,
+      "resolution": "solr_domain",
+      "resolution_detail": {
+        "source": "solr_domain",
+        "matched_domain": "doi.org",
+        "solr_db_name": "International Tables for Crystallography (2006 Edition)",
+        "solr_db_id": "61245145010003610",
+        "proxy_needed": true
+      }
+    },
+    {
+      "doi": "10.48550/arxiv.1901.06796",
+      "title": "Adversarial Attacks on Deep Learning Models in Natural Language Processing: A Survey",
+      "publisher": "Cornell University",
+      "is_oa": true,
+      "resolution": "oa",
+      "resolution_detail": {
+        "source": "openalex",
+        "oa_url": "https://arxiv.org/pdf/1901.06796"
+      }
+    },
+    {
+      "doi": "10.1007/978-1-4842-3685-7",
+      "title": "Deep Learning for Natural Language Processing",
+      "publisher": "",
+      "is_oa": true,
+      "resolution": "oa",
+      "resolution_detail": {
+        "source": "openalex",
+        "oa_url": "https://link.springer.com/content/pdf/bfm:978-1-4842-3685-7/1?pdf=chapter%20toc"
+      }
+    },
+    {
+      "doi": "10.1126/science.1152509",
+      "title": "Coral Reefs Under Rapid Climate Change and Ocean Acidification",
+      "publisher": "American Association for the Advancement of Science",
+      "is_oa": true,
+      "resolution": "oa",
+      "resolution_detail": {
+        "source": "openalex",
+        "oa_url": "https://openresearch-repository.anu.edu.au/bitstreams/ab9744aa-7521-4de0-8d87-55d2919d2206/download"
+      }
+    },
+    {
+      "doi": "10.1073/pnas.0804478105",
+      "title": "Ocean acidification causes bleaching and productivity loss in coral reef builders",
+      "publisher": "National Academy of Sciences",
+      "is_oa": true,
+      "resolution": "oa",
+      "resolution_detail": {
+        "source": "openalex",
+        "oa_url": "https://www.ncbi.nlm.nih.gov/pmc/articles/2580748"
+      }
+    },
+    {
+      "doi": "10.3389/fmars.2017.00158",
+      "title": "Coral Reef Ecosystems under Climate Change and Ocean Acidification",
+      "publisher": "Frontiers Media",
+      "is_oa": true,
+      "resolution": "oa",
+      "resolution_detail": {
+        "source": "openalex",
+        "oa_url": "https://www.frontiersin.org/articles/10.3389/fmars.2017.00158/pdf"
+      }
+    },
+    {
+      "doi": "10.1126/science.1204794",
+      "title": "Projecting Coral Reef Futures Under Global Warming and Ocean Acidification",
+      "publisher": "American Association for the Advancement of Science",
+      "is_oa": false,
+      "resolution": "solr_domain",
+      "resolution_detail": {
+        "source": "solr_domain",
+        "matched_domain": "doi.org",
+        "solr_db_name": "International Tables for Crystallography (2006 Edition)",
+        "solr_db_id": "61245145010003610",
+        "proxy_needed": true
+      }
+    },
+    {
+      "doi": "10.5670/oceanog.2009.101",
+      "title": "Coral Reefs and Ocean Acidification",
+      "publisher": "Oceanography Society",
+      "is_oa": true,
+      "resolution": "oa",
+      "resolution_detail": {
+        "source": "openalex",
+        "oa_url": "https://tos.org/oceanography/assets/docs/22-4_kleypas.pdf"
+      }
+    },
+    {
+      "doi": "10.1038/nature17155",
+      "title": "Reversal of ocean acidification enhances net coral reef calcification",
+      "publisher": "Nature Portfolio",
+      "is_oa": false,
+      "resolution": "solr_domain",
+      "resolution_detail": {
+        "source": "solr_domain",
+        "matched_domain": "doi.org",
+        "solr_db_name": "International Tables for Crystallography (2006 Edition)",
+        "solr_db_id": "61245145010003610",
+        "proxy_needed": true
+      }
+    },
+    {
+      "doi": "10.1111/j.1365-2486.2010.02364.x",
+      "title": "Ocean acidification and warming will lower coral reef resilience",
+      "publisher": "Wiley",
+      "is_oa": true,
+      "resolution": "oa",
+      "resolution_detail": {
+        "source": "openalex",
+        "oa_url": "http://europepmc.org/articles/PMC3597261"
+      }
+    },
+    {
+      "doi": "10.1146/annurev-marine-121211-172241",
+      "title": "Ocean Acidification and Coral Reefs: Effects on Breakdown, Dissolution, and Net Ecosystem Calcification",
+      "publisher": "Annual Reviews",
+      "is_oa": false,
+      "resolution": "solr_domain",
+      "resolution_detail": {
+        "source": "solr_domain",
+        "matched_domain": "doi.org",
+        "solr_db_name": "International Tables for Crystallography (2006 Edition)",
+        "solr_db_id": "61245145010003610",
+        "proxy_needed": true
+      }
+    },
+    {
+      "doi": "10.1073/pnas.2015265118",
+      "title": "Global declines in coral reef calcium carbonate production under ocean acidification and warming",
+      "publisher": "National Academy of Sciences",
+      "is_oa": true,
+      "resolution": "oa",
+      "resolution_detail": {
+        "source": "openalex",
+        "oa_url": "https://refubium.fu-berlin.de/handle/fub188/31740"
+      }
+    },
+    {
+      "doi": "10.1371/journal.pone.0034659",
+      "title": "Major Cellular and Physiological Impacts of Ocean Acidification on a Reef Building Coral",
+      "publisher": "Public Library of Science",
+      "is_oa": true,
+      "resolution": "oa",
+      "resolution_detail": {
+        "source": "openalex",
+        "oa_url": "https://journals.plos.org/plosone/article/file?id=10.1371/journal.pone.0034659&type=printable"
+      }
+    },
+    {
+      "doi": "10.1111/j.1365-2486.2011.02510.x",
+      "title": "Coral reefs modify their seawater carbon chemistry \u2013 implications for impacts of ocean acidification",
+      "publisher": "Wiley",
+      "is_oa": true,
+      "resolution": "oa",
+      "resolution_detail": {
+        "source": "openalex",
+        "oa_url": "https://zenodo.org/record/3436479"
+      }
+    },
+    {
+      "doi": "10.1038/nclimate2380",
+      "title": "Benthic coral reef calcium carbonate dissolution in an acidifying ocean",
+      "publisher": "Nature Portfolio",
+      "is_oa": false,
+      "resolution": "solr_domain",
+      "resolution_detail": {
+        "source": "solr_domain",
+        "matched_domain": "doi.org",
+        "solr_db_name": "International Tables for Crystallography (2006 Edition)",
+        "solr_db_id": "61245145010003610",
+        "proxy_needed": true
+      }
+    },
+    {
+      "doi": "10.3354/meps08137",
+      "title": "Interacting effects of elevated temperature and ocean acidification on the aerobic performance of coral reef fishes",
+      "publisher": "Inter-Research",
+      "is_oa": true,
+      "resolution": "oa",
+      "resolution_detail": {
+        "source": "openalex",
+        "oa_url": "https://www.int-res.com/articles/meps2009/388/m388p235.pdf"
+      }
+    },
+    {
+      "doi": "10.1111/gcb.12394",
+      "title": "Opposite latitudinal gradients in projected ocean acidification and bleaching impacts on coral reefs",
+      "publisher": "Wiley",
+      "is_oa": false,
+      "resolution": "solr_domain",
+      "resolution_detail": {
+        "source": "solr_domain",
+        "matched_domain": "doi.org",
+        "solr_db_name": "International Tables for Crystallography (2006 Edition)",
+        "solr_db_id": "61245145010003610",
+        "proxy_needed": true
+      }
+    },
+    {
+      "doi": "10.1029/2011jc007655",
+      "title": "Impacts of ocean acidification in naturally variable coral reef flat ecosystems",
+      "publisher": "American Geophysical Union",
+      "is_oa": false,
+      "resolution": "solr_domain",
+      "resolution_detail": {
+        "source": "solr_domain",
+        "matched_domain": "doi.org",
+        "solr_db_name": "International Tables for Crystallography (2006 Edition)",
+        "solr_db_id": "61245145010003610",
+        "proxy_needed": true
+      }
+    },
+    {
+      "doi": "10.1038/s41586-019-1903-y",
+      "title": "Ocean acidification does not impair the behaviour of coral reef fishes",
+      "publisher": "Nature Portfolio",
+      "is_oa": true,
+      "resolution": "oa",
+      "resolution_detail": {
+        "source": "openalex",
+        "oa_url": "https://figshare.com/articles/preprint/Ocean_acidification_does_not_impair_the_behaviour_of_coral_reef_fishes/11625570"
+      }
+    },
+    {
+      "doi": "10.1088/1748-9326/7/2/024026",
+      "title": "Tropical seagrass meadows modify seawater carbon chemistry: implications for coral reefs impacted by ocean acidification",
+      "publisher": "IOP Publishing",
+      "is_oa": true,
+      "resolution": "oa",
+      "resolution_detail": {
+        "source": "openalex",
+        "oa_url": "https://iopscience.iop.org/article/10.1088/1748-9326/7/2/024026/pdf"
+      }
+    },
+    {
+      "doi": "10.1146/annurev-environ-110615-085610",
+      "title": "Coral Reefs Under Climate Change and Ocean Acidification: Challenges and Opportunities for Management and Policy",
+      "publisher": "Annual Reviews",
+      "is_oa": true,
+      "resolution": "oa",
+      "resolution_detail": {
+        "source": "openalex",
+        "oa_url": "https://www.annualreviews.org/doi/pdf/10.1146/annurev-environ-110615-085610"
+      }
+    },
+    {
+      "doi": "10.1126/sciadv.aar8028",
+      "title": "Epigenome-associated phenotypic acclimatization to ocean acidification in a reef-building coral",
+      "publisher": "American Association for the Advancement of Science",
+      "is_oa": true,
+      "resolution": "oa",
+      "resolution_detail": {
+        "source": "openalex",
+        "oa_url": "https://advances.sciencemag.org/content/advances/4/6/eaar8028.full.pdf"
+      }
+    },
+    {
+      "doi": "10.1002/j.2158-1592.2001.tb00001.x",
+      "title": "DEFINING SUPPLY CHAIN MANAGEMENT",
+      "publisher": "Wiley",
+      "is_oa": false,
+      "resolution": "solr_domain",
+      "resolution_detail": {
+        "source": "solr_domain",
+        "matched_domain": "doi.org",
+        "solr_db_name": "International Tables for Crystallography (2006 Edition)",
+        "solr_db_id": "61245145010003610",
+        "proxy_needed": true
+      }
+    },
+    {
+      "doi": "10.1016/j.jclepro.2008.04.020",
+      "title": "From a literature review to a conceptual framework for sustainable supply chain management",
+      "publisher": "Elsevier BV",
+      "is_oa": false,
+      "resolution": "solr_domain",
+      "resolution_detail": {
+        "source": "solr_domain",
+        "matched_domain": "doi.org",
+        "solr_db_name": "International Tables for Crystallography (2006 Edition)",
+        "solr_db_id": "61245145010003610",
+        "proxy_needed": true
+      }
+    },
+    {
+      "doi": "10.1016/s0019-8501(99)00113-3",
+      "title": "Issues in Supply Chain Management",
+      "publisher": "Elsevier BV",
+      "is_oa": false,
+      "resolution": "solr_domain",
+      "resolution_detail": {
+        "source": "solr_domain",
+        "matched_domain": "doi.org",
+        "solr_db_name": "International Tables for Crystallography (2006 Edition)",
+        "solr_db_id": "61245145010003610",
+        "proxy_needed": true
+      }
+    },
+    {
+      "doi": "10.1111/j.1468-2370.2007.00202.x",
+      "title": "Green supply\u2010chain management: A state\u2010of\u2010the\u2010art literature review",
+      "publisher": "Wiley",
+      "is_oa": true,
+      "resolution": "oa",
+      "resolution_detail": {
+        "source": "openalex",
+        "oa_url": "https://onlinelibrary.wiley.com/doi/pdfdirect/10.1111/j.1468-2370.2007.00202.x"
+      }
+    },
+    {
+      "doi": "10.1080/00207543.2018.1533261",
+      "title": "Blockchain technology and its relationships to sustainable supply chain management",
+      "publisher": "Taylor & Francis",
+      "is_oa": false,
+      "resolution": "solr_domain",
+      "resolution_detail": {
+        "source": "solr_domain",
+        "matched_domain": "doi.org",
+        "solr_db_name": "International Tables for Crystallography (2006 Edition)",
+        "solr_db_id": "61245145010003610",
+        "proxy_needed": true
+      }
+    },
+    {
+      "doi": "10.1108/09600030810882816",
+      "title": "A framework of sustainable supply chain management: moving toward new theory",
+      "publisher": "Emerald Publishing Limited",
+      "is_oa": false,
+      "resolution": "solr_domain",
+      "resolution_detail": {
+        "source": "solr_domain",
+        "matched_domain": "doi.org",
+        "solr_db_name": "International Tables for Crystallography (2006 Edition)",
+        "solr_db_id": "61245145010003610",
+        "proxy_needed": true
+      }
+    },
+    {
+      "doi": "10.1108/09574099810805807",
+      "title": "Supply Chain Management: Implementation Issues and Research Opportunities",
+      "publisher": "Emerald Publishing Limited",
+      "is_oa": false,
+      "resolution": "solr_domain",
+      "resolution_detail": {
+        "source": "solr_domain",
+        "matched_domain": "doi.org",
+        "solr_db_name": "International Tables for Crystallography (2006 Edition)",
+        "solr_db_id": "61245145010003610",
+        "proxy_needed": true
+      }
+    },
+    {
+      "doi": "10.1108/09574099710805556",
+      "title": "Supply Chain Management: More Than a New Name for Logistics",
+      "publisher": "Emerald Publishing Limited",
+      "is_oa": false,
+      "resolution": "solr_domain",
+      "resolution_detail": {
+        "source": "solr_domain",
+        "matched_domain": "doi.org",
+        "solr_db_name": "International Tables for Crystallography (2006 Edition)",
+        "solr_db_id": "61245145010003610",
+        "proxy_needed": true
+      }
+    },
+    {
+      "doi": "10.1016/j.jom.2003.12.007",
+      "title": "Towards a theory of supply chain management: the constructs and measurements",
+      "publisher": "Wiley",
+      "is_oa": false,
+      "resolution": "solr_domain",
+      "resolution_detail": {
+        "source": "solr_domain",
+        "matched_domain": "doi.org",
+        "solr_db_name": "International Tables for Crystallography (2006 Edition)",
+        "solr_db_id": "61245145010003610",
+        "proxy_needed": true
+      }
+    },
+    {
+      "doi": "10.1007/978-3-030-89743-7",
+      "title": "Logistics and Supply Chain Management",
+      "publisher": "Springer Science+Business Media",
+      "is_oa": false,
+      "resolution": "solr_domain",
+      "resolution_detail": {
+        "source": "solr_domain",
+        "matched_domain": "doi.org",
+        "solr_db_name": "International Tables for Crystallography (2006 Edition)",
+        "solr_db_id": "61245145010003610",
+        "proxy_needed": true
+      }
+    },
+    {
+      "doi": "10.1016/j.ejor.2008.05.007",
+      "title": "Facility location and supply chain management \u2013 A review",
+      "publisher": "Elsevier BV",
+      "is_oa": false,
+      "resolution": "solr_domain",
+      "resolution_detail": {
+        "source": "solr_domain",
+        "matched_domain": "doi.org",
+        "solr_db_name": "International Tables for Crystallography (2006 Edition)",
+        "solr_db_id": "61245145010003610",
+        "proxy_needed": true
+      }
+    },
+    {
+      "doi": "10.1016/j.ijpe.2015.01.003",
+      "title": "Green supply chain management: A review and bibliometric analysis",
+      "publisher": "Elsevier BV",
+      "is_oa": false,
+      "resolution": "solr_domain",
+      "resolution_detail": {
+        "source": "solr_domain",
+        "matched_domain": "doi.org",
+        "solr_db_name": "International Tables for Crystallography (2006 Edition)",
+        "solr_db_id": "61245145010003610",
+        "proxy_needed": true
+      }
+    },
+    {
+      "doi": "10.1108/02656710310461350",
+      "title": "Supply Chain Management: Strategy, Planning, and Operation",
+      "publisher": "Emerald Publishing Limited",
+      "is_oa": true,
+      "resolution": "oa",
+      "resolution_detail": {
+        "source": "openalex",
+        "oa_url": "https://dk.um.si/IzpisGradiva.php?id=31035"
+      }
+    },
+    {
+      "doi": "10.1016/j.ijpe.2010.11.010",
+      "title": "An organizational theoretic review of green supply chain management literature",
+      "publisher": "Elsevier BV",
+      "is_oa": false,
+      "resolution": "solr_domain",
+      "resolution_detail": {
+        "source": "solr_domain",
+        "matched_domain": "doi.org",
+        "solr_db_name": "International Tables for Crystallography (2006 Edition)",
+        "solr_db_id": "61245145010003610",
+        "proxy_needed": true
+      }
+    },
+    {
+      "doi": "10.1016/j.omega.2004.08.002",
+      "title": "The impact of supply chain management practices on competitive advantage and organizational performance",
+      "publisher": "Elsevier BV",
+      "is_oa": false,
+      "resolution": "solr_domain",
+      "resolution_detail": {
+        "source": "solr_domain",
+        "matched_domain": "doi.org",
+        "solr_db_name": "International Tables for Crystallography (2006 Edition)",
+        "solr_db_id": "61245145010003610",
+        "proxy_needed": true
+      }
+    },
+    {
+      "doi": "10.1016/j.ijinfomgt.2017.12.005",
+      "title": "1 Blockchain\u2019s roles in meeting key supply chain management objectives",
+      "publisher": "Elsevier BV",
+      "is_oa": false,
+      "resolution": "solr_domain",
+      "resolution_detail": {
+        "source": "solr_domain",
+        "matched_domain": "doi.org",
+        "solr_db_name": "International Tables for Crystallography (2006 Edition)",
+        "solr_db_id": "61245145010003610",
+        "proxy_needed": true
+      }
+    },
+    {
+      "doi": "10.1108/14635770510609015",
+      "title": "Performance measurement for green supply chain management",
+      "publisher": "Emerald Publishing Limited",
+      "is_oa": false,
+      "resolution": "solr_domain",
+      "resolution_detail": {
+        "source": "solr_domain",
+        "matched_domain": "doi.org",
+        "solr_db_name": "International Tables for Crystallography (2006 Edition)",
+        "solr_db_id": "61245145010003610",
+        "proxy_needed": true
+      }
+    },
+    {
+      "doi": "10.1007/978-1-4615-4949-9",
+      "title": "Quantitative Models for Supply Chain Management",
+      "publisher": "Springer Science+Business Media",
+      "is_oa": false,
+      "resolution": "solr_domain",
+      "resolution_detail": {
+        "source": "solr_domain",
+        "matched_domain": "doi.org",
+        "solr_db_name": "International Tables for Crystallography (2006 Edition)",
+        "solr_db_id": "61245145010003610",
+        "proxy_needed": true
+      }
+    },
+    {
+      "doi": "10.1007/s10608-012-9476-1",
+      "title": "The Efficacy of Cognitive Behavioral Therapy: A Review of Meta-analyses",
+      "publisher": "Springer Science+Business Media",
+      "is_oa": true,
+      "resolution": "oa",
+      "resolution_detail": {
+        "source": "openalex",
+        "oa_url": "https://www.ncbi.nlm.nih.gov/pmc/articles/3584580"
+      }
+    },
+    {
+      "doi": "10.1016/j.cpr.2005.07.003",
+      "title": "The empirical status of cognitive-behavioral therapy: A review of meta-analyses",
+      "publisher": "Elsevier BV",
+      "is_oa": false,
+      "resolution": "solr_domain",
+      "resolution_detail": {
+        "source": "solr_domain",
+        "matched_domain": "doi.org",
+        "solr_db_name": "International Tables for Crystallography (2006 Edition)",
+        "solr_db_id": "61245145010003610",
+        "proxy_needed": true
+      }
+    },
+    {
+      "doi": "10.1056/nejmoa0804633",
+      "title": "Cognitive Behavioral Therapy, Sertraline, or a Combination in Childhood Anxiety",
+      "publisher": "Massachusetts Medical Society",
+      "is_oa": true,
+      "resolution": "oa",
+      "resolution_detail": {
+        "source": "openalex",
+        "oa_url": "https://www.nejm.org/doi/pdf/10.1056/NEJMoa0804633?articleTools=true"
+      }
+    },
+    {
+      "doi": "10.1001/jama.292.7.807",
+      "title": "Fluoxetine, Cognitive-Behavioral Therapy, and Their Combination for Adolescents With Depression",
+      "publisher": "American Medical Association",
+      "is_oa": true,
+      "resolution": "oa",
+      "resolution_detail": {
+        "source": "openalex",
+        "oa_url": "https://jamanetwork.com/journals/jama/articlepdf/199274/joc41538.pdf"
+      }
+    },
+    {
+      "doi": "10.4088/jcp.v69n0415",
+      "title": "Cognitive-Behavioral Therapy for Adult Anxiety Disorders",
+      "publisher": "Physicians Postgraduate Press, Inc.",
+      "is_oa": false,
+      "resolution": "solr_domain",
+      "resolution_detail": {
+        "source": "solr_domain",
+        "matched_domain": "doi.org",
+        "solr_db_name": "International Tables for Crystallography (2006 Edition)",
+        "solr_db_id": "61245145010003610",
+        "proxy_needed": true
+      }
+    },
+    {
+      "doi": "10.1080/16506070802473239",
+      "title": "Cognitive Behavior Therapy and Eating Disorders",
+      "publisher": "Taylor & Francis",
+      "is_oa": false,
+      "resolution": "solr_domain",
+      "resolution_detail": {
+        "source": "solr_domain",
+        "matched_domain": "doi.org",
+        "solr_db_name": "International Tables for Crystallography (2006 Edition)",
+        "solr_db_id": "61245145010003610",
+        "proxy_needed": true
+      }
+    },
+    {
+      "doi": "10.7326/m14-2841",
+      "title": "Cognitive Behavioral Therapy for Chronic Insomnia",
+      "publisher": "American College of Physicians",
+      "is_oa": false,
+      "resolution": "solr_domain",
+      "resolution_detail": {
+        "source": "solr_domain",
+        "matched_domain": "doi.org",
+        "solr_db_name": "International Tables for Crystallography (2006 Edition)",
+        "solr_db_id": "61245145010003610",
+        "proxy_needed": true
+      }
+    },
+    {
+      "doi": "10.4088/jcp.09bk05121",
+      "title": "Cognitive Behavior Therapy and Eating Disorders",
+      "publisher": "Physicians Postgraduate Press, Inc.",
+      "is_oa": true,
+      "resolution": "oa",
+      "resolution_detail": {
+        "source": "openalex",
+        "oa_url": "https://www.psychiatrist.com/read-pdf/3149"
+      }
+    },
+    {
+      "doi": "10.1176/appi.psychotherapy.2008.62.4.422",
+      "title": "Cognitive Behavior Therapy and Eating Disorders",
+      "publisher": "American Psychiatric Association",
+      "is_oa": true,
+      "resolution": "oa",
+      "resolution_detail": {
+        "source": "openalex",
+        "oa_url": "https://psychotherapy.psychiatryonline.org/doi/pdf/10.1176/appi.psychotherapy.2008.62.4.422"
+      }
+    },
+    {
+      "doi": "10.2196/mental.7785",
+      "title": "Delivering Cognitive Behavior Therapy to Young Adults With Symptoms of Depression and Anxiety Using a Fully Automated Co",
+      "publisher": "JMIR Publications",
+      "is_oa": true,
+      "resolution": "oa",
+      "resolution_detail": {
+        "source": "openalex",
+        "oa_url": "https://mental.jmir.org/2017/2/e19/PDF"
+      }
+    },
+    {
+      "doi": "10.1001/jama.283.19.2529",
+      "title": "Cognitive-Behavioral Therapy, Imipramine, or Their Combination for Panic Disorder",
+      "publisher": "American Medical Association",
+      "is_oa": false,
+      "resolution": "solr_domain",
+      "resolution_detail": {
+        "source": "solr_domain",
+        "matched_domain": "doi.org",
+        "solr_db_name": "International Tables for Crystallography (2006 Edition)",
+        "solr_db_id": "61245145010003610",
+        "proxy_needed": true
+      }
+    },
+    {
+      "doi": "10.1001/jamapsychiatry.2020.4364",
+      "title": "Internet-Based Cognitive Behavioral Therapy for Depression",
+      "publisher": "American Medical Association",
+      "is_oa": true,
+      "resolution": "oa",
+      "resolution_detail": {
+        "source": "openalex",
+        "oa_url": "https://jamanetwork.com/journals/jamapsychiatry/articlepdf/2774861/jamapsychiatry_karyotaki_2021_oi_200080_1616513412.66229.pdf"
+      }
+    },
+    {
+      "doi": "10.1080/16506073.2017.1401115",
+      "title": "Internet-based vs. face-to-face cognitive behavior therapy for psychiatric and somatic disorders: an updated systematic ",
+      "publisher": "Taylor & Francis",
+      "is_oa": true,
+      "resolution": "oa",
+      "resolution_detail": {
+        "source": "openalex",
+        "oa_url": "https://www.tandfonline.com/doi/pdf/10.1080/16506073.2017.1401115?needAccess=true"
+      }
+    },
+    {
+      "doi": "10.1016/j.psc.2010.04.012",
+      "title": "Cognitive Behavioral Therapy for Substance Use Disorders",
+      "publisher": "Elsevier BV",
+      "is_oa": false,
+      "resolution": "solr_domain",
+      "resolution_detail": {
+        "source": "solr_domain",
+        "matched_domain": "doi.org",
+        "solr_db_name": "International Tables for Crystallography (2006 Edition)",
+        "solr_db_id": "61245145010003610",
+        "proxy_needed": true
+      }
+    },
+    {
+      "doi": "10.1001/jama.297.8.820",
+      "title": "Cognitive Behavioral Therapy for Posttraumatic Stress Disorder in Women",
+      "publisher": "American Medical Association",
+      "is_oa": true,
+      "resolution": "oa",
+      "resolution_detail": {
+        "source": "openalex",
+        "oa_url": "https://jamanetwork.com/journals/jama/articlepdf/205769/joc70009_820_830_1636050096.16253.pdf"
+      }
+    },
+    {
+      "doi": "10.1001/archpsyc.57.5.459",
+      "title": "A Multicenter Comparison of Cognitive-Behavioral Therapy and Interpersonal Psychotherapy for Bulimia Nervosa",
+      "publisher": "American Medical Association",
+      "is_oa": false,
+      "resolution": "solr_domain",
+      "resolution_detail": {
+        "source": "solr_domain",
+        "matched_domain": "doi.org",
+        "solr_db_name": "International Tables for Crystallography (2006 Edition)",
+        "solr_db_id": "61245145010003610",
+        "proxy_needed": true
+      }
+    },
+    {
+      "doi": "10.1001/jama.292.16.1969",
+      "title": "Cognitive-Behavior Therapy, Sertraline, and Their Combination for Children and Adolescents With Obsessive-Compulsive Dis",
+      "publisher": "American Medical Association",
+      "is_oa": false,
+      "resolution": "solr_domain",
+      "resolution_detail": {
+        "source": "solr_domain",
+        "matched_domain": "doi.org",
+        "solr_db_name": "International Tables for Crystallography (2006 Edition)",
+        "solr_db_id": "61245145010003610",
+        "proxy_needed": true
+      }
+    },
+    {
+      "doi": "10.1002/er.4444",
+      "title": "A review of marine renewable energy storage",
+      "publisher": "Wiley",
+      "is_oa": false,
+      "resolution": "solr_domain",
+      "resolution_detail": {
+        "source": "solr_domain",
+        "matched_domain": "doi.org",
+        "solr_db_name": "International Tables for Crystallography (2006 Edition)",
+        "solr_db_id": "61245145010003610",
+        "proxy_needed": true
+      }
+    },
+    {
+      "doi": "10.1002/adma.201604799",
+      "title": "Electrochemical Reduction of N<sub>2</sub> under Ambient Conditions for Artificial N<sub>2</sub> Fixation and Renewable ",
+      "publisher": "Chinese Academy of Sciences",
+      "is_oa": false,
+      "resolution": "solr_domain",
+      "resolution_detail": {
+        "source": "solr_domain",
+        "matched_domain": "doi.org",
+        "solr_db_name": "International Tables for Crystallography (2006 Edition)",
+        "solr_db_id": "61245145010003610",
+        "proxy_needed": true
+      }
+    },
+    {
+      "doi": "10.1109/tec.2003.822305",
+      "title": "Energy Storage and Its Use With Intermittent Renewable Energy",
+      "publisher": "Institute of Electrical and Electronics Engineers",
+      "is_oa": true,
+      "resolution": "oa",
+      "resolution_detail": {
+        "source": "openalex",
+        "oa_url": "https://dspace.lboro.ac.uk/2134/9726"
+      }
+    },
+    {
+      "doi": "10.1021/acs.chemrev.2c00407",
+      "title": "Phase Change Materials for Renewable Energy Storage at Intermediate Temperatures",
+      "publisher": "American Chemical Society",
+      "is_oa": false,
+      "resolution": "solr_domain",
+      "resolution_detail": {
+        "source": "solr_domain",
+        "matched_domain": "doi.org",
+        "solr_db_name": "International Tables for Crystallography (2006 Edition)",
+        "solr_db_id": "61245145010003610",
+        "proxy_needed": true
+      }
+    },
+    {
+      "doi": "10.1016/j.rser.2013.10.004",
+      "title": "Prospects of applying ionic liquids and deep eutectic solvents for renewable energy storage by means of redox flow batte",
+      "publisher": "Elsevier BV",
+      "is_oa": false,
+      "resolution": "solr_domain",
+      "resolution_detail": {
+        "source": "solr_domain",
+        "matched_domain": "doi.org",
+        "solr_db_name": "International Tables for Crystallography (2006 Edition)",
+        "solr_db_id": "61245145010003610",
+        "proxy_needed": true
+      }
+    },
+    {
+      "doi": "10.1002/adma.201805513",
+      "title": "Plasmon\u2010Enhanced Photoelectrochemical Water Splitting for Efficient Renewable Energy Storage",
+      "publisher": "Palack\u00fd University Olomouc",
+      "is_oa": false,
+      "resolution": "solr_domain",
+      "resolution_detail": {
+        "source": "solr_domain",
+        "matched_domain": "doi.org",
+        "solr_db_name": "International Tables for Crystallography (2006 Edition)",
+        "solr_db_id": "61245145010003610",
+        "proxy_needed": true
+      }
+    },
+    {
+      "doi": "10.1021/acsenergylett.7b01302",
+      "title": "A Sulfonate-Functionalized Viologen Enabling Neutral Cation Exchange, Aqueous Organic Redox Flow Batteries toward Renewa",
+      "publisher": "American Chemical Society",
+      "is_oa": false,
+      "resolution": "solr_domain",
+      "resolution_detail": {
+        "source": "solr_domain",
+        "matched_domain": "doi.org",
+        "solr_db_name": "International Tables for Crystallography (2006 Edition)",
+        "solr_db_id": "61245145010003610",
+        "proxy_needed": true
+      }
+    },
+    {
+      "doi": "10.1039/c2cs35230c",
+      "title": "Nanomaterials for renewable energy production and storage",
+      "publisher": "Royal Society of Chemistry",
+      "is_oa": true,
+      "resolution": "oa",
+      "resolution_detail": {
+        "source": "openalex",
+        "oa_url": "http://infoscience.epfl.ch/record/184637"
+      }
+    },
+    {
+      "doi": "10.1016/j.egyr.2024.08.019",
+      "title": "Navigating challenges in large-scale renewable energy storage: Barriers, solutions, and innovations",
+      "publisher": "Elsevier BV",
+      "is_oa": true,
+      "resolution": "oa",
+      "resolution_detail": {
+        "source": "openalex",
+        "oa_url": "https://doi.org/10.1016/j.egyr.2024.08.019"
+      }
+    },
+    {
+      "doi": "10.1039/c6ra22242k",
+      "title": "Zero gap alkaline electrolysis cell design for renewable energy storage as hydrogen gas",
+      "publisher": "Royal Society of Chemistry",
+      "is_oa": false,
+      "resolution": "solr_domain",
+      "resolution_detail": {
+        "source": "solr_domain",
+        "matched_domain": "doi.org",
+        "solr_db_name": "International Tables for Crystallography (2006 Edition)",
+        "solr_db_id": "61245145010003610",
+        "proxy_needed": true
+      }
+    },
+    {
+      "doi": "10.1021/es204126r",
+      "title": "Capacitive Bioanodes Enable Renewable Energy Storage in Microbial Fuel Cells",
+      "publisher": "American Chemical Society",
+      "is_oa": false,
+      "resolution": "solr_domain",
+      "resolution_detail": {
+        "source": "solr_domain",
+        "matched_domain": "doi.org",
+        "solr_db_name": "International Tables for Crystallography (2006 Edition)",
+        "solr_db_id": "61245145010003610",
+        "proxy_needed": true
+      }
+    },
+    {
+      "doi": "10.1002/cssc.201301061",
+      "title": "Superior Pseudocapacitive Behavior of Confined Lignin Nanocrystals for Renewable Energy\u2010Storage Materials",
+      "publisher": "Wiley",
+      "is_oa": false,
+      "resolution": "solr_domain",
+      "resolution_detail": {
+        "source": "solr_domain",
+        "matched_domain": "doi.org",
+        "solr_db_name": "International Tables for Crystallography (2006 Edition)",
+        "solr_db_id": "61245145010003610",
+        "proxy_needed": true
+      }
+    },
+    {
+      "doi": "10.1016/j.rser.2013.08.001",
+      "title": "Redox flow batteries for the storage of renewable energy: A review",
+      "publisher": "Elsevier BV",
+      "is_oa": false,
+      "resolution": "solr_domain",
+      "resolution_detail": {
+        "source": "solr_domain",
+        "matched_domain": "doi.org",
+        "solr_db_name": "International Tables for Crystallography (2006 Edition)",
+        "solr_db_id": "61245145010003610",
+        "proxy_needed": true
+      }
+    },
+    {
+      "doi": "10.1109/tsg.2017.2752303",
+      "title": "Impact of Electric Vehicles on the Expansion Planning of Distribution Systems Considering Renewable Energy, Storage, and",
+      "publisher": "Institute of Electrical and Electronics Engineers",
+      "is_oa": false,
+      "resolution": "solr_domain",
+      "resolution_detail": {
+        "source": "solr_domain",
+        "matched_domain": "doi.org",
+        "solr_db_name": "International Tables for Crystallography (2006 Edition)",
+        "solr_db_id": "61245145010003610",
+        "proxy_needed": true
+      }
+    },
+    {
+      "doi": "10.1016/j.ijhydene.2016.06.243",
+      "title": "Overview of energy storage in renewable energy systems",
+      "publisher": "Elsevier BV",
+      "is_oa": false,
+      "resolution": "solr_domain",
+      "resolution_detail": {
+        "source": "solr_domain",
+        "matched_domain": "doi.org",
+        "solr_db_name": "International Tables for Crystallography (2006 Edition)",
+        "solr_db_id": "61245145010003610",
+        "proxy_needed": true
+      }
+    },
+    {
+      "doi": "10.1016/j.apenergy.2023.120817",
+      "title": "Optimal sizing of renewable energy storage: A techno-economic analysis of hydrogen, battery and hybrid systems consideri",
+      "publisher": "Elsevier BV",
+      "is_oa": true,
+      "resolution": "oa",
+      "resolution_detail": {
+        "source": "openalex",
+        "oa_url": "https://doi.org/10.1016/j.apenergy.2023.120817"
+      }
+    },
+    {
+      "doi": "10.1016/j.compchemeng.2020.106785",
+      "title": "Using hydrogen and ammonia for renewable energy storage: A geographically comprehensive techno-economic study",
+      "publisher": "Elsevier BV",
+      "is_oa": true,
+      "resolution": "oa",
+      "resolution_detail": {
+        "source": "openalex",
+        "oa_url": "https://www.sciencedirect.com/science/article/am/pii/S0098135419313055"
+      }
+    },
+    {
+      "doi": "10.1177/0957650917731181",
+      "title": "Renewable energy storage in geological formations",
+      "publisher": "SAGE Publishing",
+      "is_oa": false,
+      "resolution": "solr_domain",
+      "resolution_detail": {
+        "source": "solr_domain",
+        "matched_domain": "doi.org",
+        "solr_db_name": "International Tables for Crystallography (2006 Edition)",
+        "solr_db_id": "61245145010003610",
+        "proxy_needed": true
+      }
+    },
+    {
+      "doi": "10.1016/j.rser.2018.03.047",
+      "title": "Battery energy storage system size determination in renewable energy systems: A review",
+      "publisher": "Elsevier BV",
+      "is_oa": false,
+      "resolution": "solr_domain",
+      "resolution_detail": {
+        "source": "solr_domain",
+        "matched_domain": "doi.org",
+        "solr_db_name": "International Tables for Crystallography (2006 Edition)",
+        "solr_db_id": "61245145010003610",
+        "proxy_needed": true
+      }
+    },
+    {
+      "doi": "10.1002/ente.201500322",
+      "title": "Methanol for Renewable Energy Storage and Utilization",
+      "publisher": "Wiley",
+      "is_oa": false,
+      "resolution": "solr_domain",
+      "resolution_detail": {
+        "source": "solr_domain",
+        "matched_domain": "doi.org",
+        "solr_db_name": "International Tables for Crystallography (2006 Edition)",
+        "solr_db_id": "61245145010003610",
+        "proxy_needed": true
+      }
+    },
+    {
+      "doi": "10.1016/j.scs.2020.102677",
+      "title": "An urban planning sustainability framework: Systems approach to blue green urban design",
+      "publisher": "Elsevier BV",
+      "is_oa": true,
+      "resolution": "oa",
+      "resolution_detail": {
+        "source": "openalex",
+        "oa_url": "http://hdl.handle.net/10044/1/85211"
+      }
+    },
+    {
+      "doi": "10.1080/01944369608975696",
+      "title": "Green Cities, Growing Cities, Just Cities?: Urban Planning and the Contradictions of Sustainable Development",
+      "publisher": "Taylor & Francis",
+      "is_oa": false,
+      "resolution": "solr_domain",
+      "resolution_detail": {
+        "source": "solr_domain",
+        "matched_domain": "doi.org",
+        "solr_db_name": "International Tables for Crystallography (2006 Edition)",
+        "solr_db_id": "61245145010003610",
+        "proxy_needed": true
+      }
+    },
+    {
+      "doi": "10.1007/s10980-012-9799-z",
+      "title": "Urban landscape sustainability and resilience: the promise and challenges of integrating ecology with urban planning and",
+      "publisher": "Springer Science+Business Media",
+      "is_oa": false,
+      "resolution": "solr_domain",
+      "resolution_detail": {
+        "source": "solr_domain",
+        "matched_domain": "doi.org",
+        "solr_db_name": "International Tables for Crystallography (2006 Edition)",
+        "solr_db_id": "61245145010003610",
+        "proxy_needed": true
+      }
+    },
+    {
+      "doi": "10.1023/a:1006697118620",
+      "title": "Economic, social, and environmental sustainability in development theory and urban planning practice",
+      "publisher": "Springer Science+Business Media",
+      "is_oa": false,
+      "resolution": "solr_domain",
+      "resolution_detail": {
+        "source": "solr_domain",
+        "matched_domain": "doi.org",
+        "solr_db_name": "International Tables for Crystallography (2006 Edition)",
+        "solr_db_id": "61245145010003610",
+        "proxy_needed": true
+      }
+    },
+    {
+      "doi": "10.3390/su2082499",
+      "title": "Multifunctional Urban Agriculture for Sustainable Land Use Planning in the United States",
+      "publisher": "Multidisciplinary Digital Publishing Institute",
+      "is_oa": true,
+      "resolution": "oa",
+      "resolution_detail": {
+        "source": "openalex",
+        "oa_url": "https://www.mdpi.com/2071-1050/2/8/2499/pdf"
+      }
+    },
+    {
+      "doi": "10.1016/j.eiar.2020.106515",
+      "title": "Urban water resource management for sustainable environment planning using artificial intelligence techniques",
+      "publisher": "Elsevier BV",
+      "is_oa": false,
+      "resolution": "solr_domain",
+      "resolution_detail": {
+        "source": "solr_domain",
+        "matched_domain": "doi.org",
+        "solr_db_name": "International Tables for Crystallography (2006 Edition)",
+        "solr_db_id": "61245145010003610",
+        "proxy_needed": true
+      }
+    },
+    {
+      "doi": "10.1080/713666490",
+      "title": "Urban Planning and Sustainable Development",
+      "publisher": "Taylor & Francis",
+      "is_oa": false,
+      "resolution": "solr_domain",
+      "resolution_detail": {
+        "source": "solr_domain",
+        "matched_domain": "doi.org",
+        "solr_db_name": "International Tables for Crystallography (2006 Edition)",
+        "solr_db_id": "61245145010003610",
+        "proxy_needed": true
+      }
+    },
+    {
+      "doi": "10.1016/j.scs.2023.104562",
+      "title": "Algorithmic urban planning for smart and sustainable development: Systematic review of the literature",
+      "publisher": "Elsevier BV",
+      "is_oa": true,
+      "resolution": "oa",
+      "resolution_detail": {
+        "source": "openalex",
+        "oa_url": "https://doi.org/10.1016/j.scs.2023.104562"
+      }
+    },
+    {
+      "doi": "10.1007/s13762-013-0491-x",
+      "title": "Rethinking sustainable urban development: towards an integrated planning and development process",
+      "publisher": "Springer Science+Business Media",
+      "is_oa": false,
+      "resolution": "solr_domain",
+      "resolution_detail": {
+        "source": "solr_domain",
+        "matched_domain": "doi.org",
+        "solr_db_name": "International Tables for Crystallography (2006 Edition)",
+        "solr_db_id": "61245145010003610",
+        "proxy_needed": true
+      }
+    },
+    {
+      "doi": "10.26868/25222708.2009.1083-1090",
+      "title": "CITYSIM: Comprehensive Micro-Simulation of Resource Flows for Sustainable Urban Planning",
+      "publisher": "",
+      "is_oa": true,
+      "resolution": "oa",
+      "resolution_detail": {
+        "source": "openalex",
+        "oa_url": "http://infoscience.epfl.ch/record/148717"
+      }
+    },
+    {
+      "doi": "10.1016/j.isprsjprs.2013.12.010",
+      "title": "Effects of green space spatial pattern on land surface temperature: Implications for sustainable urban planning and clim",
+      "publisher": "Elsevier BV",
+      "is_oa": true,
+      "resolution": "oa",
+      "resolution_detail": {
+        "source": "openalex",
+        "oa_url": "http://hdl.handle.net/10234/135506"
+      }
+    },
+    {
+      "doi": "10.1016/j.ese.2021.100130",
+      "title": "Towards carbon neutrality and China's 14th Five-Year Plan: Clean energy transition, sustainable urban development, and i",
+      "publisher": "Elsevier BV",
+      "is_oa": true,
+      "resolution": "oa",
+      "resolution_detail": {
+        "source": "openalex",
+        "oa_url": "https://doi.org/10.1016/j.ese.2021.100130"
+      }
+    },
+    {
+      "doi": "10.1016/j.landusepol.2009.02.003",
+      "title": "Mainstreaming sustainable development into a city's Master plan: A case of Urban Underground Space use",
+      "publisher": "Elsevier BV",
+      "is_oa": false,
+      "resolution": "solr_domain",
+      "resolution_detail": {
+        "source": "solr_domain",
+        "matched_domain": "doi.org",
+        "solr_db_name": "International Tables for Crystallography (2006 Edition)",
+        "solr_db_id": "61245145010003610",
+        "proxy_needed": true
+      }
+    },
+    {
+      "doi": "10.1051/matecconf/201710601032",
+      "title": "Urban-planning sustainability problems in a city natural framework",
+      "publisher": "EDP Sciences",
+      "is_oa": true,
+      "resolution": "oa",
+      "resolution_detail": {
+        "source": "openalex",
+        "oa_url": "https://www.matec-conferences.org/articles/matecconf/pdf/2017/20/matecconf_spbw2017_01032.pdf"
+      }
+    },
+    {
+      "doi": "10.1177/0885412203017004001",
+      "title": "Planning for Urban Heritage Places: Reconciling Conservation, Tourism, and Sustainable Development",
+      "publisher": "SAGE Publishing",
+      "is_oa": false,
+      "resolution": "solr_domain",
+      "resolution_detail": {
+        "source": "solr_domain",
+        "matched_domain": "doi.org",
+        "solr_db_name": "International Tables for Crystallography (2006 Edition)",
+        "solr_db_id": "61245145010003610",
+        "proxy_needed": true
+      }
+    },
+    {
+      "doi": "10.1016/s1352-0237(01)00307-0",
+      "title": "Human Development Report",
+      "publisher": "Elsevier BV",
+      "is_oa": false,
+      "resolution": "solr_domain",
+      "resolution_detail": {
+        "source": "solr_domain",
+        "matched_domain": "doi.org",
+        "solr_db_name": "International Tables for Crystallography (2006 Edition)",
+        "solr_db_id": "61245145010003610",
+        "proxy_needed": true
+      }
+    },
+    {
+      "doi": "10.1016/j.landurbplan.2017.01.013",
+      "title": "A review of approaches and challenges for sustainable planning in urban peripheries",
+      "publisher": "Elsevier BV",
+      "is_oa": false,
+      "resolution": "solr_domain",
+      "resolution_detail": {
+        "source": "solr_domain",
+        "matched_domain": "doi.org",
+        "solr_db_name": "International Tables for Crystallography (2006 Edition)",
+        "solr_db_id": "61245145010003610",
+        "proxy_needed": true
+      }
+    },
+    {
+      "doi": "10.1016/j.ecolind.2013.11.011",
+      "title": "Accessibility to greenspaces: GIS based indicators for sustainable planning in a dense urban context",
+      "publisher": "Elsevier BV",
+      "is_oa": false,
+      "resolution": "solr_domain",
+      "resolution_detail": {
+        "source": "solr_domain",
+        "matched_domain": "doi.org",
+        "solr_db_name": "International Tables for Crystallography (2006 Edition)",
+        "solr_db_id": "61245145010003610",
+        "proxy_needed": true
+      }
+    },
+    {
+      "doi": "10.1068/b2740",
+      "title": "A Constrained CA Model for the Simulation and Planning of Sustainable Urban Forms by Using GIS",
+      "publisher": "SAGE Publishing",
+      "is_oa": false,
+      "resolution": "solr_domain",
+      "resolution_detail": {
+        "source": "solr_domain",
+        "matched_domain": "doi.org",
+        "solr_db_name": "International Tables for Crystallography (2006 Edition)",
+        "solr_db_id": "61245145010003610",
+        "proxy_needed": true
+      }
+    },
+    {
+      "doi": "10.1016/j.jenvman.2011.05.016",
+      "title": "Resource management as a key factor for sustainable urban planning",
+      "publisher": "Elsevier BV",
+      "is_oa": true,
+      "resolution": "oa",
+      "resolution_detail": {
+        "source": "openalex",
+        "oa_url": "https://research.wur.nl/en/publications/resource-management-as-a-key-factor-for-sustainable-urban-plannin"
+      }
+    },
+    {
+      "doi": "10.1002/9781119119692",
+      "title": "Financial Risk Modelling and Portfolio Optimization with R",
+      "publisher": "",
+      "is_oa": false,
+      "resolution": "solr_domain",
+      "resolution_detail": {
+        "source": "solr_domain",
+        "matched_domain": "doi.org",
+        "solr_db_name": "International Tables for Crystallography (2006 Edition)",
+        "solr_db_id": "61245145010003610",
+        "proxy_needed": true
+      }
+    },
+    {
+      "doi": "10.1257/0002828041464597",
+      "title": "Risk and Volatility: Econometric Models and Financial Practice",
+      "publisher": "American Economic Association",
+      "is_oa": false,
+      "resolution": "solr_domain",
+      "resolution_detail": {
+        "source": "solr_domain",
+        "matched_domain": "doi.org",
+        "solr_db_name": "International Tables for Crystallography (2006 Edition)",
+        "solr_db_id": "61245145010003610",
+        "proxy_needed": true
+      }
+    },
+    {
+      "doi": "10.1007/978-3-662-12429-1_12",
+      "title": "The Generalized Hyperbolic Model: Financial Derivatives and Risk Measures",
+      "publisher": "Springer Nature",
+      "is_oa": false,
+      "resolution": "solr_domain",
+      "resolution_detail": {
+        "source": "solr_domain",
+        "matched_domain": "doi.org",
+        "solr_db_name": "International Tables for Crystallography (2006 Edition)",
+        "solr_db_id": "61245145010003610",
+        "proxy_needed": true
+      }
+    },
+    {
+      "doi": "10.1111/0022-1082.00152",
+      "title": "Market Risk and Model Risk for a Financial Institution Writing Options",
+      "publisher": "Wiley",
+      "is_oa": false,
+      "resolution": "solr_domain",
+      "resolution_detail": {
+        "source": "solr_domain",
+        "matched_domain": "doi.org",
+        "solr_db_name": "International Tables for Crystallography (2006 Edition)",
+        "solr_db_id": "61245145010003610",
+        "proxy_needed": true
+      }
+    },
+    {
+      "doi": "10.1016/j.asoc.2018.09.029",
+      "title": "Application of eXtreme gradient boosting trees in the construction of credit risk assessment models for financial instit",
+      "publisher": "Elsevier BV",
+      "is_oa": false,
+      "resolution": "solr_domain",
+      "resolution_detail": {
+        "source": "solr_domain",
+        "matched_domain": "doi.org",
+        "solr_db_name": "International Tables for Crystallography (2006 Edition)",
+        "solr_db_id": "61245145010003610",
+        "proxy_needed": true
+      }
+    },
+    {
+      "doi": "10.3390/su12187789",
+      "title": "Sustainable Financial Risk Modelling Fitting the SDGs: Some Reflections",
+      "publisher": "Multidisciplinary Digital Publishing Institute",
+      "is_oa": true,
+      "resolution": "oa",
+      "resolution_detail": {
+        "source": "openalex",
+        "oa_url": "https://www.mdpi.com/2071-1050/12/18/7789/pdf"
+      }
+    },
+    {
+      "doi": "10.1016/j.csda.2006.09.042",
+      "title": "Extremal financial risk models and portfolio evaluation",
+      "publisher": "Elsevier BV",
+      "is_oa": false,
+      "resolution": "solr_domain",
+      "resolution_detail": {
+        "source": "solr_domain",
+        "matched_domain": "doi.org",
+        "solr_db_name": "International Tables for Crystallography (2006 Edition)",
+        "solr_db_id": "61245145010003610",
+        "proxy_needed": true
+      }
+    },
+    {
+      "doi": "10.1016/j.aos.2008.10.002",
+      "title": "The usefulness of inaccurate models: Towards an understanding of the emergence of financial risk management",
+      "publisher": "Elsevier BV",
+      "is_oa": false,
+      "resolution": "solr_domain",
+      "resolution_detail": {
+        "source": "solr_domain",
+        "matched_domain": "doi.org",
+        "solr_db_name": "International Tables for Crystallography (2006 Edition)",
+        "solr_db_id": "61245145010003610",
+        "proxy_needed": true
+      }
+    },
+    {
+      "doi": "10.1016/j.spa.2003.07.001",
+      "title": "Precise estimates for the ruin probability in finite horizon in a discrete-time model with heavy-tailed insurance and fi",
+      "publisher": "Elsevier BV",
+      "is_oa": false,
+      "resolution": "solr_domain",
+      "resolution_detail": {
+        "source": "solr_domain",
+        "matched_domain": "doi.org",
+        "solr_db_name": "International Tables for Crystallography (2006 Edition)",
+        "solr_db_id": "61245145010003610",
+        "proxy_needed": true
+      }
+    },
+    {
+      "doi": "10.1002/9781118477144",
+      "title": "Financial Risk Modelling and Portfolio Optimization with R",
+      "publisher": "",
+      "is_oa": false,
+      "resolution": "solr_domain",
+      "resolution_detail": {
+        "source": "solr_domain",
+        "matched_domain": "doi.org",
+        "solr_db_name": "International Tables for Crystallography (2006 Edition)",
+        "solr_db_id": "61245145010003610",
+        "proxy_needed": true
+      }
+    },
+    {
+      "doi": "10.1007/s42001-017-0008-3",
+      "title": "Network models of financial systemic risk: a review",
+      "publisher": "Springer Nature",
+      "is_oa": true,
+      "resolution": "oa",
+      "resolution_detail": {
+        "source": "openalex",
+        "oa_url": "https://link.springer.com/content/pdf/10.1007/s42001-017-0008-3.pdf"
+      }
+    },
+    {
+      "doi": "10.1007/s42521-019-00009-8",
+      "title": "Blockchain analytics for intraday financial risk modeling",
+      "publisher": "Springer Science+Business Media",
+      "is_oa": false,
+      "resolution": "solr_domain",
+      "resolution_detail": {
+        "source": "solr_domain",
+        "matched_domain": "doi.org",
+        "solr_db_name": "International Tables for Crystallography (2006 Edition)",
+        "solr_db_id": "61245145010003610",
+        "proxy_needed": true
+      }
+    },
+    {
+      "doi": "10.2307/2297430",
+      "title": "Financial Intermediation and Delegated Monitoring",
+      "publisher": "Oxford University Press",
+      "is_oa": false,
+      "resolution": "solr_domain",
+      "resolution_detail": {
+        "source": "solr_domain",
+        "matched_domain": "doi.org",
+        "solr_db_name": "International Tables for Crystallography (2006 Edition)",
+        "solr_db_id": "61245145010003610",
+        "proxy_needed": true
+      }
+    },
+    {
+      "doi": "10.1016/j.eswa.2011.12.021",
+      "title": "Financial early warning system model and data mining application for risk detection",
+      "publisher": "Elsevier BV",
+      "is_oa": false,
+      "resolution": "solr_domain",
+      "resolution_detail": {
+        "source": "solr_domain",
+        "matched_domain": "doi.org",
+        "solr_db_name": "International Tables for Crystallography (2006 Edition)",
+        "solr_db_id": "61245145010003610",
+        "proxy_needed": true
+      }
+    },
+    {
+      "doi": "10.1016/j.jfs.2021.100872",
+      "title": "Climate sentiments, transition risk, and financial stability in a stock-flow consistent model",
+      "publisher": "Elsevier BV",
+      "is_oa": false,
+      "resolution": "solr_domain",
+      "resolution_detail": {
+        "source": "solr_domain",
+        "matched_domain": "doi.org",
+        "solr_db_name": "International Tables for Crystallography (2006 Edition)",
+        "solr_db_id": "61245145010003610",
+        "proxy_needed": true
+      }
+    },
+    {
+      "doi": "10.1016/j.tranpol.2017.03.010",
+      "title": "Financial risk assessment and modelling of PPP based Indian highway infrastructure projects",
+      "publisher": "Elsevier BV",
+      "is_oa": false,
+      "resolution": "solr_domain",
+      "resolution_detail": {
+        "source": "solr_domain",
+        "matched_domain": "doi.org",
+        "solr_db_name": "International Tables for Crystallography (2006 Edition)",
+        "solr_db_id": "61245145010003610",
+        "proxy_needed": true
+      }
+    },
+    {
+      "doi": "10.1016/s0014-2921(01)00150-7",
+      "title": "Financial opening, deposit insurance, and risk in a model of banking competition",
+      "publisher": "Elsevier BV",
+      "is_oa": false,
+      "resolution": "solr_domain",
+      "resolution_detail": {
+        "source": "solr_domain",
+        "matched_domain": "doi.org",
+        "solr_db_name": "International Tables for Crystallography (2006 Edition)",
+        "solr_db_id": "61245145010003610",
+        "proxy_needed": true
+      }
+    },
+    {
+      "doi": "10.1086/261703",
+      "title": "Noise Trader Risk in Financial Markets",
+      "publisher": "University of Chicago Press",
+      "is_oa": false,
+      "resolution": "solr_domain",
+      "resolution_detail": {
+        "source": "solr_domain",
+        "matched_domain": "doi.org",
+        "solr_db_name": "International Tables for Crystallography (2006 Edition)",
+        "solr_db_id": "61245145010003610",
+        "proxy_needed": true
+      }
+    },
+    {
+      "doi": "10.2174/157016461302160514000940",
+      "title": "Protein Folds Prediction with Hierarchical Structured SVM",
+      "publisher": "Bentham Science Publishers",
+      "is_oa": false,
+      "resolution": "solr_domain",
+      "resolution_detail": {
+        "source": "solr_domain",
+        "matched_domain": "doi.org",
+        "solr_db_name": "International Tables for Crystallography (2006 Edition)",
+        "solr_db_id": "61245145010003610",
+        "proxy_needed": true
+      }
+    },
+    {
+      "doi": "10.1002/prot.340180309",
+      "title": "A method for \u03b1\u2010helical integral membrane protein fold prediction",
+      "publisher": "Wiley",
+      "is_oa": false,
+      "resolution": "solr_domain",
+      "resolution_detail": {
+        "source": "solr_domain",
+        "matched_domain": "doi.org",
+        "solr_db_name": "International Tables for Crystallography (2006 Edition)",
+        "solr_db_id": "61245145010003610",
+        "proxy_needed": true
+      }
+    },
+    {
+      "doi": "10.1109/tnb.2015.2450233",
+      "title": "Enhanced Protein Fold Prediction Method Through a Novel Feature Extraction Technique",
+      "publisher": "Institute of Electrical and Electronics Engineers",
+      "is_oa": false,
+      "resolution": "solr_domain",
+      "resolution_detail": {
+        "source": "solr_domain",
+        "matched_domain": "doi.org",
+        "solr_db_name": "International Tables for Crystallography (2006 Edition)",
+        "solr_db_id": "61245145010003610",
+        "proxy_needed": true
+      }
+    },
+    {
+      "doi": "10.1007/978-1-0716-0892-0_11",
+      "title": "BeStSel: From Secondary Structure Analysis to Protein Fold Prediction by Circular Dichroism Spectroscopy",
+      "publisher": "Springer Science+Business Media",
+      "is_oa": true,
+      "resolution": "oa",
+      "resolution_detail": {
+        "source": "openalex",
+        "oa_url": "https://link.springer.com/content/pdf/10.1007%2F978-1-0716-0892-0_11.pdf"
+      }
+    },
+    {
+      "doi": "10.1038/s41586-021-03819-2",
+      "title": "Highly accurate protein structure prediction with AlphaFold",
+      "publisher": "Nature Portfolio",
+      "is_oa": true,
+      "resolution": "oa",
+      "resolution_detail": {
+        "source": "openalex",
+        "oa_url": "https://www.nature.com/articles/s41586-021-03819-2.pdf"
+      }
+    },
+    {
+      "doi": "10.1021/ja0273851",
+      "title": "All-Atom Structure Prediction and Folding Simulations of a Stable Protein",
+      "publisher": "American Chemical Society",
+      "is_oa": false,
+      "resolution": "solr_domain",
+      "resolution_detail": {
+        "source": "solr_domain",
+        "matched_domain": "doi.org",
+        "solr_db_name": "International Tables for Crystallography (2006 Edition)",
+        "solr_db_id": "61245145010003610",
+        "proxy_needed": true
+      }
+    },
+    {
+      "doi": "10.1073/pnas.92.19.8700",
+      "title": "Prediction of protein folding class using global description of amino acid sequence.",
+      "publisher": "National Academy of Sciences",
+      "is_oa": true,
+      "resolution": "oa",
+      "resolution_detail": {
+        "source": "openalex",
+        "oa_url": "https://www.ncbi.nlm.nih.gov/pmc/articles/41034"
+      }
+    },
+    {
+      "doi": "10.1016/0022-2836(86)90409-2",
+      "title": "Prediction of the occurrence of the ADP-binding \u03b2\u03b1\u03b2-fold in proteins, using an amino acid sequence fingerprint",
+      "publisher": "Elsevier BV",
+      "is_oa": true,
+      "resolution": "oa",
+      "resolution_detail": {
+        "source": "openalex",
+        "oa_url": "https://www.rug.nl/research/portal/en/publications/prediction-of-the-occurrence-of-the-adpbinding-fold-in-proteins-using-an-amino-acid-sequence-fingerprint(d1c0726b-300f-435e-a75e-a887d6741863).html"
+      }
+    },
+    {
+      "doi": "10.1093/nar/gkg503",
+      "title": "Detection of reliable and unexpected protein fold predictions using 3D-Jury",
+      "publisher": "Oxford University Press",
+      "is_oa": true,
+      "resolution": "oa",
+      "resolution_detail": {
+        "source": "openalex",
+        "oa_url": "https://academic.oup.com/nar/article-pdf/31/13/3291/9487081/gkg503.pdf"
+      }
+    },
+    {
+      "doi": "10.1093/nar/gky497",
+      "title": "BeStSel: a web server for accurate protein secondary structure prediction and fold recognition from the circular dichroi",
+      "publisher": "Oxford University Press",
+      "is_oa": true,
+      "resolution": "oa",
+      "resolution_detail": {
+        "source": "openalex",
+        "oa_url": "https://academic.oup.com/nar/article-pdf/46/W1/W315/25110668/gky497.pdf"
+      }
+    },
+    {
+      "doi": "10.1007/bfb0026595",
+      "title": "Application of evolutionary algorithms to protein folding prediction",
+      "publisher": "Springer Science+Business Media",
+      "is_oa": false,
+      "resolution": "solr_domain",
+      "resolution_detail": {
+        "source": "solr_domain",
+        "matched_domain": "doi.org",
+        "solr_db_name": "International Tables for Crystallography (2006 Edition)",
+        "solr_db_id": "61245145010003610",
+        "proxy_needed": true
+      }
+    },
+    {
+      "doi": "10.1038/d41586-021-03499-y",
+      "title": "Artificial intelligence powers protein-folding predictions",
+      "publisher": "Nature Portfolio",
+      "is_oa": false,
+      "resolution": "solr_domain",
+      "resolution_detail": {
+        "source": "solr_domain",
+        "matched_domain": "doi.org",
+        "solr_db_name": "International Tables for Crystallography (2006 Edition)",
+        "solr_db_id": "61245145010003610",
+        "proxy_needed": true
+      }
+    },
+    {
+      "doi": "10.1186/1471-2105-11-172",
+      "title": "Directionality in protein fold prediction",
+      "publisher": "BioMed Central",
+      "is_oa": true,
+      "resolution": "oa",
+      "resolution_detail": {
+        "source": "openalex",
+        "oa_url": "https://bmcbioinformatics.biomedcentral.com/counter/pdf/10.1186/1471-2105-11-172"
+      }
+    },
+    {
+      "doi": "10.1006/jmbi.1997.1101",
+      "title": "Protein fold recognition by prediction-based threading",
+      "publisher": "Elsevier BV",
+      "is_oa": true,
+      "resolution": "oa",
+      "resolution_detail": {
+        "source": "openalex",
+        "oa_url": "http://orbilu.uni.lu/handle/10993/19469"
+      }
+    },
+    {
+      "doi": "10.1089/cmb.2016.0181",
+      "title": "Protein Folding Prediction in a Cubic Lattice in Hydrophobic-Polar Model",
+      "publisher": "Mary Ann Liebert, Inc.",
+      "is_oa": false,
+      "resolution": "solr_domain",
+      "resolution_detail": {
+        "source": "solr_domain",
+        "matched_domain": "doi.org",
+        "solr_db_name": "International Tables for Crystallography (2006 Edition)",
+        "solr_db_id": "61245145010003610",
+        "proxy_needed": true
+      }
+    },
+    {
+      "doi": "10.1002/pro.5560050516",
+      "title": "Protein fold recognition using sequence\u2010derived predictions",
+      "publisher": "Wiley",
+      "is_oa": true,
+      "resolution": "oa",
+      "resolution_detail": {
+        "source": "openalex",
+        "oa_url": "https://onlinelibrary.wiley.com/doi/pdfdirect/10.1002/pro.5560050516"
+      }
+    },
+    {
+      "doi": "10.5815/ijieeb.2011.01.01",
+      "title": "An Improved Particle Swarm Optimization for Protein Folding Prediction",
+      "publisher": "Dalian University of Technology",
+      "is_oa": true,
+      "resolution": "oa",
+      "resolution_detail": {
+        "source": "openalex",
+        "oa_url": "http://www.mecs-press.org/ijieeb/ijieeb-v3-n1/IJIEEB-V3-N1-1.pdf"
+      }
+    },
+    {
+      "doi": "10.1109/cec.2007.4425011",
+      "title": "Protein folding prediction in 3D FCC HP lattice model using genetic algorithm",
+      "publisher": "Griffith University",
+      "is_oa": true,
+      "resolution": "oa",
+      "resolution_detail": {
+        "source": "openalex",
+        "oa_url": "http://hdl.handle.net/10072/19125"
+      }
+    },
+    {
+      "doi": "10.1007/3-540-44989-2_140",
+      "title": "Some New Features for Protein Fold Prediction",
+      "publisher": "Springer Science+Business Media",
+      "is_oa": false,
+      "resolution": "solr_domain",
+      "resolution_detail": {
+        "source": "solr_domain",
+        "matched_domain": "doi.org",
+        "solr_db_name": "International Tables for Crystallography (2006 Edition)",
+        "solr_db_id": "61245145010003610",
+        "proxy_needed": true
+      }
+    },
+    {
+      "doi": "10.1016/j.socscimed.2019.112552",
+      "title": "Systematic Literature Review on the Spread of Health-related Misinformation on Social Media",
+      "publisher": "Elsevier BV",
+      "is_oa": true,
+      "resolution": "oa",
+      "resolution_detail": {
+        "source": "openalex",
+        "oa_url": "https://doi.org/10.1016/j.socscimed.2019.112552"
+      }
+    },
+    {
+      "doi": "10.2196/17187",
+      "title": "Prevalence of Health Misinformation on Social Media: Systematic Review",
+      "publisher": "JMIR Publications",
+      "is_oa": true,
+      "resolution": "oa",
+      "resolution_detail": {
+        "source": "openalex",
+        "oa_url": "https://www.jmir.org/2021/1/e17187/PDF"
+      }
+    },
+    {
+      "doi": "10.1177/0956797620939054",
+      "title": "Fighting COVID-19 Misinformation on Social Media: Experimental Evidence for a Scalable Accuracy-Nudge Intervention",
+      "publisher": "SAGE Publishing",
+      "is_oa": true,
+      "resolution": "oa",
+      "resolution_detail": {
+        "source": "openalex",
+        "oa_url": "https://doi.org/10.1177/0956797620939054"
+      }
+    },
+    {
+      "doi": "10.1177/2053168019848554",
+      "title": "Trends in the diffusion of misinformation on social media",
+      "publisher": "SAGE Publishing",
+      "is_oa": true,
+      "resolution": "oa",
+      "resolution_detail": {
+        "source": "openalex",
+        "oa_url": "https://journals.sagepub.com/doi/pdf/10.1177/2053168019848554"
+      }
+    },
+    {
+      "doi": "10.3961/jpmph.20.094",
+      "title": "Impact of Rumors and Misinformation on COVID-19 in Social Media",
+      "publisher": "Korean Society for Preventive Medicine",
+      "is_oa": true,
+      "resolution": "oa",
+      "resolution_detail": {
+        "source": "openalex",
+        "oa_url": "https://www.jpmph.org/upload/pdf/jpmph-20-094.pdf"
+      }
+    },
+    {
+      "doi": "10.1001/jama.2018.16865",
+      "title": "Addressing Health-Related Misinformation on Social Media",
+      "publisher": "American Medical Association",
+      "is_oa": false,
+      "resolution": "solr_domain",
+      "resolution_detail": {
+        "source": "solr_domain",
+        "matched_domain": "doi.org",
+        "solr_db_name": "International Tables for Crystallography (2006 Edition)",
+        "solr_db_id": "61245145010003610",
+        "proxy_needed": true
+      }
+    },
+    {
+      "doi": "10.1073/pnas.1806781116",
+      "title": "Fighting misinformation on social media using crowdsourced judgments of news source quality",
+      "publisher": "National Academy of Sciences",
+      "is_oa": true,
+      "resolution": "oa",
+      "resolution_detail": {
+        "source": "openalex",
+        "oa_url": "https://www.pnas.org/content/pnas/116/7/2521.full.pdf"
+      }
+    },
+    {
+      "doi": "10.1007/s41060-022-00311-6",
+      "title": "The disaster of misinformation: a review of research in social media",
+      "publisher": "Springer International Publishing",
+      "is_oa": true,
+      "resolution": "oa",
+      "resolution_detail": {
+        "source": "openalex",
+        "oa_url": "https://link.springer.com/content/pdf/10.1007/s41060-022-00311-6.pdf"
+      }
+    },
+    {
+      "doi": "10.1145/3373464.3373475",
+      "title": "Misinformation in Social Media",
+      "publisher": "Association for Computing Machinery",
+      "is_oa": false,
+      "resolution": "solr_domain",
+      "resolution_detail": {
+        "source": "solr_domain",
+        "matched_domain": "doi.org",
+        "solr_db_name": "International Tables for Crystallography (2006 Edition)",
+        "solr_db_id": "61245145010003610",
+        "proxy_needed": true
+      }
+    },
+    {
+      "doi": "10.1080/10410236.2017.1331312",
+      "title": "See Something, Say Something: Correction of Global Health Misinformation on Social Media",
+      "publisher": "Taylor & Francis",
+      "is_oa": false,
+      "resolution": "solr_domain",
+      "resolution_detail": {
+        "source": "solr_domain",
+        "matched_domain": "doi.org",
+        "solr_db_name": "International Tables for Crystallography (2006 Edition)",
+        "solr_db_id": "61245145010003610",
+        "proxy_needed": true
+      }
+    },
+    {
+      "doi": "10.1111/jcom.12166",
+      "title": "In Related News, That Was Wrong: The Correction of Misinformation Through Related Stories Functionality in Social Media",
+      "publisher": "Oxford University Press",
+      "is_oa": false,
+      "resolution": "solr_domain",
+      "resolution_detail": {
+        "source": "solr_domain",
+        "matched_domain": "doi.org",
+        "solr_db_name": "International Tables for Crystallography (2006 Edition)",
+        "solr_db_id": "61245145010003610",
+        "proxy_needed": true
+      }
+    },
+    {
+      "doi": "10.4269/ajtmh.20-0592",
+      "title": "\u201cSocial Media Misinformation\u201d\u2014An Epidemic within the COVID-19 Pandemic",
+      "publisher": "American Society of Tropical Medicine and Hygiene",
+      "is_oa": true,
+      "resolution": "oa",
+      "resolution_detail": {
+        "source": "openalex",
+        "oa_url": "https://www.ajtmh.org/downloadpdf/view/journals/tpmd/103/2/article-p920.pdf"
+      }
+    },
+    {
+      "doi": "10.1177/1075547017731776",
+      "title": "Using Expert Sources to Correct Health Misinformation in Social Media",
+      "publisher": "SAGE Publishing",
+      "is_oa": false,
+      "resolution": "solr_domain",
+      "resolution_detail": {
+        "source": "solr_domain",
+        "matched_domain": "doi.org",
+        "solr_db_name": "International Tables for Crystallography (2006 Edition)",
+        "solr_db_id": "61245145010003610",
+        "proxy_needed": true
+      }
+    },
+    {
+      "doi": "10.1007/s13278-023-01028-5",
+      "title": "Fake news, disinformation and misinformation in social media: a review",
+      "publisher": "Springer Science+Business Media",
+      "is_oa": true,
+      "resolution": "oa",
+      "resolution_detail": {
+        "source": "openalex",
+        "oa_url": "https://link.springer.com/content/pdf/10.1007/s13278-023-01028-5.pdf"
+      }
+    },
+    {
+      "doi": "10.1126/sciadv.abo6254",
+      "title": "Psychological inoculation improves resilience against misinformation on social media",
+      "publisher": "American Association for the Advancement of Science",
+      "is_oa": true,
+      "resolution": "oa",
+      "resolution_detail": {
+        "source": "openalex",
+        "oa_url": "https://aspredicted.org/5mp82.pdf"
+      }
+    },
+    {
+      "doi": "10.1016/j.chb.2018.02.008",
+      "title": "The diffusion of misinformation on social media: Temporal pattern, message, and source",
+      "publisher": "Elsevier BV",
+      "is_oa": false,
+      "resolution": "solr_domain",
+      "resolution_detail": {
+        "source": "solr_domain",
+        "matched_domain": "doi.org",
+        "solr_db_name": "International Tables for Crystallography (2006 Edition)",
+        "solr_db_id": "61245145010003610",
+        "proxy_needed": true
+      }
+    },
+    {
+      "doi": "10.1016/j.techfore.2020.120201",
+      "title": "Misinformation sharing and social media fatigue during COVID-19: An affordance and cognitive load perspective",
+      "publisher": "Elsevier BV",
+      "is_oa": true,
+      "resolution": "oa",
+      "resolution_detail": {
+        "source": "openalex",
+        "oa_url": "https://lutpub.lut.fi/handle/10024/161748"
+      }
+    },
+    {
+      "doi": "10.1080/21670811.2019.1623701",
+      "title": "The Paradox of Participation Versus Misinformation: Social Media, Political Engagement, and the Spread of Misinformation",
+      "publisher": "Taylor & Francis",
+      "is_oa": false,
+      "resolution": "solr_domain",
+      "resolution_detail": {
+        "source": "solr_domain",
+        "matched_domain": "doi.org",
+        "solr_db_name": "International Tables for Crystallography (2006 Edition)",
+        "solr_db_id": "61245145010003610",
+        "proxy_needed": true
+      }
+    },
+    {
+      "doi": "10.1016/s2589-7500(19)30136-0",
+      "title": "Vaccine misinformation and social media",
+      "publisher": "Elsevier BV",
+      "is_oa": true,
+      "resolution": "oa",
+      "resolution_detail": {
+        "source": "openalex",
+        "oa_url": "https://doi.org/10.1016/s2589-7500(19)30136-0"
+      }
+    },
+    {
+      "doi": "10.1186/s40723-015-0008-9",
+      "title": "The way to early childhood education equity - policies to tackle the urban-rural disparities in China",
+      "publisher": "Springer Nature",
+      "is_oa": true,
+      "resolution": "oa",
+      "resolution_detail": {
+        "source": "openalex",
+        "oa_url": "https://ijccep.springeropen.com/counter/pdf/10.1186/s40723-015-0008-9"
+      }
+    },
+    {
+      "doi": "10.1080/13502930601046604",
+      "title": "Beyond anti\u2010bias education: changing conceptions of diversity and equity in European early childhood education",
+      "publisher": "Taylor & Francis",
+      "is_oa": false,
+      "resolution": "solr_domain",
+      "resolution_detail": {
+        "source": "solr_domain",
+        "matched_domain": "doi.org",
+        "solr_db_name": "International Tables for Crystallography (2006 Edition)",
+        "solr_db_id": "61245145010003610",
+        "proxy_needed": true
+      }
+    },
+    {
+      "doi": "10.1007/s10643-007-0177-4",
+      "title": "Universal Design for Early Childhood Education: Ensuring Access and Equity for All",
+      "publisher": "Springer Science+Business Media",
+      "is_oa": false,
+      "resolution": "solr_domain",
+      "resolution_detail": {
+        "source": "solr_domain",
+        "matched_domain": "doi.org",
+        "solr_db_name": "International Tables for Crystallography (2006 Edition)",
+        "solr_db_id": "61245145010003610",
+        "proxy_needed": true
+      }
+    },
+    {
+      "doi": "10.1146/annurev-publhealth-071321-032337",
+      "title": "Early Childhood Education: Health, Equity, and Economics",
+      "publisher": "Annual Reviews",
+      "is_oa": true,
+      "resolution": "oa",
+      "resolution_detail": {
+        "source": "openalex",
+        "oa_url": "https://www.annualreviews.org/doi/pdf/10.1146/annurev-publhealth-071321-032337"
+      }
+    },
+    {
+      "doi": "10.1080/15700763.2021.2017464",
+      "title": "Equity as Praxis in Early Childhood Education and Care",
+      "publisher": "Taylor & Francis",
+      "is_oa": false,
+      "resolution": "solr_domain",
+      "resolution_detail": {
+        "source": "solr_domain",
+        "matched_domain": "doi.org",
+        "solr_db_name": "International Tables for Crystallography (2006 Edition)",
+        "solr_db_id": "61245145010003610",
+        "proxy_needed": true
+      }
+    },
+    {
+      "doi": "10.1002/9781119148104.ch29",
+      "title": "Social Justice and Equity in Early Childhood Education",
+      "publisher": "The University of Texas at Austin",
+      "is_oa": false,
+      "resolution": "solr_domain",
+      "resolution_detail": {
+        "source": "solr_domain",
+        "matched_domain": "doi.org",
+        "solr_db_name": "International Tables for Crystallography (2006 Edition)",
+        "solr_db_id": "61245145010003610",
+        "proxy_needed": true
+      }
+    },
+    {
+      "doi": "10.1007/s40841-016-0062-z",
+      "title": "Intentional Teaching as a Pathway to Equity in Early Childhood Education: Participation, Quality, and Equity",
+      "publisher": "Springer Science+Business Media",
+      "is_oa": false,
+      "resolution": "solr_domain",
+      "resolution_detail": {
+        "source": "solr_domain",
+        "matched_domain": "doi.org",
+        "solr_db_name": "International Tables for Crystallography (2006 Edition)",
+        "solr_db_id": "61245145010003610",
+        "proxy_needed": true
+      }
+    },
+    {
+      "doi": "10.1097/phh.0000000000000378",
+      "title": "Early Childhood Education to Promote Health Equity: A Community Guide Systematic Review",
+      "publisher": "Lippincott Williams & Wilkins",
+      "is_oa": true,
+      "resolution": "oa",
+      "resolution_detail": {
+        "source": "openalex",
+        "oa_url": "https://www.ncbi.nlm.nih.gov/pmc/articles/6172656"
+      }
+    },
+    {
+      "doi": "10.1057/9780230362796_15",
+      "title": "Pathways through Early Childhood Education in Ethiopia, India, and Peru: Rights, Equity, and Diversity",
+      "publisher": "Palgrave Macmillan",
+      "is_oa": false,
+      "resolution": "solr_domain",
+      "resolution_detail": {
+        "source": "solr_domain",
+        "matched_domain": "doi.org",
+        "solr_db_name": "International Tables for Crystallography (2006 Edition)",
+        "solr_db_id": "61245145010003610",
+        "proxy_needed": true
+      }
+    },
+    {
+      "doi": "10.1097/phh.0000000000000557",
+      "title": "Early Childhood Education to Promote Health Equity: A Community Guide Economic Review",
+      "publisher": "Lippincott Williams & Wilkins",
+      "is_oa": false,
+      "resolution": "solr_domain",
+      "resolution_detail": {
+        "source": "solr_domain",
+        "matched_domain": "doi.org",
+        "solr_db_name": "International Tables for Crystallography (2006 Edition)",
+        "solr_db_id": "61245145010003610",
+        "proxy_needed": true
+      }
+    },
+    {
+      "doi": "10.1080/03004430.2016.1266588",
+      "title": "Is play a privilege or a right? And what\u2019s our responsibility? On the role of play for equity in early childhood educati",
+      "publisher": "Taylor & Francis",
+      "is_oa": true,
+      "resolution": "oa",
+      "resolution_detail": {
+        "source": "openalex",
+        "oa_url": "https://www.tandfonline.com/doi/pdf/10.1080/03004430.2016.1266588?needAccess=true"
+      }
+    },
+    {
+      "doi": "10.3390/children10101674",
+      "title": "Promoting Equity in Access to Quality Early Childhood Education in China",
+      "publisher": "Multidisciplinary Digital Publishing Institute",
+      "is_oa": true,
+      "resolution": "oa",
+      "resolution_detail": {
+        "source": "openalex",
+        "oa_url": "https://www.mdpi.com/2227-9067/10/10/1674/pdf?version=1696929422"
+      }
+    },
+    {
+      "doi": "10.1177/0004944115588789",
+      "title": "Access, quality and equity in early childhood education and care: A South Australian study",
+      "publisher": "SAGE Publishing",
+      "is_oa": false,
+      "resolution": "solr_domain",
+      "resolution_detail": {
+        "source": "solr_domain",
+        "matched_domain": "doi.org",
+        "solr_db_name": "International Tables for Crystallography (2006 Edition)",
+        "solr_db_id": "61245145010003610",
+        "proxy_needed": true
+      }
+    },
+    {
+      "doi": "10.1002/cad.20483",
+      "title": "Delivering on the promise of early childhood education for black children: An equity strategy",
+      "publisher": "Wiley",
+      "is_oa": false,
+      "resolution": "solr_domain",
+      "resolution_detail": {
+        "source": "solr_domain",
+        "matched_domain": "doi.org",
+        "solr_db_name": "International Tables for Crystallography (2006 Edition)",
+        "solr_db_id": "61245145010003610",
+        "proxy_needed": true
+      }
+    },
+    {
+      "doi": "10.32920/29120360",
+      "title": "Paths to Equity: Cultural, Linguistic and Racial Diversity in Canadian Early Childhood Education",
+      "publisher": "",
+      "is_oa": false,
+      "resolution": "solr_domain",
+      "resolution_detail": {
+        "source": "solr_domain",
+        "matched_domain": "doi.org",
+        "solr_db_name": "International Tables for Crystallography (2006 Edition)",
+        "solr_db_id": "61245145010003610",
+        "proxy_needed": true
+      }
+    },
+    {
+      "doi": "10.1016/0370-1573(90)90081-c",
+      "title": "Dark matter detection",
+      "publisher": "Elsevier BV",
+      "is_oa": false,
+      "resolution": "solr_domain",
+      "resolution_detail": {
+        "source": "solr_domain",
+        "matched_domain": "doi.org",
+        "solr_db_name": "International Tables for Crystallography (2006 Edition)",
+        "solr_db_id": "61245145010003610",
+        "proxy_needed": true
+      }
+    },
+    {
+      "doi": "10.1103/physrevd.37.3388",
+      "title": "Signal modulation in cold-dark-matter detection",
+      "publisher": "American Physical Society",
+      "is_oa": true,
+      "resolution": "oa",
+      "resolution_detail": {
+        "source": "openalex",
+        "oa_url": "https://www.osti.gov/biblio/1448427"
+      }
+    },
+    {
+      "doi": "10.1088/1475-7516/2009/04/010",
+      "title": "Compatibility of DAMA/LIBRA dark matter detection with other searches",
+      "publisher": "Institute of Physics",
+      "is_oa": true,
+      "resolution": "oa",
+      "resolution_detail": {
+        "source": "openalex",
+        "oa_url": "https://arxiv.org/pdf/0808.3607"
+      }
+    },
+    {
+      "doi": "10.1103/physrevlett.117.141801",
+      "title": "Broadband and Resonant Approaches to Axion Dark Matter Detection",
+      "publisher": "American Physical Society",
+      "is_oa": true,
+      "resolution": "oa",
+      "resolution_detail": {
+        "source": "openalex",
+        "oa_url": "https://arxiv.org/pdf/1602.01086"
+      }
+    },
+    {
+      "doi": "10.1140/epjp/i2018-11973-4",
+      "title": "DarkSide-20k: A 20 tonne two-phase LAr TPC for direct dark matter detection at LNGS",
+      "publisher": "Springer Science+Business Media",
+      "is_oa": true,
+      "resolution": "oa",
+      "resolution_detail": {
+        "source": "openalex",
+        "oa_url": "https://arxiv.org/pdf/1707.08145"
+      }
+    },
+    {
+      "doi": "10.1038/nphys4039",
+      "title": "Current status of direct dark matter detection\u00a0experiments",
+      "publisher": "Nature Portfolio",
+      "is_oa": true,
+      "resolution": "oa",
+      "resolution_detail": {
+        "source": "openalex",
+        "oa_url": "https://arxiv.org/pdf/1709.00688"
+      }
+    },
+    {
+      "doi": "10.1142/s0217751x04018154",
+      "title": "DARK MATTER DETECTION IN THE LIGHT OF RECENT EXPERIMENTAL RESULTS",
+      "publisher": "World Scientific",
+      "is_oa": true,
+      "resolution": "oa",
+      "resolution_detail": {
+        "source": "openalex",
+        "oa_url": "https://arxiv.org/pdf/hep-ph/0309346"
+      }
+    },
+    {
+      "doi": "10.1142/s0218301392000023",
+      "title": "NUCLEAR PHYSICS OF DARK MATTER DETECTION",
+      "publisher": "World Scientific",
+      "is_oa": false,
+      "resolution": "solr_domain",
+      "resolution_detail": {
+        "source": "solr_domain",
+        "matched_domain": "doi.org",
+        "solr_db_name": "International Tables for Crystallography (2006 Edition)",
+        "solr_db_id": "61245145010003610",
+        "proxy_needed": true
+      }
+    },
+    {
+      "doi": "10.1016/j.physrep.2016.02.007",
+      "title": "A review of the discovery reach of directional Dark Matter detection",
+      "publisher": "Elsevier BV",
+      "is_oa": true,
+      "resolution": "oa",
+      "resolution_detail": {
+        "source": "openalex",
+        "oa_url": "https://www.sciencedirect.com/science/article/am/pii/S0370157316001022?via%3Dihub"
+      }
+    },
+    {
+      "doi": "10.1103/physrevd.92.075012",
+      "title": "Radio for hidden-photon dark matter detection",
+      "publisher": "American Physical Society",
+      "is_oa": true,
+      "resolution": "oa",
+      "resolution_detail": {
+        "source": "openalex",
+        "oa_url": "https://arxiv.org/pdf/1411.7382"
+      }
+    },
+    {
+      "doi": "10.1016/j.physletb.2009.04.010",
+      "title": "WIMPonium and boost factors for indirect dark matter detection",
+      "publisher": "Elsevier BV",
+      "is_oa": true,
+      "resolution": "oa",
+      "resolution_detail": {
+        "source": "openalex",
+        "oa_url": "https://doi.org/10.1016/j.physletb.2009.04.010"
+      }
+    },
+    {
+      "doi": "10.1103/physrevd.84.055013",
+      "title": "Axion dark matter detection with cold molecules",
+      "publisher": "American Physical Society",
+      "is_oa": true,
+      "resolution": "oa",
+      "resolution_detail": {
+        "source": "openalex",
+        "oa_url": "https://arxiv.org/pdf/1101.2691"
+      }
+    },
+    {
+      "doi": "10.1146/annurev-astro-082708-101659",
+      "title": "Dark Matter Candidates from Particle Physics and Methods of Detection",
+      "publisher": "Annual Reviews",
+      "is_oa": true,
+      "resolution": "oa",
+      "resolution_detail": {
+        "source": "openalex",
+        "oa_url": "https://arxiv.org/pdf/1003.0904"
+      }
+    },
+    {
+      "doi": "10.1103/physrevd.100.015040",
+      "title": "Axion dark matter detection with CMB polarization",
+      "publisher": "American Physical Society",
+      "is_oa": true,
+      "resolution": "oa",
+      "resolution_detail": {
+        "source": "openalex",
+        "oa_url": "https://arxiv.org/pdf/1903.02666"
+      }
+    },
+    {
+      "doi": "10.1016/j.dark.2012.10.006",
+      "title": "Direct dark matter detection: The next decade",
+      "publisher": "Elsevier BV",
+      "is_oa": true,
+      "resolution": "oa",
+      "resolution_detail": {
+        "source": "openalex",
+        "oa_url": "https://doi.org/10.1016/j.dark.2012.10.006"
+      }
+    },
+    {
+      "doi": "10.1103/physrevd.98.035006",
+      "title": "Axion and hidden photon dark matter detection with multilayer optical haloscopes",
+      "publisher": "American Physical Society",
+      "is_oa": true,
+      "resolution": "oa",
+      "resolution_detail": {
+        "source": "openalex",
+        "oa_url": "http://link.aps.org/pdf/10.1103/PhysRevD.98.035006"
+      }
+    },
+    {
+      "doi": "10.1103/physrevd.71.123520",
+      "title": "Compatibility of DAMA dark matter detection with other searches",
+      "publisher": "American Physical Society",
+      "is_oa": true,
+      "resolution": "oa",
+      "resolution_detail": {
+        "source": "openalex",
+        "oa_url": "https://arxiv.org/pdf/hep-ph/0504010"
+      }
+    },
+    {
+      "doi": "10.1103/physrevlett.113.201301",
+      "title": "Axion Dark Matter Detection Using Atomic Transitions",
+      "publisher": "American Physical Society",
+      "is_oa": true,
+      "resolution": "oa",
+      "resolution_detail": {
+        "source": "openalex",
+        "oa_url": "https://arxiv.org/pdf/1409.2806"
+      }
+    },
+    {
+      "doi": "10.1088/0954-3899/43/4/044001",
+      "title": "Dark matter detection",
+      "publisher": "IOP Publishing",
+      "is_oa": false,
+      "resolution": "solr_domain",
+      "resolution_detail": {
+        "source": "solr_domain",
+        "matched_domain": "doi.org",
+        "solr_db_name": "International Tables for Crystallography (2006 Edition)",
+        "solr_db_id": "61245145010003610",
+        "proxy_needed": true
+      }
+    },
+    {
+      "doi": "10.1103/physrevd.91.055006",
+      "title": "DAE\u03b4ALUS and dark matter detection",
+      "publisher": "American Physical Society",
+      "is_oa": true,
+      "resolution": "oa",
+      "resolution_detail": {
+        "source": "openalex",
+        "oa_url": "https://arxiv.org/pdf/1411.1055"
+      }
+    },
+    {
+      "doi": "10.1038/35002501",
+      "title": "Biodiversity hotspots for conservation priorities",
+      "publisher": "Nature Portfolio",
+      "is_oa": false,
+      "resolution": "solr_domain",
+      "resolution_detail": {
+        "source": "solr_domain",
+        "matched_domain": "doi.org",
+        "solr_db_name": "International Tables for Crystallography (2006 Edition)",
+        "solr_db_id": "61245145010003610",
+        "proxy_needed": true
+      }
+    },
+    {
+      "doi": "10.1126/science.1127609",
+      "title": "Global Biodiversity Conservation Priorities",
+      "publisher": "American Association for the Advancement of Science",
+      "is_oa": false,
+      "resolution": "solr_domain",
+      "resolution_detail": {
+        "source": "solr_domain",
+        "matched_domain": "doi.org",
+        "solr_db_name": "International Tables for Crystallography (2006 Edition)",
+        "solr_db_id": "61245145010003610",
+        "proxy_needed": true
+      }
+    },
+    {
+      "doi": "10.1126/science.1097920",
+      "title": "Biodiversity Conservation and the Eradication of Poverty",
+      "publisher": "American Association for the Advancement of Science",
+      "is_oa": false,
+      "resolution": "solr_domain",
+      "resolution_detail": {
+        "source": "solr_domain",
+        "matched_domain": "doi.org",
+        "solr_db_name": "International Tables for Crystallography (2006 Edition)",
+        "solr_db_id": "61245145010003610",
+        "proxy_needed": true
+      }
+    },
+    {
+      "doi": "10.1890/080023",
+      "title": "Modeling multiple ecosystem services, biodiversity conservation, commodity production, and tradeoffs at landscape scales",
+      "publisher": "Wiley",
+      "is_oa": false,
+      "resolution": "solr_domain",
+      "resolution_detail": {
+        "source": "solr_domain",
+        "matched_domain": "doi.org",
+        "solr_db_name": "International Tables for Crystallography (2006 Edition)",
+        "solr_db_id": "61245145010003610",
+        "proxy_needed": true
+      }
+    },
+    {
+      "doi": "10.1126/science.1200303",
+      "title": "Beyond Predictions: Biodiversity Conservation in a Changing Climate",
+      "publisher": "American Association for the Advancement of Science",
+      "is_oa": false,
+      "resolution": "solr_domain",
+      "resolution_detail": {
+        "source": "solr_domain",
+        "matched_domain": "doi.org",
+        "solr_db_name": "International Tables for Crystallography (2006 Edition)",
+        "solr_db_id": "61245145010003610",
+        "proxy_needed": true
+      }
+    },
+    {
+      "doi": "10.1016/j.tree.2005.05.013",
+      "title": "Biodiversity conservation and the extinction of experience",
+      "publisher": "Elsevier BV",
+      "is_oa": false,
+      "resolution": "solr_domain",
+      "resolution_detail": {
+        "source": "solr_domain",
+        "matched_domain": "doi.org",
+        "solr_db_name": "International Tables for Crystallography (2006 Edition)",
+        "solr_db_id": "61245145010003610",
+        "proxy_needed": true
+      }
+    },
+    {
+      "doi": "10.1016/j.tree.2009.04.011",
+      "title": "Extinction debt: a challenge for biodiversity conservation",
+      "publisher": "Elsevier BV",
+      "is_oa": false,
+      "resolution": "solr_domain",
+      "resolution_detail": {
+        "source": "solr_domain",
+        "matched_domain": "doi.org",
+        "solr_db_name": "International Tables for Crystallography (2006 Edition)",
+        "solr_db_id": "61245145010003610",
+        "proxy_needed": true
+      }
+    },
+    {
+      "doi": "10.1016/j.biocon.2012.01.068",
+      "title": "Global food security, biodiversity conservation and the future of agricultural intensification",
+      "publisher": "Elsevier BV",
+      "is_oa": true,
+      "resolution": "oa",
+      "resolution_detail": {
+        "source": "openalex",
+        "oa_url": "https://resolver.sub.uni-goettingen.de/purl?gro-2/6611"
+      }
+    },
+    {
+      "doi": "10.1007/978-3-642-20992-5_1",
+      "title": "Global Biodiversity Conservation: The Critical Role of Hotspots",
+      "publisher": "Conservation International",
+      "is_oa": false,
+      "resolution": "solr_domain",
+      "resolution_detail": {
+        "source": "solr_domain",
+        "matched_domain": "doi.org",
+        "solr_db_name": "International Tables for Crystallography (2006 Edition)",
+        "solr_db_id": "61245145010003610",
+        "proxy_needed": true
+      }
+    },
+    {
+      "doi": "10.1016/j.tree.2009.07.016",
+      "title": "Scaling up from gardens: biodiversity conservation in urban environments",
+      "publisher": "Elsevier BV",
+      "is_oa": true,
+      "resolution": "oa",
+      "resolution_detail": {
+        "source": "openalex",
+        "oa_url": "http://www.cell.com/article/S0169534709002468/pdf"
+      }
+    },
+    {
+      "doi": "10.1899/08-171.1",
+      "title": "Freshwater biodiversity conservation: recent progress and future challenges",
+      "publisher": "University of Chicago Press",
+      "is_oa": false,
+      "resolution": "solr_domain",
+      "resolution_detail": {
+        "source": "solr_domain",
+        "matched_domain": "doi.org",
+        "solr_db_name": "International Tables for Crystallography (2006 Edition)",
+        "solr_db_id": "61245145010003610",
+        "proxy_needed": true
+      }
+    },
+    {
+      "doi": "10.1126/science.1189138",
+      "title": "Biodiversity Conservation: Challenges Beyond 2010",
+      "publisher": "American Association for the Advancement of Science",
+      "is_oa": false,
+      "resolution": "solr_domain",
+      "resolution_detail": {
+        "source": "solr_domain",
+        "matched_domain": "doi.org",
+        "solr_db_name": "International Tables for Crystallography (2006 Edition)",
+        "solr_db_id": "61245145010003610",
+        "proxy_needed": true
+      }
+    },
+    {
+      "doi": "10.1111/j.1461-0248.2009.01347.x",
+      "title": "Predator interactions, mesopredator release and biodiversity conservation",
+      "publisher": "Wiley",
+      "is_oa": false,
+      "resolution": "solr_domain",
+      "resolution_detail": {
+        "source": "solr_domain",
+        "matched_domain": "doi.org",
+        "solr_db_name": "International Tables for Crystallography (2006 Edition)",
+        "solr_db_id": "61245145010003610",
+        "proxy_needed": true
+      }
+    },
+    {
+      "doi": "10.2307/1312104",
+      "title": "Biodiversity Conservation in Running Waters",
+      "publisher": "Oxford University Press",
+      "is_oa": false,
+      "resolution": "solr_domain",
+      "resolution_detail": {
+        "source": "solr_domain",
+        "matched_domain": "doi.org",
+        "solr_db_name": "International Tables for Crystallography (2006 Edition)",
+        "solr_db_id": "61245145010003610",
+        "proxy_needed": true
+      }
+    },
+    {
+      "doi": "10.1073/pnas.1732458100",
+      "title": "Wilderness and biodiversity conservation",
+      "publisher": "National Academy of Sciences",
+      "is_oa": true,
+      "resolution": "oa",
+      "resolution_detail": {
+        "source": "openalex",
+        "oa_url": "https://www.ncbi.nlm.nih.gov/pmc/articles/193557"
+      }
+    },
+    {
+      "doi": "10.1017/s1464793105006950",
+      "title": "Freshwater biodiversity: importance, threats, status and conservation challenges",
+      "publisher": "Wiley",
+      "is_oa": false,
+      "resolution": "solr_domain",
+      "resolution_detail": {
+        "source": "solr_domain",
+        "matched_domain": "doi.org",
+        "solr_db_name": "International Tables for Crystallography (2006 Edition)",
+        "solr_db_id": "61245145010003610",
+        "proxy_needed": true
+      }
+    },
+    {
+      "doi": "10.1038/ncomms12558",
+      "title": "Sixteen years of change in the global terrestrial human footprint and implications for biodiversity conservation",
+      "publisher": "Nature Portfolio",
+      "is_oa": true,
+      "resolution": "oa",
+      "resolution_detail": {
+        "source": "openalex",
+        "oa_url": "https://www.nature.com/articles/ncomms12558.pdf"
+      }
+    },
+    {
+      "doi": "10.1641/b580507",
+      "title": "Freshwater Ecoregions of the World: A New Map of Biogeographic Units for Freshwater Biodiversity Conservation",
+      "publisher": "Oxford University Press",
+      "is_oa": true,
+      "resolution": "oa",
+      "resolution_detail": {
+        "source": "openalex",
+        "oa_url": "https://academic.oup.com/bioscience/article-pdf/58/5/403/26888972/58-5-403.pdf"
+      }
+    },
+    {
+      "doi": "10.1016/j.tree.2015.11.005",
+      "title": "How Should Beta-Diversity Inform Biodiversity Conservation?",
+      "publisher": "Elsevier BV",
+      "is_oa": false,
+      "resolution": "solr_domain",
+      "resolution_detail": {
+        "source": "solr_domain",
+        "matched_domain": "doi.org",
+        "solr_db_name": "International Tables for Crystallography (2006 Edition)",
+        "solr_db_id": "61245145010003610",
+        "proxy_needed": true
+      }
+    },
+    {
+      "doi": "10.1007/s10796-022-10333-x",
+      "title": "Deep Reinforcement Learning in the Advanced Cybersecurity Threat Detection and Protection",
+      "publisher": "Springer Science+Business Media",
+      "is_oa": false,
+      "resolution": "solr_domain",
+      "resolution_detail": {
+        "source": "solr_domain",
+        "matched_domain": "doi.org",
+        "solr_db_name": "International Tables for Crystallography (2006 Edition)",
+        "solr_db_id": "61245145010003610",
+        "proxy_needed": true
+      }
+    },
+    {
+      "doi": "10.1109/iciptm59628.2024.10563348",
+      "title": "Cybersecurity Threats Detection in Intelligent Networks using Predictive Analytics Approaches",
+      "publisher": "KIIT University",
+      "is_oa": false,
+      "resolution": "solr_domain",
+      "resolution_detail": {
+        "source": "solr_domain",
+        "matched_domain": "doi.org",
+        "solr_db_name": "International Tables for Crystallography (2006 Edition)",
+        "solr_db_id": "61245145010003610",
+        "proxy_needed": true
+      }
+    },
+    {
+      "doi": "10.1007/978-3-030-97532-6_4",
+      "title": "Deep Reinforcement Learning for Cybersecurity Threat Detection and Protection: A Review",
+      "publisher": "Springer Science+Business Media",
+      "is_oa": true,
+      "resolution": "oa",
+      "resolution_detail": {
+        "source": "openalex",
+        "oa_url": "https://arxiv.org/pdf/2206.02733"
+      }
+    },
+    {
+      "doi": "10.1080/08839514.2019.1582861",
+      "title": "A New Hybrid Machine Learning for Cybersecurity Threat Detection Based on Adaptive Boosting",
+      "publisher": "Taylor & Francis",
+      "is_oa": true,
+      "resolution": "oa",
+      "resolution_detail": {
+        "source": "openalex",
+        "oa_url": "https://doaj.org/article/4f51b052f34344638d6ebab8e99fbd7e"
+      }
+    },
+    {
+      "doi": "10.32604/csse.2023.030188",
+      "title": "Automated Machine Learning Enabled Cybersecurity Threat Detection in Internet of Things Environment",
+      "publisher": "Princess Nourah bint Abdulrahman University",
+      "is_oa": true,
+      "resolution": "oa",
+      "resolution_detail": {
+        "source": "openalex",
+        "oa_url": "https://file.techscience.com/ueditor/files/csse/TSP_CSSE-45-1/TSP_CSSE_30188/TSP_CSSE_30188.pdf"
+      }
+    },
+    {
+      "doi": "10.30574/ijsra.2024.11.1.0313",
+      "title": "Adaptive generative AI for dynamic cybersecurity threat detection in enterprises",
+      "publisher": "Silicon Valley University",
+      "is_oa": true,
+      "resolution": "oa",
+      "resolution_detail": {
+        "source": "openalex",
+        "oa_url": "https://ijsra.net/sites/default/files/IJSRA-2024-0313.pdf"
+      }
+    },
+    {
+      "doi": "10.51594/csitrj.v4i3.1500",
+      "title": "Real-Time Cybersecurity threat detection using machine learning and big data analytics: A comprehensive approach",
+      "publisher": "Fair East Publishers",
+      "is_oa": true,
+      "resolution": "oa",
+      "resolution_detail": {
+        "source": "openalex",
+        "oa_url": "https://doi.org/10.51594/csitrj.v4i3.1500"
+      }
+    },
+    {
+      "doi": "10.36676/dira.v12.i1.01",
+      "title": "Machine Learning for Cybersecurity: Threat Detection, Prevention, and Response",
+      "publisher": "CT Group Of Institutions",
+      "is_oa": true,
+      "resolution": "oa",
+      "resolution_detail": {
+        "source": "openalex",
+        "oa_url": "https://dira.shodhsagar.com/index.php/j/article/download/31/32"
+      }
+    },
+    {
+      "doi": "10.1109/ickecs61492.2024.10617347",
+      "title": "Cybersecurity Threat Detection Using Deep Learning and Anomaly Detection Techniques",
+      "publisher": "",
+      "is_oa": false,
+      "resolution": "solr_domain",
+      "resolution_detail": {
+        "source": "solr_domain",
+        "matched_domain": "doi.org",
+        "solr_db_name": "International Tables for Crystallography (2006 Edition)",
+        "solr_db_id": "61245145010003610",
+        "proxy_needed": true
+      }
+    },
+    {
+      "doi": "10.30574/ijsra.2022.7.2.0235",
+      "title": "An Optimal Artificial Intelligence (AI) technique for cybersecurity threat detection in IoT Networks",
+      "publisher": "",
+      "is_oa": true,
+      "resolution": "oa",
+      "resolution_detail": {
+        "source": "openalex",
+        "oa_url": "https://ijsra.net/sites/default/files/IJSRA-2022-0235.pdf"
+      }
+    },
+    {
+      "doi": "10.1007/978-3-030-57024-8_6",
+      "title": "Bayesian Networks for Online Cybersecurity Threat Detection",
+      "publisher": "Springer Nature",
+      "is_oa": false,
+      "resolution": "solr_domain",
+      "resolution_detail": {
+        "source": "solr_domain",
+        "matched_domain": "doi.org",
+        "solr_db_name": "International Tables for Crystallography (2006 Edition)",
+        "solr_db_id": "61245145010003610",
+        "proxy_needed": true
+      }
+    },
+    {
+      "doi": "10.52783/tjjpt.v44.i3.237",
+      "title": "AI in Cybersecurity: Threat Detection and Response with Machine Learning",
+      "publisher": "Science and Engineering Research Support Society",
+      "is_oa": true,
+      "resolution": "oa",
+      "resolution_detail": {
+        "source": "openalex",
+        "oa_url": "https://propulsiontechjournal.com/index.php/journal/article/download/237/210"
+      }
+    },
+    {
+      "doi": "10.30574/wjarr.2024.21.1.0315",
+      "title": "Machine learning in cybersecurity: A review of threat detection and defense mechanisms",
+      "publisher": "GSC Online Press",
+      "is_oa": true,
+      "resolution": "oa",
+      "resolution_detail": {
+        "source": "openalex",
+        "oa_url": "https://wjarr.com/sites/default/files/WJARR-2024-0315.pdf"
+      }
+    },
+    {
+      "doi": "10.4018/978-1-6684-9814-9.ch006",
+      "title": "AI-Based Cybersecurity Threat Detection and Prevention",
+      "publisher": "IGI Global",
+      "is_oa": false,
+      "resolution": "solr_domain",
+      "resolution_detail": {
+        "source": "solr_domain",
+        "matched_domain": "doi.org",
+        "solr_db_name": "International Tables for Crystallography (2006 Edition)",
+        "solr_db_id": "61245145010003610",
+        "proxy_needed": true
+      }
+    },
+    {
+      "doi": "10.34218/ijcet_16_01_266",
+      "title": "AI-POWERED CYBERSECURITY THREAT DETECTION IN CLOUD ENVIRONMENTS",
+      "publisher": "",
+      "is_oa": true,
+      "resolution": "oa",
+      "resolution_detail": {
+        "source": "openalex",
+        "oa_url": "https://doi.org/10.34218/ijcet_16_01_266"
+      }
+    },
+    {
+      "doi": "10.48550/arxiv.1710.00811",
+      "title": "Deep Learning for Unsupervised Insider Threat Detection in Structured\\n Cybersecurity Data Streams",
+      "publisher": "Cornell University",
+      "is_oa": true,
+      "resolution": "oa",
+      "resolution_detail": {
+        "source": "openalex",
+        "oa_url": "https://arxiv.org/pdf/1710.00811"
+      }
+    },
+    {
+      "doi": "10.1109/icais56108.2023.10073843",
+      "title": "Cybersecurity Threats, Detection Methods, and Prevention Strategies in Smart Grid: Review",
+      "publisher": "",
+      "is_oa": false,
+      "resolution": "solr_domain",
+      "resolution_detail": {
+        "source": "solr_domain",
+        "matched_domain": "doi.org",
+        "solr_db_name": "International Tables for Crystallography (2006 Edition)",
+        "solr_db_id": "61245145010003610",
+        "proxy_needed": true
+      }
+    },
+    {
+      "doi": "10.15439/2023f4457",
+      "title": "Gradient boosting models for cybersecurity threat detection with aggregated time series features",
+      "publisher": "Polskie Towarzystwo Informatyczne",
+      "is_oa": true,
+      "resolution": "oa",
+      "resolution_detail": {
+        "source": "openalex",
+        "oa_url": "https://annals-csis.org/proceedings/2023/drp/pdf/4457.pdf"
+      }
+    },
+    {
+      "doi": "10.62304/jbedpm.v3i05.180",
+      "title": "A COMPREHENSIVE REVIEW OF ARTIFICIAL INTELLIGENCE APPLICATIONS IN ENHANCING CYBERSECURITY THREAT DETECTION AND RESPONSE ",
+      "publisher": "Andhra University",
+      "is_oa": true,
+      "resolution": "oa",
+      "resolution_detail": {
+        "source": "openalex",
+        "oa_url": "https://globalmainstreamjournal.com/index.php/BEDPM/article/download/180/140"
+      }
+    },
+    {
+      "doi": "10.1016/j.cegh.2020.06.009",
+      "title": "Public perception and preparedness for the pandemic COVID 19: A Health Belief Model approach",
+      "publisher": "Elsevier BV",
+      "is_oa": true,
+      "resolution": "oa",
+      "resolution_detail": {
+        "source": "openalex",
+        "oa_url": "http://cegh.net/article/S2213398420301664/pdf"
+      }
+    },
+    {
+      "doi": "10.1002/hpm.3131",
+      "title": "Public health competences through the lens of the COVID\u201019 pandemic: what matters for health workforce preparedness for ",
+      "publisher": "Wiley",
+      "is_oa": true,
+      "resolution": "oa",
+      "resolution_detail": {
+        "source": "openalex",
+        "oa_url": "https://onlinelibrary.wiley.com/doi/pdfdirect/10.1002/hpm.3131"
+      }
+    },
+    {
+      "doi": "10.3390/economies8030060",
+      "title": "Pandemic Preparedness and Public Health Expenditure",
+      "publisher": "Multidisciplinary Digital Publishing Institute",
+      "is_oa": true,
+      "resolution": "oa",
+      "resolution_detail": {
+        "source": "openalex",
+        "oa_url": "https://www.mdpi.com/2227-7099/8/3/60/pdf?version=1596087051"
+      }
+    },
+    {
+      "doi": "10.1111/j.1750-2659.2009.00081.x",
+      "title": "Managing public health crises: the role of models in pandemic preparedness",
+      "publisher": "Wiley",
+      "is_oa": true,
+      "resolution": "oa",
+      "resolution_detail": {
+        "source": "openalex",
+        "oa_url": "https://onlinelibrary.wiley.com/doi/pdfdirect/10.1111/j.1750-2659.2009.00081.x"
+      }
+    },
+    {
+      "doi": "10.1016/j.glohj.2020.11.003",
+      "title": "Public health preparedness and responses to the coronavirus disease 2019 (COVID-19) pandemic in South Asia: a situation ",
+      "publisher": "Elsevier BV",
+      "is_oa": true,
+      "resolution": "oa",
+      "resolution_detail": {
+        "source": "openalex",
+        "oa_url": "https://doi.org/10.1016/j.glohj.2020.11.003"
+      }
+    },
+    {
+      "doi": "10.1111/j.1748-720x.2004.tb01962.x",
+      "title": "Pandemic Influenza: Public Health Preparedness for the Next Global Health Emergency",
+      "publisher": "Cambridge University Press",
+      "is_oa": false,
+      "resolution": "solr_domain",
+      "resolution_detail": {
+        "source": "solr_domain",
+        "matched_domain": "doi.org",
+        "solr_db_name": "International Tables for Crystallography (2006 Edition)",
+        "solr_db_id": "61245145010003610",
+        "proxy_needed": true
+      }
+    },
+    {
+      "doi": "10.1002/gch2.1018",
+      "title": "Data, disease and diplomacy: GISAID's innovative contribution to global health",
+      "publisher": "Wiley",
+      "is_oa": true,
+      "resolution": "oa",
+      "resolution_detail": {
+        "source": "openalex",
+        "oa_url": "https://onlinelibrary.wiley.com/doi/pdfdirect/10.1002/gch2.1018"
+      }
+    },
+    {
+      "doi": "10.1016/s0140-6736(20)30185-9",
+      "title": "A novel coronavirus outbreak of global health concern",
+      "publisher": "Elsevier BV",
+      "is_oa": true,
+      "resolution": "oa",
+      "resolution_detail": {
+        "source": "openalex",
+        "oa_url": "http://www.thelancet.com/article/S0140673620301859/pdf"
+      }
+    },
+    {
+      "doi": "10.1038/s41591-020-1011-4",
+      "title": "Digital technologies in the public-health response to COVID-19",
+      "publisher": "Nature Portfolio",
+      "is_oa": true,
+      "resolution": "oa",
+      "resolution_detail": {
+        "source": "openalex",
+        "oa_url": "https://www.nature.com/articles/s41591-020-1011-4.pdf"
+      }
+    },
+    {
+      "doi": "10.1136/bmjgh-2020-002830",
+      "title": "Using critical information to strengthen pandemic preparedness: the role of national public health agencies",
+      "publisher": "BMJ",
+      "is_oa": true,
+      "resolution": "oa",
+      "resolution_detail": {
+        "source": "openalex",
+        "oa_url": "https://gh.bmj.com/content/bmjgh/5/9/e002830.full.pdf"
+      }
+    },
+    {
+      "doi": "10.53854/liim-3204-5",
+      "title": "Updated WHO list of emerging pathogens for a potential future pandemic: Implications for public health and global prepar",
+      "publisher": "",
+      "is_oa": true,
+      "resolution": "oa",
+      "resolution_detail": {
+        "source": "openalex",
+        "oa_url": "https://doi.org/10.53854/liim-3204-5"
+      }
+    },
+    {
+      "doi": "10.1377/hlthaff.27.5.w328",
+      "title": "Using Quality Improvement Methods To Improve Public Health Emergency Preparedness: PREPARE For Pandemic Influenza",
+      "publisher": "Project HOPE",
+      "is_oa": false,
+      "resolution": "solr_domain",
+      "resolution_detail": {
+        "source": "solr_domain",
+        "matched_domain": "doi.org",
+        "solr_db_name": "International Tables for Crystallography (2006 Edition)",
+        "solr_db_id": "61245145010003610",
+        "proxy_needed": true
+      }
+    },
+    {
+      "doi": "10.1186/s12966-022-01255-7",
+      "title": "Causal systems mapping to promote healthy living for pandemic preparedness: a call to action for global public health",
+      "publisher": "BioMed Central",
+      "is_oa": true,
+      "resolution": "oa",
+      "resolution_detail": {
+        "source": "openalex",
+        "oa_url": "https://ijbnpa.biomedcentral.com/counter/pdf/10.1186/s12966-022-01255-7"
+      }
+    },
+    {
+      "doi": "10.1016/s1473-3099(20)30983-x",
+      "title": "Nurses at the frontline of public health emergency preparedness and response: lessons learned from the HIV/AIDS pandemic",
+      "publisher": "Elsevier BV",
+      "is_oa": true,
+      "resolution": "oa",
+      "resolution_detail": {
+        "source": "openalex",
+        "oa_url": "http://www.thelancet.com/article/S147330992030983X/pdf"
+      }
+    },
+    {
+      "doi": "10.3390/ijerph19031091",
+      "title": "Public Health Regulations and Policies Dealing with Preparedness and Emergency Management: The Experience of the COVID-1",
+      "publisher": "Multidisciplinary Digital Publishing Institute",
+      "is_oa": true,
+      "resolution": "oa",
+      "resolution_detail": {
+        "source": "openalex",
+        "oa_url": "https://www.mdpi.com/1660-4601/19/3/1091/pdf?version=1642641682"
+      }
+    },
+    {
+      "doi": "10.14745/ccdr.v45i06a03",
+      "title": "Canadian pandemic influenza preparedness: Public health measures strategy",
+      "publisher": "Health Canada",
+      "is_oa": true,
+      "resolution": "oa",
+      "resolution_detail": {
+        "source": "openalex",
+        "oa_url": "https://doi.org/10.14745/ccdr.v45i06a03"
+      }
+    },
+    {
+      "doi": "10.3329/bjms.v20i5.55405",
+      "title": "COVID-19 pandemic and disaster preparedness in the context of public health laws and policies",
+      "publisher": "Ibn Sina Trust",
+      "is_oa": true,
+      "resolution": "oa",
+      "resolution_detail": {
+        "source": "openalex",
+        "oa_url": "https://www.banglajol.info/index.php/BJMS/article/download/55405/38938"
+      }
+    },
+    {
+      "doi": "10.1016/s2214-109x(23)00328-5",
+      "title": "From private incentives to public health need: rethinking research and development for pandemic preparedness",
+      "publisher": "Elsevier BV",
+      "is_oa": true,
+      "resolution": "oa",
+      "resolution_detail": {
+        "source": "openalex",
+        "oa_url": "http://www.thelancet.com/article/S2214109X23003285/pdf"
+      }
+    },
+    {
+      "doi": "10.3390/vaccines11071154",
+      "title": "Artificial Intelligence in Public Health: Revolutionizing Epidemiological Surveillance for Pandemic Preparedness and Equ",
+      "publisher": "Multidisciplinary Digital Publishing Institute",
+      "is_oa": true,
+      "resolution": "oa",
+      "resolution_detail": {
+        "source": "openalex",
+        "oa_url": "https://www.mdpi.com/2076-393X/11/7/1154/pdf?version=1687762294"
+      }
+    }
+  ]
+}

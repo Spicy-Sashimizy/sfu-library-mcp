@@ -25,8 +25,11 @@
         "terminal.integrated.defaultProfile.linux": "bash",
         "python.defaultInterpreterPath": "/workspaces/sfu-library-mcp-clone/.venv/bin/python3",
         "python.formatting.provider": "none",
-        "editor.formatOnSave": true
-      },
+        "editor.formatOnSave": true,
+      
+        "remote.autoForwardPorts": false,
+        "remote.autoForwardPortsSource": "output"
+},
       "extensions": [
         "ms-python.python",
         "ms-python.vscode-pylance",
@@ -59,12 +62,16 @@
     },
     "8080": {
       "label": "Alt Server"
-    }
-  },
+    },
+  
+    "11434": {
+      "label": "Ollama (internal - do not forward)",
+      "onAutoForward": "ignore"
+    }},
 
 
   "otherPortsAttributes": {
-    "onAutoForward": "silent"
+    "onAutoForward": "ignore"
   },
   "remoteUser": "vscode"
 }

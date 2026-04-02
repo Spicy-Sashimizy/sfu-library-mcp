@@ -65,8 +65,9 @@ BROWSER_HEADERS = {
     "Origin": PRIMO_BASE,
 }
 
-# Semantic Scholar enforces ~1 req/s for unauthenticated callers
-SEMSCHOLAR_DELAY = 1.1  # seconds between requests
+# Semantic Scholar: 1 req/s with API key (x-api-key header required)
+SEMSCHOLAR_DELAY = 1.1  # seconds between requests (slightly over 1s to stay safe)
+SEMSCHOLAR_API_KEY = os.environ.get("SFU_SEMANTIC_SCHOLAR_API_KEY", "")
 
 # Primo rate limiting — be gentle to avoid triggering circuit breaker
 PRIMO_DELAY = 1.5  # seconds between Primo requests
@@ -389,11 +390,13 @@ async def fetch_semscholar_async(
         "limit": 10,
         "fields": "title,year,citationCount,isOpenAccess,externalIds,tldr,authors",
     }
+    headers = {"x-api-key": SEMSCHOLAR_API_KEY} if SEMSCHOLAR_API_KEY else {}
     async with semaphore:
         try:
             async with session.get(
                 SEMSCHOLAR_SEARCH,
                 params=params,
+                headers=headers,
                 timeout=aiohttp.ClientTimeout(total=30),
             ) as resp:
                 if resp.status == 429:
@@ -624,8 +627,9 @@ def fetch_semscholar_sync(query: str) -> SourceResult:
         "limit": 10,
         "fields": "title,year,citationCount,isOpenAccess,externalIds,tldr,authors",
     }
+    headers = {"x-api-key": SEMSCHOLAR_API_KEY} if SEMSCHOLAR_API_KEY else {}
     try:
-        resp = requests.get(SEMSCHOLAR_SEARCH, params=params, timeout=30)
+        resp = requests.get(SEMSCHOLAR_SEARCH, params=params, headers=headers, timeout=30)
         if resp.status_code == 429:
             result.error = "Rate limited (429)"
             return result

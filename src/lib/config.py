@@ -52,6 +52,9 @@ class ServerConfig:
     zotero_api_key: str = ""
     zotero_user_id: str = ""
 
+    # Semantic Scholar API
+    semantic_scholar_api_key: str = ""
+
     # Multi-profile support
     active_profile: str = "default"
 
@@ -148,6 +151,9 @@ def load_config() -> ServerConfig:
         active_profile=os.environ.get("SFU_ACTIVE_PROFILE", "default"),
         zotero_api_key=_read_secret("zotero_api_key", "SFU_ZOTERO_API_KEY"),
         zotero_user_id=_read_secret("zotero_user_id", "SFU_ZOTERO_USER_ID"),
+        semantic_scholar_api_key=_read_secret(
+            "semantic_scholar_api_key", "SFU_SEMANTIC_SCHOLAR_API_KEY"
+        ),
     )
 
 
@@ -167,6 +173,10 @@ def validate_config(config: ServerConfig) -> list[str]:
     valid_levels = {"DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"}
     if config.log_level.upper() not in valid_levels:
         warnings.append(f"Invalid log_level: {config.log_level}")
+
+    # Semantic Scholar credential validation
+    if not config.semantic_scholar_api_key:
+        warnings.append("SFU_SEMANTIC_SCHOLAR_API_KEY is empty — S2 requests will be unauthenticated (lower rate limit)")
 
     # Zotero credential validation
     if not config.zotero_api_key:
