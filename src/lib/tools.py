@@ -26,7 +26,7 @@ from lib.formatters import (
 )
 from lib.reranker import rerank_results
 from lib.validators import sanitize_search_query
-from lib.zotero import ZoteroClient, ZoteroError
+from lib.zotero import ZoteroClient, ZoteroError, fetch_zotero_item_types
 
 logger = logging.getLogger("sfu_library_mcp")
 
@@ -409,15 +409,10 @@ TOOL_DEFINITIONS: list[Tool] = [
                 "year": {"type": "string", "description": "Publication year"},
                 "item_type": {
                     "type": "string",
-                    "enum": [
-                        "journalArticle", "magazineArticle", "newspaperArticle",
-                        "book", "bookSection", "conferencePaper", "thesis",
-                        "webpage", "computerProgram", "report", "dataset",
-                        "film", "videoRecording", "audioRecording",
-                        "patent", "presentation", "document",
-                        "article", "software", "other",
-                    ],
-                    "description": "Zotero item type (e.g. 'journalArticle', 'computerProgram', 'thesis')",
+                    "description": (
+                        "Any valid Zotero item type, e.g. 'journalArticle', 'computerProgram', "
+                        "'thesis', 'blogPost'. Full list: https://api.zotero.org/itemTypes"
+                    ),
                     "default": "document",
                 },
                 "journal": {"type": "string", "description": "Journal or publication name (articles)"},
@@ -514,15 +509,10 @@ TOOL_DEFINITIONS: list[Tool] = [
                 "year": {"type": "string", "description": "Publication year"},
                 "item_type": {
                     "type": "string",
-                    "enum": [
-                        "journalArticle", "magazineArticle", "newspaperArticle",
-                        "book", "bookSection", "conferencePaper", "thesis",
-                        "webpage", "computerProgram", "report", "dataset",
-                        "film", "videoRecording", "audioRecording",
-                        "patent", "presentation", "document",
-                        "article", "software", "other",
-                    ],
-                    "description": "Zotero item type (e.g. 'journalArticle', 'computerProgram', 'thesis')",
+                    "description": (
+                        "Any valid Zotero item type, e.g. 'journalArticle', 'computerProgram', "
+                        "'thesis', 'blogPost'. Full list: https://api.zotero.org/itemTypes"
+                    ),
                     "default": "document",
                 },
                 "journal": {"type": "string", "description": "Journal or publication name (articles)"},
@@ -619,6 +609,58 @@ TOOL_DEFINITIONS: list[Tool] = [
         inputSchema={"type": "object", "properties": {}},
     ),
 ]
+
+
+# ── Dynamic tool definitions (item_type enum populated from Zotero API) ───────
+
+_tool_definitions_cache: list[Tool] | None = None
+
+
+async def get_tool_definitions() -> list[Tool]:
+    """Return tool definitions with the item_type enum populated from the Zotero API.
+
+    On first call, fetches all valid item types from https://api.zotero.org/itemTypes
+    (no auth required) and patches the item_type property in generate_citation and
+    save_to_zotero with a live enum. Result is cached for the process lifetime.
+    Falls back to TOOL_DEFINITIONS with a plain string type if the API is unavailable.
+    """
+    global _tool_definitions_cache
+    if _tool_definitions_cache is not None:
+        return _tool_definitions_cache
+
+    item_types: list[str] = await asyncio.get_event_loop().run_in_executor(
+        None, fetch_zotero_item_types
+    )
+
+    if not item_types:
+        _tool_definitions_cache = TOOL_DEFINITIONS
+        return _tool_definitions_cache
+
+    dynamic_item_type = {
+        "type": "string",
+        "enum": item_types,
+        "description": (
+            f"Any valid Zotero item type ({len(item_types)} types fetched live from "
+            "https://api.zotero.org/itemTypes). "
+            "E.g. 'journalArticle', 'computerProgram', 'thesis', 'blogPost'."
+        ),
+        "default": "document",
+    }
+
+    patched: list[Tool] = []
+    for tool in TOOL_DEFINITIONS:
+        if tool.name in ("generate_citation", "save_to_zotero"):
+            props = {**tool.inputSchema["properties"], "item_type": dynamic_item_type}
+            patched.append(Tool(
+                name=tool.name,
+                description=tool.description,
+                inputSchema={**tool.inputSchema, "properties": props},
+            ))
+        else:
+            patched.append(tool)
+
+    _tool_definitions_cache = patched
+    return _tool_definitions_cache
 
 
 # ── Tool handler dispatch ─────────────────────────────────────────────────────
@@ -1090,42 +1132,78 @@ async def _fetch_work_metadata(doi: str) -> dict | None:
     return work
 
 
-_ITEM_TYPE_MAP = {
-    # Zotero native names
-    "journalArticle": "article",
-    "magazineArticle": "magazine_article",
-    "newspaperArticle": "newspaper_article",
+# Explicit mappings for well-known Zotero types → internal formatting category.
+# _resolve_resource_type() falls back to keyword heuristics for any type not here.
+_KNOWN_RESOURCE_TYPES: dict[str, str] = {
+    "journalArticle": "article",   "article": "article",
+    "magazineArticle": "magazine_article",   "magazine_article": "magazine_article",
+    "newspaperArticle": "newspaper_article", "newspaper_article": "newspaper_article",
+    "blogPost": "article",         "forumPost": "article",
     "book": "book",
-    "bookSection": "book_section",
-    "conferencePaper": "conference_paper",
+    "bookSection": "book_section", "book_section": "book_section",
+    "dictionaryEntry": "book_section", "encyclopediaArticle": "book_section",
+    "conferencePaper": "conference_paper", "conference_paper": "conference_paper",
     "thesis": "thesis",
     "webpage": "webpage",
-    "computerProgram": "software",
+    "computerProgram": "software", "software": "software",
     "report": "report",
     "dataset": "dataset",
     "film": "film",
-    "videoRecording": "video",
-    "audioRecording": "audio",
+    "videoRecording": "video",     "video": "video",   "tvBroadcast": "video",
+    "audioRecording": "audio",     "audio": "audio",
+    "radioBroadcast": "audio",     "podcast": "audio",
     "patent": "patent",
     "presentation": "presentation",
-    "document": "other",
-    # Common aliases
-    "article": "article",
-    "software": "software",
-    "video": "video",
-    "audio": "audio",
-    "book_section": "book_section",
-    "conference_paper": "conference_paper",
-    "magazine_article": "magazine_article",
-    "newspaper_article": "newspaper_article",
+    "document": "other",  "manuscript": "other", "letter": "other",
+    "email": "other",     "interview": "other",  "instantMessage": "other",
+    "hearing": "other",   "bill": "other",       "case": "other",
+    "statute": "other",   "map": "other",        "artwork": "other",
     "other": "other",
 }
 
 
+def _resolve_resource_type(item_type: str) -> str:
+    """Map any Zotero item type string to an internal formatting category.
+
+    Uses the explicit mapping table for known types and keyword heuristics
+    for any type returned by the Zotero API that isn't listed there.
+    """
+    if item_type in _KNOWN_RESOURCE_TYPES:
+        return _KNOWN_RESOURCE_TYPES[item_type]
+    lower = item_type.lower()
+    if any(w in lower for w in ("article", "news", "blog", "forum", "post", "review")):
+        return "article"
+    if any(w in lower for w in ("book", "chapter", "encyclopedia", "dictionary", "section")):
+        return "book"
+    if any(w in lower for w in ("thesis", "dissertation")):
+        return "thesis"
+    if any(w in lower for w in ("conference", "proceedings", "symposium")):
+        return "conference_paper"
+    if any(w in lower for w in ("report", "manual", "brief", "technical", "whitepaper")):
+        return "report"
+    if any(w in lower for w in ("software", "program", "computer", "code", "app")):
+        return "software"
+    if any(w in lower for w in ("web", "page", "site", "online")):
+        return "webpage"
+    if any(w in lower for w in ("film", "movie", "cinema")):
+        return "film"
+    if any(w in lower for w in ("video", "tv", "television", "broadcast")):
+        return "video"
+    if any(w in lower for w in ("audio", "podcast", "radio", "music", "sound")):
+        return "audio"
+    if "patent" in lower:
+        return "patent"
+    if any(w in lower for w in ("presentation", "slide", "poster", "talk")):
+        return "presentation"
+    if any(w in lower for w in ("dataset", "data")):
+        return "dataset"
+    return "other"
+
+
 def _build_manual_metadata(args: dict) -> dict:
     """Build a metadata dict from raw tool input fields (no DOI lookup needed)."""
-    item_type = args.get("item_type", "other")
-    resource_type = _ITEM_TYPE_MAP.get(item_type, "other")
+    item_type = args.get("item_type", "document")
+    resource_type = _resolve_resource_type(item_type)
     return {
         "title": args.get("title", ""),
         "authors": args.get("authors") or [],

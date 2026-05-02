@@ -8,11 +8,43 @@ wraps all API calls with a circuit breaker.
 import logging
 import os
 import re
+import time
+
+import requests
 
 from lib.config import ServerConfig
 from lib.retry import CircuitBreaker
 
 logger = logging.getLogger("sfu_library_mcp")
+
+# ── Public Zotero item-type registry ─────────────────────────────────────────
+
+_item_types_cache: list[str] | None = None
+_item_types_cache_ts: float = 0.0
+_ITEM_TYPES_TTL = 86400  # 24 hours
+
+
+def fetch_zotero_item_types() -> list[str]:
+    """Return all valid Zotero item type names from the public API (no auth needed).
+
+    Results are cached for 24 hours. Falls back to the previous cache on
+    network error; returns an empty list if the API has never been reached.
+    """
+    global _item_types_cache, _item_types_cache_ts
+    now = time.time()
+    if _item_types_cache is not None and now - _item_types_cache_ts < _ITEM_TYPES_TTL:
+        return _item_types_cache
+    try:
+        resp = requests.get("https://api.zotero.org/itemTypes", timeout=10)
+        resp.raise_for_status()
+        _item_types_cache = [entry["itemType"] for entry in resp.json()]
+        _item_types_cache_ts = now
+        logger.info("Fetched %d Zotero item types from API", len(_item_types_cache))
+    except Exception as e:
+        logger.warning("Could not fetch Zotero item types: %s", e)
+        if _item_types_cache is None:
+            _item_types_cache = []
+    return _item_types_cache
 
 
 class ZoteroError(Exception):

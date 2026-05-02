@@ -15,7 +15,7 @@ from mcp.types import Tool, TextContent
 
 from lib.logging_setup import setup_logging
 from lib.config import load_config, validate_config
-from lib.tools import TOOL_DEFINITIONS, handle_tool_call
+from lib.tools import get_tool_definitions, handle_tool_call
 
 # Configure logging to stderr (never stdout — MCP uses stdio JSON-RPC)
 config = load_config()
@@ -30,7 +30,7 @@ server = Server("sfu-library")
 
 @server.list_tools()
 async def list_tools() -> list[Tool]:
-    return TOOL_DEFINITIONS
+    return await get_tool_definitions()
 
 
 @server.call_tool()
