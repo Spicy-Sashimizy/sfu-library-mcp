@@ -6,10 +6,13 @@
         "${USERPROFILE}/OneDrive\\Desktop\\random ass scripts\\cataloging the buiness plan\\archived_sites\\fm4actioncoach\\fm4_data_export\\scripts\\business_plan_mcp.py"
       ]
     },
-    "sfu-library-DISABLED-CLONE": {
-      "_note": "DISABLED: This is a clone - do not register this MCP server to avoid conflicting with the original sfu-library-mcp",
-      "command": "echo",
-      "args": ["disabled"]
+    "sfu-library-clone": {
+      "command": "powershell.exe",
+      "args": [
+        "-NoProfile",
+        "-ExecutionPolicy", "Bypass",
+        "-File", "${USERPROFILE}/OneDrive/Desktop/random ass scripts/sfu_library_mcp_clone/start_sfu_library_mcp_clone.ps1"
+      ]
     },
     "pommel": {
       "command": "C:\\Program Files\\Python314\\python.exe",
