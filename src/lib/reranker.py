@@ -10,15 +10,24 @@ from datetime import datetime
 
 logger = logging.getLogger("sfu_library_mcp")
 
-# Current year for recency scoring
 _CURRENT_YEAR = datetime.now().year
 
 # Scoring weights (must sum to 1.0)
-_WEIGHTS = {
+# When semantic embedding is enabled, weights are redistributed
+_WEIGHTS_NO_EMBEDDING = {
     "title_relevance": 0.35,
     "recency": 0.20,
     "fulltext_available": 0.20,
     "type_match": 0.15,
+    "completeness": 0.10,
+}
+
+_WEIGHTS_WITH_EMBEDDING = {
+    "semantic_similarity": 0.35,
+    "title_relevance": 0.15,
+    "recency": 0.15,
+    "fulltext_available": 0.15,
+    "type_match": 0.10,
     "completeness": 0.10,
 }
 
@@ -93,26 +102,64 @@ def _score_completeness(doc: dict) -> float:
     display = pnx.get("display", {})
 
     score = 0.0
-    # Has DOI
     if addata.get("doi") and addata["doi"][0]:
         score += 0.34
-    # Has authors
     if display.get("creator") and display["creator"][0]:
         score += 0.33
-    # Has date
     if display.get("creationdate") and display["creationdate"][0]:
         score += 0.33
 
     return min(score, 1.0)
 
 
-def rerank_results(docs: list[dict], query: str, limit: int) -> list[dict]:
+def _extract_doc_text(doc: dict) -> str:
+    """Extract title + description text from a document for embedding."""
+    pnx = doc.get("pnx", {})
+    display = pnx.get("display", {})
+    titles = display.get("title", [])
+    descriptions = display.get("description", [])
+    title = titles[0] if titles else ""
+    desc = descriptions[0] if descriptions else ""
+    return f"{title} {desc}".strip()
+
+
+def _compute_semantic_scores(query: str, docs: list[dict], model_path: str | None = None) -> list[float] | None:
+    """Compute semantic similarity scores using local embedding model.
+
+    Returns None if embedding model is unavailable (graceful fallback).
+    """
+    try:
+        from lib.embedding import compute_similarity
+    except ImportError:
+        logger.debug("Embedding module not available, skipping semantic scoring")
+        return None
+
+    doc_texts = [_extract_doc_text(doc) for doc in docs]
+    if not any(doc_texts):
+        return None
+
+    scores = compute_similarity(query, doc_texts, model_path)
+    if not scores:
+        return None
+
+    return scores
+
+
+def rerank_results(
+    docs: list[dict],
+    query: str,
+    limit: int,
+    use_embedding: bool = True,
+    embedding_model_path: str | None = None,
+) -> list[dict]:
     """Re-rank search results using weighted multi-signal scoring.
 
     Args:
         docs: List of document dicts (with pnx structure).
         query: The original search query for title relevance scoring.
         limit: Maximum number of results to return.
+        use_embedding: Whether to use local embedding model for semantic scoring.
+        embedding_model_path: Custom path to embedding model (None = default).
 
     Returns:
         Re-ranked list of docs, sorted by composite score descending.
@@ -121,6 +168,15 @@ def rerank_results(docs: list[dict], query: str, limit: int) -> list[dict]:
         return []
 
     query_tokens = _tokenize(query)
+
+    # Try semantic scoring if enabled
+    semantic_scores = None
+    if use_embedding:
+        semantic_scores = _compute_semantic_scores(query, docs, embedding_model_path)
+        if semantic_scores:
+            logger.debug("Semantic reranking active (%d docs scored)", len(semantic_scores))
+
+    weights = _WEIGHTS_WITH_EMBEDDING if semantic_scores else _WEIGHTS_NO_EMBEDDING
 
     scored: list[tuple[float, int, dict]] = []
     for idx, doc in enumerate(docs):
@@ -131,14 +187,16 @@ def rerank_results(docs: list[dict], query: str, limit: int) -> list[dict]:
         completeness_score = _score_completeness(doc)
 
         composite = (
-            _WEIGHTS["title_relevance"] * title_score
-            + _WEIGHTS["recency"] * recency_score
-            + _WEIGHTS["fulltext_available"] * fulltext_score
-            + _WEIGHTS["type_match"] * type_score
-            + _WEIGHTS["completeness"] * completeness_score
+            weights["title_relevance"] * title_score
+            + weights["recency"] * recency_score
+            + weights["fulltext_available"] * fulltext_score
+            + weights["type_match"] * type_score
+            + weights["completeness"] * completeness_score
         )
 
-        # Use negative idx as tiebreaker to preserve original Primo order
+        if semantic_scores:
+            composite += weights["semantic_similarity"] * semantic_scores[idx]
+
         scored.append((composite, -idx, doc))
 
     scored.sort(key=lambda x: (x[0], x[1]), reverse=True)
