@@ -47,7 +47,12 @@ class ServerConfig:
         "zotero_enabled": True,
         "semantic_scholar_enabled": True,
         "europe_pmc_enabled": False,
+        "local_embedding_enabled": True,
     })
+
+    # Local embedding model
+    embedding_model_path: str = ""
+    embedding_default_model: str = "sentence-transformers/all-MiniLM-L6-v2"
 
     # Zotero integration
     zotero_api_key: str = ""
@@ -147,6 +152,7 @@ def load_config() -> ServerConfig:
         "zotero_enabled": True,
         "semantic_scholar_enabled": True,
         "europe_pmc_enabled": False,
+        "local_embedding_enabled": True,
     }
     for key in default_features:
         env_key = f"SFU_FEATURE_{key.upper()}"
@@ -186,6 +192,11 @@ def load_config() -> ServerConfig:
         ),
         semantic_scholar_api_key=_read_secret(
             "semantic_scholar_api_key", "SFU_SEMANTIC_SCHOLAR_API_KEY"
+        ),
+        embedding_model_path=os.environ.get("SFU_EMBEDDING_MODEL_PATH", ""),
+        embedding_default_model=os.environ.get(
+            "SFU_EMBEDDING_DEFAULT_MODEL",
+            "sentence-transformers/all-MiniLM-L6-v2",
         ),
     )
 
