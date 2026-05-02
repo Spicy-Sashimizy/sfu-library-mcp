@@ -215,13 +215,34 @@ class ZoteroClient:
         resource_type = metadata.get("resource_type", "other")
         type_map = {
             "article": "journalArticle",
+            "magazine_article": "magazineArticle",
+            "newspaper_article": "newspaperArticle",
             "book": "book",
+            "book_section": "bookSection",
+            "conference_paper": "conferencePaper",
+            "thesis": "thesis",
+            "webpage": "webpage",
+            "software": "computerProgram",
+            "report": "report",
+            "dataset": "dataset",
+            "film": "film",
+            "video": "videoRecording",
+            "audio": "audioRecording",
+            "patent": "patent",
+            "presentation": "presentation",
             "other": "document",
         }
         item_type = type_map.get(resource_type, "document")
 
         authors = metadata.get("authors") or metadata.get("creators", [])
         creators = [self._parse_author_name(a) for a in authors]
+
+        # Add editors as contributors for book sections
+        editors = metadata.get("editors", [])
+        for ed in editors:
+            parsed = self._parse_author_name(ed)
+            parsed["creatorType"] = "editor"
+            creators.append(parsed)
 
         item = {
             "itemType": item_type,
@@ -250,11 +271,52 @@ class ZoteroClient:
         # Type-specific fields
         if item_type == "journalArticle":
             item["publicationTitle"] = metadata.get("source", "")
+        elif item_type in ("magazineArticle", "newspaperArticle"):
+            item["publicationTitle"] = metadata.get("source", "")
         elif item_type == "book":
             item["publisher"] = metadata.get("publisher", "")
+            if metadata.get("edition"):
+                item["edition"] = metadata["edition"]
+        elif item_type == "bookSection":
+            item["publicationTitle"] = metadata.get("book_title", "")
+            item["publisher"] = metadata.get("publisher", "")
+        elif item_type == "conferencePaper":
+            item["conferenceName"] = metadata.get("conference_name", "") or metadata.get("source", "")
+            item["place"] = metadata.get("conference_location", "")
+        elif item_type == "thesis":
+            item["university"] = metadata.get("institution", "")
+            degree = (metadata.get("degree_type", "") or "").lower()
+            item["thesisType"] = (
+                "Master's Thesis" if degree in ("masters", "master's", "master")
+                else "Doctoral Dissertation"
+            )
+        elif item_type == "webpage":
+            item["websiteTitle"] = metadata.get("source", "")
+            if metadata.get("url"):
+                item["url"] = metadata["url"]
+            if metadata.get("accessed_date"):
+                item["accessDate"] = metadata["accessed_date"]
+        elif item_type == "computerProgram":
+            item["publisher"] = metadata.get("publisher", "")
+            if metadata.get("version"):
+                item["versionNumber"] = metadata["version"]
+            if metadata.get("url"):
+                item["url"] = metadata["url"]
+        elif item_type == "report":
+            item["institution"] = metadata.get("publisher", "")
+            if metadata.get("report_number"):
+                item["reportNumber"] = metadata["report_number"]
+            if metadata.get("url"):
+                item["url"] = metadata["url"]
+        elif item_type == "dataset":
+            item["repository"] = metadata.get("publisher", "")
+            if metadata.get("url"):
+                item["url"] = metadata["url"]
         else:
             item["publicationTitle"] = metadata.get("source", "")
             item["publisher"] = metadata.get("publisher", "")
+            if metadata.get("url"):
+                item["url"] = metadata["url"]
 
         # Traceability
         record_id = metadata.get("record_id", "")

@@ -225,7 +225,6 @@ def format_apa_citation(metadata: dict | None) -> str:
         return "Unable to generate citation: no metadata available."
 
     parts = []
-
     authors = metadata.get("authors", [])
     if authors:
         if len(authors) == 1:
@@ -262,6 +261,100 @@ def format_apa_citation(metadata: dict | None) -> str:
             if pages:
                 journal_part += f", {pages}"
             parts.append(f"{journal_part}.")
+    elif resource_type in ("magazine_article", "newspaper_article"):
+        parts.append(f"{title}.")
+        source = metadata.get("source", "")
+        if source:
+            pub_part = source
+            pages = metadata.get("pages", "")
+            if pages:
+                pub_part += f", {pages}"
+            parts.append(pub_part + ".")
+    elif resource_type == "book":
+        edition = metadata.get("edition", "")
+        title_part = f"{title} ({edition} ed.)" if edition else title
+        parts.append(f"{title_part}.")
+        publisher = metadata.get("publisher", "")
+        if publisher:
+            parts.append(publisher + ".")
+    elif resource_type == "book_section":
+        parts.append(f"{title}.")
+        editors = metadata.get("editors", [])
+        book_title = metadata.get("book_title", "")
+        pages = metadata.get("pages", "")
+        pages_part = f" (pp. {pages})" if pages else ""
+        if editors and book_title:
+            ed_str = ", ".join(editors)
+            ed_label = "Eds." if len(editors) > 1 else "Ed."
+            parts.append(f"In {ed_str} ({ed_label}), {book_title}{pages_part}.")
+        elif book_title:
+            parts.append(f"In {book_title}{pages_part}.")
+        publisher = metadata.get("publisher", "")
+        if publisher:
+            parts.append(publisher + ".")
+    elif resource_type == "conference_paper":
+        parts.append(f"{title} [Conference presentation].")
+        conf = metadata.get("conference_name", "") or metadata.get("source", "")
+        loc = metadata.get("conference_location", "")
+        if conf:
+            parts.append((f"{conf}, {loc}." if loc else f"{conf}."))
+    elif resource_type == "thesis":
+        degree = (metadata.get("degree_type", "") or "").lower()
+        label = (
+            "Master's thesis" if degree in ("masters", "master's", "master")
+            else "Doctoral dissertation"
+        )
+        institution = metadata.get("institution", "")
+        bracket = f"[{label}, {institution}]" if institution else f"[{label}]"
+        parts.append(f"{title} {bracket}.")
+    elif resource_type == "webpage":
+        parts.append(f"{title}.")
+        source = metadata.get("source", "")
+        if source:
+            parts.append(f"{source}.")
+        accessed = metadata.get("accessed_date", "")
+        if accessed:
+            parts.append(f"Retrieved {accessed}.")
+    elif resource_type == "software":
+        version = metadata.get("version", "")
+        ver_str = f" (Version {version})" if version else ""
+        parts.append(f"{title}{ver_str} [Computer software].")
+        publisher = metadata.get("publisher", "")
+        if publisher:
+            parts.append(publisher + ".")
+    elif resource_type == "report":
+        report_number = metadata.get("report_number", "")
+        rn = f" (Report No. {report_number})" if report_number else ""
+        parts.append(f"{title}{rn}.")
+        publisher = metadata.get("publisher", "")
+        if publisher:
+            parts.append(publisher + ".")
+    elif resource_type == "dataset":
+        parts.append(f"{title} [Data set].")
+        publisher = metadata.get("publisher", "")
+        if publisher:
+            parts.append(publisher + ".")
+    elif resource_type in ("film", "video"):
+        label = "Film" if resource_type == "film" else "Video"
+        parts.append(f"{title} [{label}].")
+        publisher = metadata.get("publisher", "")
+        if publisher:
+            parts.append(publisher + ".")
+    elif resource_type == "audio":
+        parts.append(f"{title} [Audio recording].")
+        publisher = metadata.get("publisher", "")
+        if publisher:
+            parts.append(publisher + ".")
+    elif resource_type == "patent":
+        parts.append(f"{title} [Patent].")
+        publisher = metadata.get("publisher", "")
+        if publisher:
+            parts.append(publisher + ".")
+    elif resource_type == "presentation":
+        parts.append(f"{title} [Presentation].")
+        publisher = metadata.get("publisher", "")
+        if publisher:
+            parts.append(publisher + ".")
     else:
         parts.append(f"{title}.")
         publisher = metadata.get("publisher", "")
@@ -269,10 +362,13 @@ def format_apa_citation(metadata: dict | None) -> str:
             parts.append(publisher + ".")
 
     doi = metadata.get("doi", "")
+    url = metadata.get("url", "")
     if doi:
         if not doi.startswith("http"):
             doi = f"https://doi.org/{doi}"
         parts.append(doi)
+    elif url:
+        parts.append(url)
 
     return " ".join(parts)
 
@@ -283,7 +379,6 @@ def format_mla_citation(metadata: dict | None) -> str:
         return "Unable to generate citation: no metadata available."
 
     parts = []
-
     authors = metadata.get("authors", [])
     if authors:
         if len(authors) == 1:
@@ -295,6 +390,7 @@ def format_mla_citation(metadata: dict | None) -> str:
 
     title = metadata.get("title", "Untitled")
     resource_type = metadata.get("resource_type", "other")
+    year = metadata.get("date", "")[:4] if metadata.get("date") else ""
 
     if resource_type == "article":
         parts.append(f'"{title}."')
@@ -307,17 +403,125 @@ def format_mla_citation(metadata: dict | None) -> str:
                 journal_part += f", vol. {vol}"
             if issue:
                 journal_part += f", no. {issue}"
-            year = metadata.get("date", "")[:4] if metadata.get("date") else ""
             if year:
                 journal_part += f", {year}"
             pages = metadata.get("pages", "") or f"{metadata.get('spage', '')}-{metadata.get('epage', '')}".strip("-")
             if pages:
                 journal_part += f", pp. {pages}"
             parts.append(journal_part + ".")
+    elif resource_type in ("magazine_article", "newspaper_article"):
+        parts.append(f'"{title}."')
+        source = metadata.get("source", "")
+        if source:
+            pub_part = source
+            if year:
+                pub_part += f", {year}"
+            pages = metadata.get("pages", "")
+            if pages:
+                pub_part += f", p. {pages}"
+            parts.append(pub_part + ".")
+    elif resource_type == "book":
+        parts.append(f"{title}.")
+        edition = metadata.get("edition", "")
+        publisher = metadata.get("publisher", "")
+        edition_str = f"{edition} ed., " if edition else ""
+        if publisher and year:
+            parts.append(f"{edition_str}{publisher}, {year}.")
+        elif publisher:
+            parts.append(f"{edition_str}{publisher}.")
+        elif year:
+            parts.append(f"{edition_str}{year}.")
+    elif resource_type == "book_section":
+        parts.append(f'"{title}."')
+        book_title = metadata.get("book_title", "")
+        editors = metadata.get("editors", [])
+        publisher = metadata.get("publisher", "")
+        pages = metadata.get("pages", "")
+        if book_title:
+            ed_part = f"edited by {', '.join(editors)}, " if editors else ""
+            section = f"{book_title}, {ed_part}"
+            if publisher:
+                section += f"{publisher}, "
+            if year:
+                section += f"{year}"
+            if pages:
+                section += f", pp. {pages}"
+            parts.append(section + ".")
+    elif resource_type == "conference_paper":
+        parts.append(f'"{title}."')
+        conf = metadata.get("conference_name", "") or metadata.get("source", "")
+        if conf:
+            parts.append((f"{conf}, {year}." if year else f"{conf}."))
+    elif resource_type == "thesis":
+        parts.append(f"{title}.")
+        degree = (metadata.get("degree_type", "") or "").lower()
+        degree_label = (
+            "master's thesis" if degree in ("masters", "master's", "master")
+            else "doctoral dissertation"
+        )
+        institution = metadata.get("institution", "")
+        if institution and year:
+            parts.append(f"{year}, {institution}, {degree_label}.")
+        elif institution:
+            parts.append(f"{institution}, {degree_label}.")
+        elif year:
+            parts.append(f"{year}, {degree_label}.")
+    elif resource_type == "webpage":
+        parts.append(f'"{title}."')
+        source = metadata.get("source", "")
+        if source:
+            parts.append(f"{source},")
+        if year:
+            parts.append(f"{year}.")
+    elif resource_type == "software":
+        parts.append(f"{title}.")
+        version = metadata.get("version", "")
+        publisher = metadata.get("publisher", "")
+        if version:
+            parts.append(f"Version {version},")
+        if publisher:
+            parts.append(f"{publisher},")
+        if year:
+            parts.append(f"{year}.")
+    elif resource_type == "report":
+        parts.append(f"{title}.")
+        report_number = metadata.get("report_number", "")
+        publisher = metadata.get("publisher", "")
+        if report_number:
+            parts.append(f"Report No. {report_number},")
+        if publisher:
+            parts.append(f"{publisher},")
+        if year:
+            parts.append(f"{year}.")
+    elif resource_type == "dataset":
+        parts.append(f"{title}.")
+        publisher = metadata.get("publisher", "")
+        if publisher and year:
+            parts.append(f"{publisher}, {year}.")
+        elif publisher:
+            parts.append(f"{publisher}.")
+    elif resource_type in ("film", "video"):
+        parts.append(f"{title}.")
+        publisher = metadata.get("publisher", "")
+        if publisher and year:
+            parts.append(f"{publisher}, {year}.")
+        elif publisher:
+            parts.append(f"{publisher}.")
+    elif resource_type == "audio":
+        parts.append(f"{title}.")
+        publisher = metadata.get("publisher", "")
+        if publisher and year:
+            parts.append(f"{publisher}, {year}.")
+        elif publisher:
+            parts.append(f"{publisher}.")
+    elif resource_type in ("patent", "presentation"):
+        parts.append(f"{title}.")
+        publisher = metadata.get("publisher", "")
+        if publisher and year:
+            parts.append(f"{publisher}, {year}.")
     else:
         parts.append(f"{title}.")
         publisher = metadata.get("publisher", "")
-        year = metadata.get("date", "")[:4] if metadata.get("date") else ""
         if publisher and year:
             parts.append(f"{publisher}, {year}.")
         elif publisher:
@@ -326,10 +530,13 @@ def format_mla_citation(metadata: dict | None) -> str:
             parts.append(f"{year}.")
 
     doi = metadata.get("doi", "")
+    url = metadata.get("url", "")
     if doi:
         if not doi.startswith("http"):
             doi = f"https://doi.org/{doi}"
         parts.append(doi)
+    elif url:
+        parts.append(url)
 
     return " ".join(parts)
 
@@ -340,7 +547,6 @@ def format_chicago_citation(metadata: dict | None) -> str:
         return "Unable to generate citation: no metadata available."
 
     parts = []
-
     authors = metadata.get("authors", [])
     if authors:
         if len(authors) == 1:
@@ -353,6 +559,7 @@ def format_chicago_citation(metadata: dict | None) -> str:
 
     title = metadata.get("title", "Untitled")
     resource_type = metadata.get("resource_type", "other")
+    year = metadata.get("date", "")[:4] if metadata.get("date") else ""
 
     if resource_type == "article":
         parts.append(f'"{title}."')
@@ -365,25 +572,118 @@ def format_chicago_citation(metadata: dict | None) -> str:
                 journal_part += f" {vol}"
             if issue:
                 journal_part += f", no. {issue}"
-            year = metadata.get("date", "")[:4] if metadata.get("date") else ""
             if year:
                 journal_part += f" ({year})"
             pages = metadata.get("pages", "") or f"{metadata.get('spage', '')}-{metadata.get('epage', '')}".strip("-")
             if pages:
                 journal_part += f": {pages}"
             parts.append(journal_part + ".")
+    elif resource_type in ("magazine_article", "newspaper_article"):
+        parts.append(f'"{title}."')
+        source = metadata.get("source", "")
+        if source:
+            pub_part = source
+            if year:
+                pub_part += f", {year}"
+            pages = metadata.get("pages", "")
+            if pages:
+                pub_part += f", {pages}"
+            parts.append(pub_part + ".")
+    elif resource_type == "book":
+        parts.append(f"{title}.")
+        edition = metadata.get("edition", "")
+        publisher = metadata.get("publisher", "")
+        edition_str = f"{edition} ed. " if edition else ""
+        if publisher:
+            parts.append(f"{edition_str}{publisher}, {year}." if year else f"{edition_str}{publisher}.")
+    elif resource_type == "book_section":
+        parts.append(f'"{title}."')
+        editors = metadata.get("editors", [])
+        book_title = metadata.get("book_title", "")
+        publisher = metadata.get("publisher", "")
+        pages = metadata.get("pages", "")
+        if book_title:
+            ed_part = f"edited by {', '.join(editors)}, " if editors else ""
+            pg_part = f", {pages}" if pages else ""
+            pub_year = f"{publisher}, {year}" if publisher and year else (publisher or year or "")
+            parts.append(f"In {book_title}, {ed_part}{pg_part}. {pub_year}." if pub_year
+                         else f"In {book_title}{pg_part}.")
+    elif resource_type == "conference_paper":
+        parts.append(f'"{title}."')
+        conf = metadata.get("conference_name", "") or metadata.get("source", "")
+        loc = metadata.get("conference_location", "")
+        if conf:
+            conf_part = f"Paper presented at {conf}"
+            if loc:
+                conf_part += f", {loc}"
+            if year:
+                conf_part += f", {year}"
+            parts.append(conf_part + ".")
+    elif resource_type == "thesis":
+        degree = (metadata.get("degree_type", "") or "").lower()
+        degree_label = (
+            "master's thesis" if degree in ("masters", "master's", "master")
+            else "doctoral dissertation"
+        )
+        institution = metadata.get("institution", "")
+        parts.append(f'"{title}."')
+        if institution and year:
+            parts.append(f"{degree_label.capitalize()}, {institution}, {year}.")
+        elif institution:
+            parts.append(f"{degree_label.capitalize()}, {institution}.")
+        elif year:
+            parts.append(f"{degree_label.capitalize()}, {year}.")
+    elif resource_type == "webpage":
+        parts.append(f'"{title}."')
+        source = metadata.get("source", "")
+        accessed = metadata.get("accessed_date", "")
+        if source:
+            parts.append(f"{source}.")
+        if accessed:
+            parts.append(f"Accessed {accessed}.")
+    elif resource_type == "software":
+        version = metadata.get("version", "")
+        ver_str = f". Version {version}" if version else ""
+        parts.append(f"{title}{ver_str}.")
+        publisher = metadata.get("publisher", "")
+        if publisher:
+            parts.append(f"{publisher}, {year}." if year else f"{publisher}.")
+    elif resource_type == "report":
+        report_number = metadata.get("report_number", "")
+        parts.append(f"{title}.")
+        publisher = metadata.get("publisher", "")
+        rn_str = f" Report No. {report_number}." if report_number else ""
+        if publisher:
+            parts.append(f"{publisher}, {year}.{rn_str}" if year else f"{publisher}.{rn_str}")
+    elif resource_type == "dataset":
+        parts.append(f"{title}.")
+        publisher = metadata.get("publisher", "")
+        if publisher:
+            parts.append(f"{publisher}, {year}." if year else f"{publisher}.")
+    elif resource_type in ("film", "video", "audio"):
+        parts.append(f"{title}.")
+        publisher = metadata.get("publisher", "")
+        if publisher:
+            parts.append(f"{publisher}, {year}." if year else f"{publisher}.")
+    elif resource_type in ("patent", "presentation"):
+        parts.append(f"{title}.")
+        publisher = metadata.get("publisher", "")
+        if publisher:
+            parts.append(f"{publisher}, {year}." if year else f"{publisher}.")
     else:
         parts.append(f"{title}.")
         publisher = metadata.get("publisher", "")
-        year = metadata.get("date", "")[:4] if metadata.get("date") else ""
         if publisher:
             parts.append(f"{publisher}, {year}." if year else f"{publisher}.")
 
     doi = metadata.get("doi", "")
+    url = metadata.get("url", "")
     if doi:
         if not doi.startswith("http"):
             doi = f"https://doi.org/{doi}"
         parts.append(doi)
+    elif url:
+        parts.append(url)
 
     return " ".join(parts)
 
@@ -395,6 +695,24 @@ def format_bibtex_entry(metadata: dict | None) -> str:
 
     resource_type = metadata.get("resource_type", "other")
 
+    _BIBTEX_TYPE = {
+        "article": "article",
+        "magazine_article": "article",
+        "newspaper_article": "article",
+        "book": "book",
+        "book_section": "incollection",
+        "conference_paper": "inproceedings",
+        "report": "techreport",
+        "dataset": "misc",
+        "webpage": "misc",
+        "film": "misc",
+        "video": "misc",
+        "audio": "misc",
+        "patent": "misc",
+        "presentation": "misc",
+        "software": "software",
+    }
+
     authors = metadata.get("authors", [])
     first_author = authors[0].split("$$")[0].split(",")[0].strip() if authors else "unknown"
     first_author = "".join(c for c in first_author if c.isalnum())
@@ -403,7 +721,11 @@ def format_bibtex_entry(metadata: dict | None) -> str:
     title_word = "".join(c for c in title_word if c.isalnum())
     key = f"{first_author.lower()}{year}{title_word.lower()}"
 
-    entry_type = "article" if resource_type == "article" else "book"
+    if resource_type == "thesis":
+        degree = (metadata.get("degree_type", "") or "").lower()
+        entry_type = "mastersthesis" if degree in ("masters", "master's", "master") else "phdthesis"
+    else:
+        entry_type = _BIBTEX_TYPE.get(resource_type, "misc")
 
     lines = [f"@{entry_type}{{{key},"]
 
@@ -418,7 +740,7 @@ def format_bibtex_entry(metadata: dict | None) -> str:
     if year and year != "YYYY":
         lines.append(f"  year = {{{year}}},")
 
-    if resource_type == "article":
+    if resource_type in ("article", "magazine_article", "newspaper_article"):
         source = metadata.get("source", "")
         if source:
             lines.append(f"  journal = {{{source}}},")
@@ -431,10 +753,61 @@ def format_bibtex_entry(metadata: dict | None) -> str:
         pages = metadata.get("pages", "") or f"{metadata.get('spage', '')}-{metadata.get('epage', '')}".strip("-")
         if pages:
             lines.append(f"  pages = {{{pages}}},")
+    elif resource_type == "book":
+        publisher = metadata.get("publisher", "")
+        if publisher:
+            lines.append(f"  publisher = {{{publisher}}},")
+        edition = metadata.get("edition", "")
+        if edition:
+            lines.append(f"  edition = {{{edition}}},")
+    elif resource_type == "book_section":
+        book_title = metadata.get("book_title", "")
+        if book_title:
+            lines.append(f"  booktitle = {{{book_title}}},")
+        editors = metadata.get("editors", [])
+        if editors:
+            lines.append(f"  editor = {{{' and '.join(editors)}}},")
+        publisher = metadata.get("publisher", "")
+        if publisher:
+            lines.append(f"  publisher = {{{publisher}}},")
+        pages = metadata.get("pages", "")
+        if pages:
+            lines.append(f"  pages = {{{pages}}},")
+    elif resource_type == "conference_paper":
+        conf = metadata.get("conference_name", "") or metadata.get("source", "")
+        if conf:
+            lines.append(f"  booktitle = {{{conf}}},")
+        loc = metadata.get("conference_location", "")
+        if loc:
+            lines.append(f"  address = {{{loc}}},")
+        pages = metadata.get("pages", "")
+        if pages:
+            lines.append(f"  pages = {{{pages}}},")
+    elif resource_type == "thesis":
+        institution = metadata.get("institution", "")
+        if institution:
+            lines.append(f"  school = {{{institution}}},")
+    elif resource_type == "report":
+        report_number = metadata.get("report_number", "")
+        if report_number:
+            lines.append(f"  number = {{{report_number}}},")
+        publisher = metadata.get("publisher", "")
+        if publisher:
+            lines.append(f"  institution = {{{publisher}}},")
+    elif resource_type == "software":
+        version = metadata.get("version", "")
+        if version:
+            lines.append(f"  version = {{{version}}},")
+        publisher = metadata.get("publisher", "")
+        if publisher:
+            lines.append(f"  organization = {{{publisher}}},")
     else:
         publisher = metadata.get("publisher", "")
         if publisher:
             lines.append(f"  publisher = {{{publisher}}},")
+        source = metadata.get("source", "")
+        if source:
+            lines.append(f"  howpublished = {{{source}}},")
 
     isbn = metadata.get("isbn", "")
     if isbn:
@@ -447,6 +820,10 @@ def format_bibtex_entry(metadata: dict | None) -> str:
     doi = metadata.get("doi", "")
     if doi:
         lines.append(f"  doi = {{{doi}}},")
+
+    url = metadata.get("url", "")
+    if url and not doi:
+        lines.append(f"  url = {{{url}}},")
 
     lines.append("}")
 
