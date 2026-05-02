@@ -14,7 +14,7 @@ def format_search_results(results: dict | None, metadata: dict | None = None) ->
     """Format search results for display.
 
     Args:
-        results: Primo API response dict with docs and info.
+        results: Search response dict with docs and info.
         metadata: Optional dict with query metadata for the search hints footer.
             Keys: query, field, sort, resource_type.
     """

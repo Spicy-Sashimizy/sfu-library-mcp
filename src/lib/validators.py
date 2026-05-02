@@ -108,7 +108,7 @@ _MAX_BOOLEAN_OPERATORS = 30
 
 
 def sanitize_search_query_advanced(query: str) -> str:
-    """Sanitize a search query while preserving Primo-valid syntax.
+    """Sanitize a search query while preserving boolean search syntax.
 
     Preserves:
     - Double quotes (phrase search)
@@ -118,14 +118,14 @@ def sanitize_search_query_advanced(query: str) -> str:
     Still strips:
     - HTML tags
     - Null bytes
-    - Stray $$ sequences (Primo subfield delimiters)
+    - Stray $$ sequences (subfield delimiters)
     - Collapses whitespace, enforces max length
 
     Args:
         query: Raw user search query.
 
     Returns:
-        Sanitized query string safe for the Primo API.
+        Sanitized query string safe for search APIs.
     """
     if not query:
         return ""

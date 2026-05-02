@@ -79,7 +79,7 @@ class TestReranker:
         assert result[0]["pnx"]["display"]["title"][0] == "Complete Test Document"
 
     def test_preserves_order_on_tied_scores(self):
-        """When scores are equal, original Primo order should be preserved."""
+        """When scores are equal, original input order should be preserved."""
         doc_a = _make_doc(title="Alpha Document", date="2024", doc_type="article",
                           doi="10.1/a", availability="available")
         doc_b = _make_doc(title="Beta Document", date="2024", doc_type="article",

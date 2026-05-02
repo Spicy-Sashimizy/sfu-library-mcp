@@ -602,103 +602,103 @@ This includes extra fields (`licenseTerms`, `authenticationNote`, `collection_id
 
 ### What Has NOT Been Implemented
 
-**All six phases of the plan are pending.** The server still runs entirely on the Primo API.
+**All six phases are complete.** The server no longer depends on the Primo API.
 
 ---
 
-### TODO: Implementation Checklist
+### Implementation Checklist
 
-#### Phase 1 — SFU Database Registry Client [ ] NOT STARTED
-- [ ] Create `src/lib/sfu_databases.py`
-  - [ ] Fetch all 764 records from `https://databases.lib.sfu.ca/solr/sfu_databases/select?q=*:*&rows=1000&wt=json`
-  - [ ] Parse into dataclass/typed dict models
-  - [ ] Build publisher domain index (`url` field → normalized domain) for access matching
-  - [ ] Strip HTML from `publicNote` fields (remove `<strong>`, `<a>`, `<p>` tags)
-  - [ ] Implement disk-backed JSON cache with configurable TTL (default 24h)
-  - [ ] Serve from disk cache if Solr is unreachable (cold-start fallback)
-  - [ ] Unit tests in `src/tests/test_sfu_databases.py`
+#### Phase 1 — SFU Database Registry Client [x] COMPLETE
+- [x] Create `src/lib/sfu_databases.py`
+  - [x] Fetch all 764 records from `https://databases.lib.sfu.ca/solr/sfu_databases/select?q=*:*&rows=1000&wt=json`
+  - [x] Parse into dataclass/typed dict models
+  - [x] Build publisher domain index (`url` field → normalized domain) for access matching
+  - [x] Strip HTML from `publicNote` fields (remove `<strong>`, `<a>`, `<p>` tags)
+  - [x] Implement disk-backed JSON cache with configurable TTL (default 24h)
+  - [x] Serve from disk cache if Solr is unreachable (cold-start fallback)
+  - [x] Unit tests in `src/tests/test_sfu_databases.py`
 
-#### Phase 2 — OpenAlex Client [ ] NOT STARTED
-- [ ] Create `src/lib/openalex.py`
-  - [ ] `search_works(query, filters, page, per_page)` — primary search
-  - [ ] Filter builder: `publication_year`, `open_access.is_oa`, `type`, `authorships.author.id`, `topics.id`
-  - [ ] Reconstruct abstract from `abstract_inverted_index` (OpenAlex stores it inverted)
-  - [ ] Normalize result to a common `WorkMetadata` dict shared with CrossRef/S2 output
-  - [ ] Include `mailto` param in all requests for polite pool (10 req/s vs 1 req/s)
-  - [ ] Unit tests in `src/tests/test_openalex.py`
+#### Phase 2 — OpenAlex Client [x] COMPLETE
+- [x] Create `src/lib/openalex.py`
+  - [x] `search_works(query, filters, page, per_page)` — primary search
+  - [x] Filter builder: `publication_year`, `open_access.is_oa`, `type`, `authorships.author.id`, `topics.id`
+  - [x] Reconstruct abstract from `abstract_inverted_index` (OpenAlex stores it inverted)
+  - [x] Normalize result to a common `WorkMetadata` dict shared with CrossRef/S2 output
+  - [x] Include `mailto` param in all requests for polite pool (10 req/s vs 1 req/s)
+  - [x] Unit tests in `src/tests/test_openalex.py`
 
-#### Phase 3 — Access Resolution [ ] NOT STARTED
-- [ ] Create `src/lib/access_resolver.py`
-  - [ ] `resolve_access(doi, article_url, source_name)` → returns best URL + access type label
-  - [ ] Step 1: pass-through if OpenAlex already gives `is_oa=true` + `oa_url`
-  - [ ] Step 2: Unpaywall check by DOI (`https://api.unpaywall.org/v2/{doi}?email=...`)
-  - [ ] Step 3: domain match against SFU Database Registry (from Phase 1 index)
-  - [ ] Step 4: construct EZProxy URL (`https://proxy.lib.sfu.ca/login?url={article_url}`) if `proxy=true`
-  - [ ] Step 5: DOI link fallback
-  - [ ] Unit tests in `src/tests/test_access_resolver.py`
-  - [ ] Wire the standalone `src/tests/test_access_resolution.py` harness into this module
+#### Phase 3 — Access Resolution [x] COMPLETE
+- [x] Create `src/lib/access_resolver.py`
+  - [x] `resolve_access(doi, article_url, source_name)` → returns best URL + access type label
+  - [x] Step 1: pass-through if OpenAlex already gives `is_oa=true` + `oa_url`
+  - [x] Step 2: Unpaywall check by DOI (`https://api.unpaywall.org/v2/{doi}?email=...`)
+  - [x] Step 3: domain match against SFU Database Registry (from Phase 1 index)
+  - [x] Step 4: construct EZProxy URL (`https://proxy.lib.sfu.ca/login?url={article_url}`) if `proxy=true`
+  - [x] Step 5: DOI link fallback
+  - [x] Unit tests in `src/tests/test_access_resolver.py`
+  - [x] Wire the standalone `src/tests/test_access_resolution.py` harness into this module
 
-#### Phase 4 — Semantic Scholar Client [ ] NOT STARTED
-- [ ] Create `src/lib/semantic_scholar.py`
-  - [ ] `search_papers(query, fields, limit)` — basic search
-  - [ ] `get_paper(paper_id, fields)` — detail fetch
-  - [ ] `get_citations(paper_id, limit)` — papers citing this work
-  - [ ] `get_references(paper_id, limit)` — this paper's reference list
-  - [ ] `get_tldr(paper_id)` — AI-generated summary
-  - [ ] Batch endpoint: `POST /paper/batch` (up to 500 IDs)
-  - [ ] Use API key from `config.semantic_scholar_api_key` (1 req/s authenticated vs 100 req/5min anon)
-  - [ ] Unit tests in `src/tests/test_semantic_scholar.py`
+#### Phase 4 — Semantic Scholar Client [x] COMPLETE
+- [x] Create `src/lib/semantic_scholar.py`
+  - [x] `search_papers(query, fields, limit)` — basic search
+  - [x] `get_paper(paper_id, fields)` — detail fetch
+  - [x] `get_citations(paper_id, limit)` — papers citing this work
+  - [x] `get_references(paper_id, limit)` — this paper's reference list
+  - [x] `get_tldr(paper_id)` — AI-generated summary
+  - [x] Batch endpoint: `POST /paper/batch` (up to 500 IDs)
+  - [x] Use API key from `config.semantic_scholar_api_key` (1 req/s authenticated vs 100 req/5min anon)
+  - [x] Unit tests in `src/tests/test_semantic_scholar.py`
 
-#### Phase 5 — Tool Rewiring in `tools.py` [ ] NOT STARTED
-- [ ] Add 12 new tool definitions (see Proposed MCP Tools table above)
-  - [ ] `search_academic` (OpenAlex)
-  - [ ] `search_by_author` (OpenAlex)
-  - [ ] `search_by_doi` (OpenAlex + CrossRef)
-  - [ ] `search_by_topic` (OpenAlex concepts/topics)
-  - [ ] `get_citations` (Semantic Scholar)
-  - [ ] `get_references` (Semantic Scholar)
-  - [ ] `get_paper_summary` (Semantic Scholar TLDR)
-  - [ ] `find_open_access` (Unpaywall)
-  - [ ] `get_full_text_link` (access resolver cascade)
-  - [ ] `browse_sfu_databases` (Solr endpoint)
-  - [ ] `check_sfu_access` (Solr endpoint)
-  - [ ] `search_biomedical` (Europe PMC — optional, behind feature flag)
-- [ ] Add handler functions for each new tool
-- [ ] Update `handle_tool_call()` dispatch to route new tool names
-- [ ] Remove handlers for deprecated tools (see Phase 6)
-- [ ] Keep citation, export, and Zotero tool handlers unchanged
-- [ ] Update `src/tests/test_tools_unit.py` with new tool tests
+#### Phase 5 — Tool Rewiring in `tools.py` [x] COMPLETE
+- [x] Add 21 new tool definitions (see Proposed MCP Tools table above)
+  - [x] `search_academic` (OpenAlex)
+  - [x] `search_by_author` (OpenAlex)
+  - [x] `search_by_doi` (OpenAlex + CrossRef)
+  - [x] `search_by_topic` (OpenAlex concepts/topics)
+  - [x] `get_citations` (Semantic Scholar)
+  - [x] `get_references` (Semantic Scholar)
+  - [x] `get_paper_summary` (Semantic Scholar TLDR)
+  - [x] `find_open_access` (Unpaywall)
+  - [x] `get_full_text_link` (access resolver cascade)
+  - [x] `browse_sfu_databases` (Solr endpoint)
+  - [x] `check_sfu_access` (Solr endpoint)
+  - [x] `search_biomedical` (Europe PMC — optional, behind feature flag)
+- [x] Add handler functions for each new tool
+- [x] Update `handle_tool_call()` dispatch to route new tool names
+- [x] Remove handlers for deprecated tools (see Phase 6)
+- [x] Keep citation, export, and Zotero tool handlers unchanged
+- [x] Update `src/tests/test_tools_unit.py` with new tool tests
 
-#### Phase 6 — Remove Primo Dependencies [ ] NOT STARTED
-- [ ] Delete `src/lib/client.py` (the `SFULibraryClient` Primo REST client — 200+ lines)
-- [ ] Remove the 6 deprecated tool definitions from `tools.py`:
-  - [ ] `search_library` → replaced by `search_academic`
-  - [ ] `get_item_details` → replaced by `search_by_doi`
-  - [ ] `search_by_subject` → replaced by `search_by_topic`
-  - [ ] `search_by_isbn` → replaced by `search_by_doi` with ISBN filter
-  - [ ] `search_electronic_resources` → replaced by `browse_sfu_databases`
-  - [ ] `batch_isbn_lookup` → replaced by OpenAlex batch ISBN lookup
-- [ ] Remove `lib_client` / `SFULibraryClient` instantiation from server entry points
-- [ ] Delete or repurpose `src/tests/test_client_unit.py` (currently tests Primo client)
-- [ ] Update `src/lib/config.py`:
-  - [ ] Remove any lingering Primo URL/credential fields
-  - [ ] Add `openalex_mailto: str`
-  - [ ] Add `unpaywall_email: str`
-  - [ ] Add `sfu_ezproxy_base: str` (default `https://proxy.lib.sfu.ca/login?url=`)
-  - [ ] Add `sfu_db_registry_cache_ttl: int` (default 86400)
-  - [ ] Add `sfu_db_registry_cache_file: str`
-  - [ ] Expand feature flags: `semantic_scholar_enabled`, `europe_pmc_enabled`
-  - [ ] Update `validate_config()` to warn when `openalex_mailto` / `unpaywall_email` are unset
-- [ ] Update `src/tests/test_config.py` for new fields
+#### Phase 6 — Remove Primo Dependencies [x] COMPLETE
+- [x] Delete `src/lib/client.py` (the `SFULibraryClient` Primo REST client — 200+ lines)
+- [x] Remove the 6 deprecated tool definitions from `tools.py`:
+  - [x] `search_library` → replaced by `search_academic`
+  - [x] `get_item_details` → replaced by `search_by_doi`
+  - [x] `search_by_subject` → replaced by `search_by_topic`
+  - [x] `search_by_isbn` → replaced by `search_by_doi` with ISBN filter
+  - [x] `search_electronic_resources` → replaced by `browse_sfu_databases`
+  - [x] `batch_isbn_lookup` → replaced by OpenAlex batch ISBN lookup
+- [x] Remove `lib_client` / `SFULibraryClient` instantiation from server entry points
+- [x] Repurpose `src/tests/test_client_unit.py` to test new OpenAlex/access resolver modules
+- [x] Update `src/lib/config.py`:
+  - [x] Remove any lingering Primo URL/credential fields
+  - [x] Add `openalex_mailto: str`
+  - [x] Add `unpaywall_email: str`
+  - [x] Add `sfu_ezproxy_base: str` (default `https://proxy.lib.sfu.ca/login?url=`)
+  - [x] Add `sfu_db_registry_cache_ttl: int` (default 86400)
+  - [x] Add `sfu_db_registry_cache_file: str`
+  - [x] Expand feature flags: `semantic_scholar_enabled`, `europe_pmc_enabled`
+  - [x] Update `validate_config()` to warn when `openalex_mailto` / `unpaywall_email` are unset
+- [x] Update `src/tests/test_config.py` for new fields
 
 ---
 
-### Modules to Deprecate (Delete)
+### Modules Deprecated (Deleted)
 
 | File | Status | Reason |
 |------|--------|--------|
-| `src/lib/client.py` | **Deprecate entirely** | Primo REST API client — replaced by OpenAlex + Solr clients |
-| `src/tests/test_client_unit.py` | **Deprecate or repurpose** | Tests `SFULibraryClient` (Primo); replace with tests for new modules |
+| `src/lib/client.py` | **Deleted** | Primo REST API client — replaced by OpenAlex + Solr clients |
+| `src/tests/test_client_unit.py` | **Repurposed** | Now tests OpenAlex helpers and access resolver utilities |
 
 ### Modules to Refactor (Keep but Modify Significantly)
 

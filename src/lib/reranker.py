@@ -1,7 +1,7 @@
 """Two-stage re-ranking for search results.
 
 Scores documents on multiple signals and re-orders them to surface
-the most useful results. Designed to run after Primo's native ranking.
+the most useful results. Designed to run after the initial API ranking.
 """
 
 import re
@@ -110,7 +110,7 @@ def rerank_results(docs: list[dict], query: str, limit: int) -> list[dict]:
     """Re-rank search results using weighted multi-signal scoring.
 
     Args:
-        docs: List of Primo document dicts (with pnx structure).
+        docs: List of document dicts (with pnx structure).
         query: The original search query for title relevance scoring.
         limit: Maximum number of results to return.
 
