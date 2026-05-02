@@ -4,7 +4,9 @@
     "num_papers": 50,
     "scores": {
       "bm25_only": 0.1421,
-      "MiniLM-L6-v2": 0.0979
+      "MiniLM-L6-v2": 0.0979,
+      "SPECTER2-base": 0.1204,
+      "BGE-base-v1.5": 0.0883
     }
   },
   {
@@ -12,7 +14,9 @@
     "num_papers": 50,
     "scores": {
       "bm25_only": 0.0845,
-      "MiniLM-L6-v2": 0.0184
+      "MiniLM-L6-v2": 0.0184,
+      "SPECTER2-base": 0.0392,
+      "BGE-base-v1.5": 0.0283
     }
   },
   {
@@ -20,7 +24,9 @@
     "num_papers": 50,
     "scores": {
       "bm25_only": 0.11,
-      "MiniLM-L6-v2": 0.0212
+      "MiniLM-L6-v2": 0.0212,
+      "SPECTER2-base": 0.0493,
+      "BGE-base-v1.5": 0.0218
     }
   },
   {
@@ -28,7 +34,9 @@
     "num_papers": 50,
     "scores": {
       "bm25_only": 0.998,
-      "MiniLM-L6-v2": 0.0002
+      "MiniLM-L6-v2": 0.0002,
+      "SPECTER2-base": 0.0003,
+      "BGE-base-v1.5": 0.0004
     }
   },
   {
@@ -36,7 +44,9 @@
     "num_papers": 50,
     "scores": {
       "bm25_only": 0.3383,
-      "MiniLM-L6-v2": 0.0355
+      "MiniLM-L6-v2": 0.0355,
+      "SPECTER2-base": 0.075,
+      "BGE-base-v1.5": 0.0787
     }
   },
   {
@@ -44,7 +54,9 @@
     "num_papers": 50,
     "scores": {
       "bm25_only": 0.2829,
-      "MiniLM-L6-v2": 0.2458
+      "MiniLM-L6-v2": 0.2458,
+      "SPECTER2-base": 0.232,
+      "BGE-base-v1.5": 0.2005
     }
   },
   {
@@ -52,7 +64,9 @@
     "num_papers": 50,
     "scores": {
       "bm25_only": 0.3866,
-      "MiniLM-L6-v2": 0.0102
+      "MiniLM-L6-v2": 0.0102,
+      "SPECTER2-base": 0.0381,
+      "BGE-base-v1.5": 0.0099
     }
   },
   {
@@ -60,7 +74,9 @@
     "num_papers": 50,
     "scores": {
       "bm25_only": 0.5993,
-      "MiniLM-L6-v2": 0.1672
+      "MiniLM-L6-v2": 0.1672,
+      "SPECTER2-base": 0.1535,
+      "BGE-base-v1.5": 0.0881
     }
   },
   {
@@ -68,7 +84,9 @@
     "num_papers": 50,
     "scores": {
       "bm25_only": 0.2703,
-      "MiniLM-L6-v2": 0.0754
+      "MiniLM-L6-v2": 0.0754,
+      "SPECTER2-base": 0.1125,
+      "BGE-base-v1.5": 0.3506
     }
   },
   {
@@ -76,7 +94,9 @@
     "num_papers": 50,
     "scores": {
       "bm25_only": 0.7709,
-      "MiniLM-L6-v2": 0.2453
+      "MiniLM-L6-v2": 0.2453,
+      "SPECTER2-base": 0.0258,
+      "BGE-base-v1.5": 0.2659
     }
   },
   {
@@ -84,7 +104,9 @@
     "num_papers": 50,
     "scores": {
       "bm25_only": 0.2699,
-      "MiniLM-L6-v2": 0.0331
+      "MiniLM-L6-v2": 0.0331,
+      "SPECTER2-base": 0.1705,
+      "BGE-base-v1.5": 0.0356
     }
   },
   {
@@ -92,7 +114,9 @@
     "num_papers": 50,
     "scores": {
       "bm25_only": 0.8891,
-      "MiniLM-L6-v2": 0.2665
+      "MiniLM-L6-v2": 0.2665,
+      "SPECTER2-base": 0.1834,
+      "BGE-base-v1.5": 0.2574
     }
   },
   {
@@ -100,7 +124,9 @@
     "num_papers": 50,
     "scores": {
       "bm25_only": 0.0394,
-      "MiniLM-L6-v2": 0.0174
+      "MiniLM-L6-v2": 0.0174,
+      "SPECTER2-base": 0.0084,
+      "BGE-base-v1.5": 0.0109
     }
   },
   {
@@ -108,7 +134,9 @@
     "num_papers": 50,
     "scores": {
       "bm25_only": 0.907,
-      "MiniLM-L6-v2": 0.1834
+      "MiniLM-L6-v2": 0.1834,
+      "SPECTER2-base": 0.2946,
+      "BGE-base-v1.5": 0.2881
     }
   },
   {
@@ -116,7 +144,9 @@
     "num_papers": 50,
     "scores": {
       "bm25_only": 0.0173,
-      "MiniLM-L6-v2": 0.0074
+      "MiniLM-L6-v2": 0.0074,
+      "SPECTER2-base": 0.0037,
+      "BGE-base-v1.5": 0.0057
     }
   },
   {
@@ -124,7 +154,9 @@
     "num_papers": 50,
     "scores": {
       "bm25_only": 0.1567,
-      "MiniLM-L6-v2": 0.0897
+      "MiniLM-L6-v2": 0.0897,
+      "SPECTER2-base": 0.059,
+      "BGE-base-v1.5": 0.0793
     }
   },
   {
@@ -132,7 +164,9 @@
     "num_papers": 50,
     "scores": {
       "bm25_only": 0.1903,
-      "MiniLM-L6-v2": 0.3414
+      "MiniLM-L6-v2": 0.3414,
+      "SPECTER2-base": 0.3611,
+      "BGE-base-v1.5": 0.3651
     }
   },
   {
@@ -140,7 +174,9 @@
     "num_papers": 50,
     "scores": {
       "bm25_only": 0.2155,
-      "MiniLM-L6-v2": 0.0921
+      "MiniLM-L6-v2": 0.0921,
+      "SPECTER2-base": 0.0685,
+      "BGE-base-v1.5": 0.1026
     }
   },
   {
@@ -148,7 +184,9 @@
     "num_papers": 50,
     "scores": {
       "bm25_only": 0.6672,
-      "MiniLM-L6-v2": 0.5164
+      "MiniLM-L6-v2": 0.5164,
+      "SPECTER2-base": 0.3666,
+      "BGE-base-v1.5": 0.3898
     }
   },
   {
@@ -156,7 +194,9 @@
     "num_papers": 50,
     "scores": {
       "bm25_only": 0.2586,
-      "MiniLM-L6-v2": 0.1437
+      "MiniLM-L6-v2": 0.1437,
+      "SPECTER2-base": 0.1368,
+      "BGE-base-v1.5": 0.1703
     }
   },
   {
@@ -164,7 +204,9 @@
     "num_papers": 50,
     "scores": {
       "bm25_only": 0.0967,
-      "MiniLM-L6-v2": 0.3713
+      "MiniLM-L6-v2": 0.3713,
+      "SPECTER2-base": 0.0629,
+      "BGE-base-v1.5": 0.6339
     }
   },
   {
@@ -172,7 +214,9 @@
     "num_papers": 50,
     "scores": {
       "bm25_only": 0.1131,
-      "MiniLM-L6-v2": 0.0484
+      "MiniLM-L6-v2": 0.0484,
+      "SPECTER2-base": 0.0821,
+      "BGE-base-v1.5": 0.0736
     }
   },
   {
@@ -180,7 +224,9 @@
     "num_papers": 50,
     "scores": {
       "bm25_only": 0.2355,
-      "MiniLM-L6-v2": 0.0703
+      "MiniLM-L6-v2": 0.0703,
+      "SPECTER2-base": 0.0597,
+      "BGE-base-v1.5": 0.0451
     }
   },
   {
@@ -188,7 +234,9 @@
     "num_papers": 50,
     "scores": {
       "bm25_only": 0.54,
-      "MiniLM-L6-v2": 0.2934
+      "MiniLM-L6-v2": 0.2934,
+      "SPECTER2-base": 0.4339,
+      "BGE-base-v1.5": 0.486
     }
   },
   {
@@ -196,7 +244,9 @@
     "num_papers": 50,
     "scores": {
       "bm25_only": 0.0456,
-      "MiniLM-L6-v2": 0.0482
+      "MiniLM-L6-v2": 0.0482,
+      "SPECTER2-base": 0.1017,
+      "BGE-base-v1.5": 0.0153
     }
   },
   {
@@ -204,7 +254,9 @@
     "num_papers": 50,
     "scores": {
       "bm25_only": 0.3921,
-      "MiniLM-L6-v2": 0.1358
+      "MiniLM-L6-v2": 0.1358,
+      "SPECTER2-base": 0.1358,
+      "BGE-base-v1.5": 0.0388
     }
   },
   {
@@ -212,7 +264,9 @@
     "num_papers": 50,
     "scores": {
       "bm25_only": 0.2241,
-      "MiniLM-L6-v2": 0.0086
+      "MiniLM-L6-v2": 0.0086,
+      "SPECTER2-base": 0.0841,
+      "BGE-base-v1.5": 0.0076
     }
   },
   {
@@ -220,7 +274,9 @@
     "num_papers": 50,
     "scores": {
       "bm25_only": 0.3918,
-      "MiniLM-L6-v2": 0.1883
+      "MiniLM-L6-v2": 0.1883,
+      "SPECTER2-base": 0.0408,
+      "BGE-base-v1.5": 0.0658
     }
   },
   {
@@ -228,7 +284,9 @@
     "num_papers": 50,
     "scores": {
       "bm25_only": 0.2702,
-      "MiniLM-L6-v2": 0.0372
+      "MiniLM-L6-v2": 0.0372,
+      "SPECTER2-base": 0.1163,
+      "BGE-base-v1.5": 0.0128
     }
   },
   {
@@ -236,7 +294,9 @@
     "num_papers": 50,
     "scores": {
       "bm25_only": 0.5876,
-      "MiniLM-L6-v2": 0.2705
+      "MiniLM-L6-v2": 0.2705,
+      "SPECTER2-base": 0.3059,
+      "BGE-base-v1.5": 0.3685
     }
   },
   {
@@ -244,7 +304,9 @@
     "num_papers": 50,
     "scores": {
       "bm25_only": 0.0768,
-      "MiniLM-L6-v2": 0.0657
+      "MiniLM-L6-v2": 0.0657,
+      "SPECTER2-base": 0.0575,
+      "BGE-base-v1.5": 0.0543
     }
   },
   {
@@ -252,7 +314,9 @@
     "num_papers": 50,
     "scores": {
       "bm25_only": 0.2219,
-      "MiniLM-L6-v2": 0.0741
+      "MiniLM-L6-v2": 0.0741,
+      "SPECTER2-base": 0.1079,
+      "BGE-base-v1.5": 0.1212
     }
   },
   {
@@ -260,7 +324,9 @@
     "num_papers": 50,
     "scores": {
       "bm25_only": 0.2788,
-      "MiniLM-L6-v2": 0.0724
+      "MiniLM-L6-v2": 0.0724,
+      "SPECTER2-base": 0.0828,
+      "BGE-base-v1.5": 0.0641
     }
   },
   {
@@ -268,7 +334,9 @@
     "num_papers": 50,
     "scores": {
       "bm25_only": 0.0277,
-      "MiniLM-L6-v2": 0.0147
+      "MiniLM-L6-v2": 0.0147,
+      "SPECTER2-base": 0.0182,
+      "BGE-base-v1.5": 0.0129
     }
   },
   {
@@ -276,7 +344,9 @@
     "num_papers": 50,
     "scores": {
       "bm25_only": 0.0167,
-      "MiniLM-L6-v2": 0.0143
+      "MiniLM-L6-v2": 0.0143,
+      "SPECTER2-base": 0.0164,
+      "BGE-base-v1.5": 0.0157
     }
   },
   {
@@ -284,7 +354,9 @@
     "num_papers": 50,
     "scores": {
       "bm25_only": 0.4556,
-      "MiniLM-L6-v2": 0.2562
+      "MiniLM-L6-v2": 0.2562,
+      "SPECTER2-base": 0.1964,
+      "BGE-base-v1.5": 0.1627
     }
   },
   {
@@ -292,7 +364,9 @@
     "num_papers": 50,
     "scores": {
       "bm25_only": 0.0173,
-      "MiniLM-L6-v2": 0.0139
+      "MiniLM-L6-v2": 0.0139,
+      "SPECTER2-base": 0.0134,
+      "BGE-base-v1.5": 0.0141
     }
   },
   {
@@ -300,7 +374,9 @@
     "num_papers": 50,
     "scores": {
       "bm25_only": 0.3929,
-      "MiniLM-L6-v2": 0.1593
+      "MiniLM-L6-v2": 0.1593,
+      "SPECTER2-base": 0.1504,
+      "BGE-base-v1.5": 0.6012
     }
   },
   {
@@ -308,7 +384,9 @@
     "num_papers": 50,
     "scores": {
       "bm25_only": 0.521,
-      "MiniLM-L6-v2": 0.1327
+      "MiniLM-L6-v2": 0.1327,
+      "SPECTER2-base": 0.088,
+      "BGE-base-v1.5": 0.0702
     }
   },
   {
@@ -316,7 +394,9 @@
     "num_papers": 50,
     "scores": {
       "bm25_only": 0.2176,
-      "MiniLM-L6-v2": 0.0201
+      "MiniLM-L6-v2": 0.0201,
+      "SPECTER2-base": 0.0217,
+      "BGE-base-v1.5": 0.0198
     }
   },
   {
@@ -324,7 +404,9 @@
     "num_papers": 50,
     "scores": {
       "bm25_only": 0.0573,
-      "MiniLM-L6-v2": 0.0336
+      "MiniLM-L6-v2": 0.0336,
+      "SPECTER2-base": 0.037,
+      "BGE-base-v1.5": 0.0296
     }
   },
   {
@@ -332,7 +414,9 @@
     "num_papers": 50,
     "scores": {
       "bm25_only": 0.4523,
-      "MiniLM-L6-v2": 0.4372
+      "MiniLM-L6-v2": 0.4372,
+      "SPECTER2-base": 0.019,
+      "BGE-base-v1.5": 0.018
     }
   },
   {
@@ -340,7 +424,9 @@
     "num_papers": 50,
     "scores": {
       "bm25_only": 0.9843,
-      "MiniLM-L6-v2": 0.2432
+      "MiniLM-L6-v2": 0.2432,
+      "SPECTER2-base": 0.2033,
+      "BGE-base-v1.5": 0.1913
     }
   },
   {
@@ -348,7 +434,9 @@
     "num_papers": 50,
     "scores": {
       "bm25_only": 0.3166,
-      "MiniLM-L6-v2": 0.0051
+      "MiniLM-L6-v2": 0.0051,
+      "SPECTER2-base": 0.017,
+      "BGE-base-v1.5": 0.0033
     }
   },
   {
@@ -356,7 +444,9 @@
     "num_papers": 50,
     "scores": {
       "bm25_only": 0.1552,
-      "MiniLM-L6-v2": 0.0601
+      "MiniLM-L6-v2": 0.0601,
+      "SPECTER2-base": 0.0982,
+      "BGE-base-v1.5": 0.1113
     }
   },
   {
@@ -364,7 +454,9 @@
     "num_papers": 50,
     "scores": {
       "bm25_only": 0.0716,
-      "MiniLM-L6-v2": 0.0151
+      "MiniLM-L6-v2": 0.0151,
+      "SPECTER2-base": 0.023,
+      "BGE-base-v1.5": 0.0155
     }
   },
   {
@@ -372,7 +464,9 @@
     "num_papers": 50,
     "scores": {
       "bm25_only": 0.4285,
-      "MiniLM-L6-v2": 0.0254
+      "MiniLM-L6-v2": 0.0254,
+      "SPECTER2-base": 0.0116,
+      "BGE-base-v1.5": 0.008
     }
   },
   {
@@ -380,7 +474,9 @@
     "num_papers": 50,
     "scores": {
       "bm25_only": 0.0234,
-      "MiniLM-L6-v2": 0.0106
+      "MiniLM-L6-v2": 0.0106,
+      "SPECTER2-base": 0.0021,
+      "BGE-base-v1.5": 0.009
     }
   },
   {
@@ -388,7 +484,9 @@
     "num_papers": 50,
     "scores": {
       "bm25_only": 0.0466,
-      "MiniLM-L6-v2": 0.0283
+      "MiniLM-L6-v2": 0.0283,
+      "SPECTER2-base": 0.0241,
+      "BGE-base-v1.5": 0.0166
     }
   },
   {
@@ -396,7 +494,9 @@
     "num_papers": 50,
     "scores": {
       "bm25_only": 0.2592,
-      "MiniLM-L6-v2": 0.0182
+      "MiniLM-L6-v2": 0.0182,
+      "SPECTER2-base": 0.0247,
+      "BGE-base-v1.5": 0.0191
     }
   }
 ]

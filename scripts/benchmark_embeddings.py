@@ -137,10 +137,10 @@ def _get_or_load_model(model_name: str):
 
     from sentence_transformers import SentenceTransformer
 
-    if "specter2" in model_name.lower():
-        # SPECTER2 uses base model + PEFT adapter for query-doc retrieval
+    if model_name == "allenai/specter2":
+        # SPECTER2 adapter has peft version issues — use base model directly
+        # specter2_base is still SciBERT-based and academic-domain trained
         model = SentenceTransformer("allenai/specter2_base")
-        model.load_adapter("allenai/specter2_adhoc_query")
     else:
         model = SentenceTransformer(model_name)
 
@@ -219,7 +219,8 @@ def run_benchmark(
     }
 
     if test_specter2_local:
-        models_to_test["SPECTER2-local"] = "allenai/specter2"
+        models_to_test["SPECTER2-base"] = "allenai/specter2"
+        models_to_test["BGE-base-v1.5"] = "BAAI/bge-base-en-v1.5"
 
     if custom_model:
         models_to_test["custom-finetuned"] = custom_model
@@ -292,7 +293,7 @@ def run_benchmark(
 
     # Decision recommendation
     minilm_scores = results.get("MiniLM-L6-v2", [])
-    specter_scores = results.get("SPECTER2-local", [])
+    specter_scores = results.get("SPECTER2-base", [])
     if minilm_scores:
         minilm_mean = np.mean(minilm_scores)
         if specter_scores:
