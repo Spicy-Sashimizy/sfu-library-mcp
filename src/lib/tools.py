@@ -385,22 +385,43 @@ TOOL_DEFINITIONS: list[Tool] = [
     Tool(
         name="generate_citation",
         description=(
-            "Generate a formatted citation for a paper using its DOI. "
-            "Supports APA 7th, MLA 9th, Chicago 17th, and BibTeX formats. "
-            "Fetches metadata from OpenAlex and enriches with CrossRef if needed."
+            "Generate a formatted citation for a paper. "
+            "Provide a DOI to auto-fetch metadata, OR supply raw fields (title, authors, year, etc.) "
+            "directly when no DOI is available. "
+            "Supports APA 7th, MLA 9th, Chicago 17th, and BibTeX formats."
         ),
         inputSchema={
             "type": "object",
             "properties": {
-                "doi": {"type": "string", "description": "DOI of the paper to cite"},
+                "doi": {"type": "string", "description": "DOI of the paper (optional if raw fields are provided)"},
                 "format": {
                     "type": "string",
                     "description": "Citation format: 'apa', 'mla', 'chicago', 'bibtex'",
                     "enum": ["apa", "mla", "chicago", "bibtex"],
                     "default": "apa",
                 },
+                "title": {"type": "string", "description": "Paper/book title (used when no DOI is available)"},
+                "authors": {
+                    "type": "array",
+                    "items": {"type": "string"},
+                    "description": "Author names in 'Last, First' format (used when no DOI is available)",
+                },
+                "year": {"type": "string", "description": "Publication year (used when no DOI is available)"},
+                "item_type": {
+                    "type": "string",
+                    "enum": ["article", "book", "other"],
+                    "description": "Type of work (used when no DOI is available)",
+                    "default": "other",
+                },
+                "journal": {"type": "string", "description": "Journal or publication name (for articles)"},
+                "publisher": {"type": "string", "description": "Publisher name (for books)"},
+                "volume": {"type": "string", "description": "Volume number"},
+                "issue": {"type": "string", "description": "Issue number"},
+                "pages": {"type": "string", "description": "Page range (e.g. '123-145')"},
+                "isbn": {"type": "string", "description": "ISBN (for books)"},
+                "issn": {"type": "string", "description": "ISSN (for journals)"},
             },
-            "required": ["doi"],
+            "required": [],
         },
     ),
     Tool(
@@ -447,18 +468,40 @@ TOOL_DEFINITIONS: list[Tool] = [
     Tool(
         name="save_to_zotero",
         description=(
-            "Save a paper to the user's Zotero library using its DOI. "
-            "Automatically checks for duplicates. "
-            "Optionally specify a collection name."
+            "Save a paper to the user's Zotero library. "
+            "Provide a DOI to auto-fetch metadata, OR supply raw fields (title, authors, year, etc.) "
+            "directly when no DOI is available. "
+            "Automatically checks for duplicates. Optionally specify a collection name."
         ),
         inputSchema={
             "type": "object",
             "properties": {
-                "doi": {"type": "string", "description": "DOI of the paper to save"},
+                "doi": {"type": "string", "description": "DOI of the paper (optional if raw fields are provided)"},
                 "collection_name": {"type": "string", "description": "Zotero collection name (created if it doesn't exist)"},
                 "parent_collection": {"type": "string", "description": "Parent collection name for nested collections"},
+                "title": {"type": "string", "description": "Paper/book title (used when no DOI is available)"},
+                "authors": {
+                    "type": "array",
+                    "items": {"type": "string"},
+                    "description": "Author names in 'Last, First' format (used when no DOI is available)",
+                },
+                "year": {"type": "string", "description": "Publication year (used when no DOI is available)"},
+                "item_type": {
+                    "type": "string",
+                    "enum": ["article", "book", "other"],
+                    "description": "Type of work (used when no DOI is available)",
+                    "default": "other",
+                },
+                "journal": {"type": "string", "description": "Journal or publication name (for articles)"},
+                "publisher": {"type": "string", "description": "Publisher name (for books)"},
+                "volume": {"type": "string", "description": "Volume number"},
+                "issue": {"type": "string", "description": "Issue number"},
+                "pages": {"type": "string", "description": "Page range (e.g. '123-145')"},
+                "isbn": {"type": "string", "description": "ISBN (for books)"},
+                "issn": {"type": "string", "description": "ISSN (for journals)"},
+                "url": {"type": "string", "description": "URL for the resource"},
             },
-            "required": ["doi"],
+            "required": [],
         },
     ),
     Tool(
@@ -996,6 +1039,30 @@ async def _fetch_work_metadata(doi: str) -> dict | None:
     return work
 
 
+def _build_manual_metadata(args: dict) -> dict:
+    """Build a metadata dict from raw tool input fields (no DOI lookup needed)."""
+    item_type = args.get("item_type", "other")
+    resource_type = item_type if item_type in ("article", "book") else "other"
+    return {
+        "title": args.get("title", ""),
+        "authors": args.get("authors") or [],
+        "creators": args.get("authors") or [],
+        "date": args.get("year", ""),
+        "source": args.get("journal", ""),
+        "publisher": args.get("publisher", ""),
+        "doi": args.get("doi", ""),
+        "isbn": args.get("isbn", ""),
+        "issn": args.get("issn", ""),
+        "volume": args.get("volume", ""),
+        "issue": args.get("issue", ""),
+        "pages": args.get("pages", ""),
+        "spage": "",
+        "epage": "",
+        "resource_type": resource_type,
+        "url": args.get("url", ""),
+    }
+
+
 def _format_single_citation(metadata: dict | None, fmt: str) -> str:
     formatters = {
         "apa": format_apa_citation,
@@ -1008,17 +1075,18 @@ def _format_single_citation(metadata: dict | None, fmt: str) -> str:
 
 async def _handle_generate_citation(args: dict) -> list[TextContent]:
     doi = args.get("doi", "").strip()
-    if not doi:
-        return [TextContent(type="text", text="No DOI provided.")]
     fmt = args.get("format", "apa").lower()
 
-    async with _request_semaphore:
-        metadata = await _fetch_work_metadata(doi)
-
-    if not metadata:
-        return [TextContent(type="text", text=f"Could not retrieve metadata for DOI: {doi}")]
-
-    metadata = enrich_metadata_from_crossref(metadata)
+    if doi:
+        async with _request_semaphore:
+            metadata = await _fetch_work_metadata(doi)
+        if not metadata:
+            return [TextContent(type="text", text=f"Could not retrieve metadata for DOI: {doi}")]
+        metadata = enrich_metadata_from_crossref(metadata)
+    elif args.get("title", "").strip():
+        metadata = _build_manual_metadata(args)
+    else:
+        return [TextContent(type="text", text="Provide a DOI or at minimum a title to generate a citation.")]
     format_names = {
         "apa": "APA 7th Edition",
         "mla": "MLA 9th Edition",
@@ -1137,18 +1205,19 @@ async def _handle_save_to_zotero(args: dict) -> list[TextContent]:
         return auth_err
 
     doi = args.get("doi", "").strip()
-    if not doi:
-        return [TextContent(type="text", text="No DOI provided.")]
     collection_name = args.get("collection_name", "")
     parent_collection = args.get("parent_collection", "")
 
-    async with _request_semaphore:
-        metadata = await _fetch_work_metadata(doi)
-
-    if not metadata:
-        return [TextContent(type="text", text=f"Could not retrieve metadata for DOI: {doi}")]
-
-    metadata = enrich_metadata_from_crossref(metadata)
+    if doi:
+        async with _request_semaphore:
+            metadata = await _fetch_work_metadata(doi)
+        if not metadata:
+            return [TextContent(type="text", text=f"Could not retrieve metadata for DOI: {doi}")]
+        metadata = enrich_metadata_from_crossref(metadata)
+    elif args.get("title", "").strip():
+        metadata = _build_manual_metadata(args)
+    else:
+        return [TextContent(type="text", text="Provide a DOI or at minimum a title to save to Zotero.")]
     zot = _get_zotero_client()
 
     try:
