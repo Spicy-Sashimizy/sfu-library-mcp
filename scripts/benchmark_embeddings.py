@@ -127,12 +127,31 @@ def compute_bm25_proxy_scores(query: str, papers: list[dict]) -> list[float]:
     return [1.0 - (i / n) for i in range(n)]
 
 
+_model_cache: dict = {}
+
+
+def _get_or_load_model(model_name: str):
+    """Load and cache a sentence-transformer model, handling SPECTER2 specially."""
+    if model_name in _model_cache:
+        return _model_cache[model_name]
+
+    from sentence_transformers import SentenceTransformer
+
+    if "specter2" in model_name.lower():
+        # SPECTER2 uses base model + PEFT adapter for query-doc retrieval
+        model = SentenceTransformer("allenai/specter2_base")
+        model.load_adapter("allenai/specter2_adhoc_query")
+    else:
+        model = SentenceTransformer(model_name)
+
+    _model_cache[model_name] = model
+    return model
+
+
 def compute_embedding_scores(query: str, papers: list[dict], model_name: str) -> list[float]:
     """Compute semantic similarity scores using a sentence-transformer model."""
     try:
-        from sentence_transformers import SentenceTransformer
-
-        model = SentenceTransformer(model_name)
+        model = _get_or_load_model(model_name)
         texts = [query] + [
             f"{p.get('title', '')} {p.get('abstract', '')}" for p in papers
         ]
