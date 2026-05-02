@@ -3,16 +3,13 @@
 import asyncio
 import json
 import logging
-import os
-import re
 import time
 from typing import Any
 
+import requests
 from mcp.types import Tool, TextContent
 
 from lib.citations import (
-    extract_metadata,
-    extract_full_text_links,
     enrich_metadata_from_crossref,
     format_apa_citation,
     format_mla_citation,
@@ -20,24 +17,27 @@ from lib.citations import (
     format_bibtex_entry,
     format_ris_entry,
 )
-from lib.config import load_config
-from lib.formatters import format_search_results, format_item_details
+from lib.config import load_config, ServerConfig
+from lib.formatters import (
+    format_openalex_results,
+    format_sfu_databases_list,
+    format_sfu_database,
+    format_semantic_scholar_papers,
+)
 from lib.reranker import rerank_results
-from lib.validators import sanitize_search_query, validate_isbn
+from lib.validators import sanitize_search_query
 from lib.zotero import ZoteroClient, ZoteroError
 
 logger = logging.getLogger("sfu_library_mcp")
 
-
-# Semaphore to limit concurrent API requests
+# Semaphore to limit concurrent outbound API requests
 _request_semaphore = asyncio.Semaphore(8)
 
-# Lazy-loaded config for feature flags
-_config = None
+# Lazy-loaded config
+_config: ServerConfig | None = None
 
 
-def _get_config() -> "ServerConfig":
-    """Get config (lazy-loaded)."""
+def _get_config() -> ServerConfig:
     global _config
     if _config is None:
         _config = load_config()
@@ -45,1167 +45,1187 @@ def _get_config() -> "ServerConfig":
 
 
 def _get_features() -> dict[str, bool]:
-    """Get feature flags from config (lazy-loaded)."""
     return _get_config().features
 
 
-# Lazy-loaded zotero client
+# ── Lazy-loaded API clients ───────────────────────────────────────────────────
+
 _zotero_client: ZoteroClient | None = None
+_openalex_client = None
+_sfu_registry = None
+_access_resolver = None
+_s2_client = None
 
 
 def _get_zotero_client() -> ZoteroClient:
-    """Get or create ZoteroClient."""
     global _zotero_client
     if _zotero_client is None:
         _zotero_client = ZoteroClient(_get_config())
     return _zotero_client
 
 
-def _ensure_zotero_auth() -> list[TextContent] | None:
-    """Zotero-only auth pre-flight check. Returns error response or None if OK."""
-    features = _get_features()
-    if not features.get("zotero_enabled", True):
-        return [TextContent(type="text", text="Zotero integration is disabled.")]
-    try:
-        zot = _get_zotero_client()
-        if not zot.ensure_authenticated():
-            return [TextContent(type="text", text=(
-                "Zotero authentication failed. Check SFU_ZOTERO_API_KEY and "
-                "SFU_ZOTERO_USER_ID."
-            ))]
-    except ZoteroError as e:
-        return [TextContent(type="text", text=f"Zotero auth error: {e}")]
-    return None
+def _get_openalex() -> "OpenAlexClient":
+    global _openalex_client
+    if _openalex_client is None:
+        from lib.openalex import OpenAlexClient
+        _openalex_client = OpenAlexClient(mailto=_get_config().openalex_mailto)
+    return _openalex_client
 
 
-# Simple metrics counters
+def _get_registry() -> "SFUDatabaseRegistry":
+    global _sfu_registry
+    if _sfu_registry is None:
+        from lib.sfu_databases import SFUDatabaseRegistry
+        cfg = _get_config()
+        _sfu_registry = SFUDatabaseRegistry(
+            cache_ttl=cfg.sfu_db_registry_cache_ttl,
+            cache_file=cfg.sfu_db_registry_cache_file,
+        )
+    return _sfu_registry
+
+
+def _get_resolver() -> "AccessResolver":
+    global _access_resolver
+    if _access_resolver is None:
+        from lib.access_resolver import AccessResolver
+        _access_resolver = AccessResolver(
+            registry=_get_registry(),
+            unpaywall_email=_get_config().unpaywall_email,
+        )
+    return _access_resolver
+
+
+def _get_s2() -> "SemanticScholarClient":
+    global _s2_client
+    if _s2_client is None:
+        from lib.semantic_scholar import SemanticScholarClient
+        _s2_client = SemanticScholarClient(api_key=_get_config().semantic_scholar_api_key)
+    return _s2_client
+
+
+# ── Work cache (keyed by DOI) ─────────────────────────────────────────────────
+# Populated by search results so citation/Zotero tools can avoid a second API call.
+
+_work_cache: dict[str, dict] = {}
+
+
+def _cache_works(works: list[dict]) -> None:
+    for w in works:
+        doi = w.get("doi", "")
+        openalex_id = w.get("openalex_id", "")
+        if doi:
+            _work_cache[doi] = w
+        if openalex_id:
+            _work_cache[openalex_id] = w
+    # Cap at 500 entries
+    if len(_work_cache) > 500:
+        for k in list(_work_cache)[:len(_work_cache) - 500]:
+            del _work_cache[k]
+
+
+def _lookup_work(doi_or_id: str) -> dict | None:
+    return _work_cache.get(doi_or_id)
+
+
+# ── Metrics ───────────────────────────────────────────────────────────────────
+
 _metrics: dict[str, dict[str, Any]] = {}
-
-# Search result cache indexed by record ID.
-# Populated by every search call so that generate_citation / get_full_text_links
-# can fall back to cached PNX data when get_item_details fails for CDI records.
-_record_cache: dict[str, dict] = {}
 
 
 def _record_metric(tool_name: str, latency: float, success: bool) -> None:
-    """Record a metric for a tool call."""
     if tool_name not in _metrics:
         _metrics[tool_name] = {"count": 0, "errors": 0, "total_latency": 0.0}
     _metrics[tool_name]["count"] += 1
     _metrics[tool_name]["total_latency"] += latency
     if not success:
         _metrics[tool_name]["errors"] += 1
-    logger.debug(
-        "Metric: %s count=%d latency=%.3fs",
-        tool_name,
-        _metrics[tool_name]["count"],
-        latency,
-    )
 
 
 def get_metrics() -> dict:
-    """Return current metrics snapshot."""
     return dict(_metrics)
 
 
-def _cache_search_docs(docs: list[dict]) -> None:
-    """Cache docs from search results by record ID."""
-    for doc in docs:
-        pnx = doc.get("pnx", {})
-        control = pnx.get("control", {})
-        record_id = control.get("recordid", [""])[0] if control.get("recordid") else ""
-        if record_id:
-            _record_cache[record_id] = doc
-    # Cap cache to prevent unbounded growth
-    if len(_record_cache) > 500:
-        keys = list(_record_cache.keys())
-        for k in keys[:len(keys) - 500]:
-            del _record_cache[k]
+# ── Zotero auth helper ────────────────────────────────────────────────────────
+
+def _ensure_zotero_auth() -> list[TextContent] | None:
+    if not _get_features().get("zotero_enabled", True):
+        return [TextContent(type="text", text="Zotero integration is disabled.")]
+    try:
+        zot = _get_zotero_client()
+        if not zot.ensure_authenticated():
+            return [TextContent(type="text", text=(
+                "Zotero authentication failed. Check SFU_ZOTERO_API_KEY and SFU_ZOTERO_USER_ID."
+            ))]
+    except ZoteroError as e:
+        return [TextContent(type="text", text=f"Zotero auth error: {e}")]
+    return None
 
 
-def _lookup_cached_record(record_id: str) -> dict | None:
-    """Look up a previously searched record from cache."""
-    return _record_cache.get(record_id)
-
-
-# ─── Tool definitions ───────────────────────────────────────────
+# ── Tool definitions ──────────────────────────────────────────────────────────
 
 TOOL_DEFINITIONS: list[Tool] = [
+    # ── Search ────────────────────────────────────────────────────────────────
     Tool(
-        name="search_library",
+        name="search_academic",
         description=(
-            "Search the SFU Library database for books, articles, journals, and other academic resources. "
-            "Returns titles, authors, dates, subjects, availability, and record IDs.\n\n"
-            "QUERY SYNTAX:\n"
-            "- Boolean operators: AND, OR, NOT (MUST be uppercase). Example: '\"CRISPR\" AND \"sickle cell\"'\n"
-            "- Phrase search: wrap exact phrases in double quotes. Example: '\"machine learning\"'\n"
-            "- Wildcards: ? (single char), * (multiple chars). Example: 'cultur*' matches culture, cultures, cultural\n\n"
-            "SEARCH STRATEGY:\n"
-            "- For comprehensive results on complex topics, make multiple calls with different field/scope combinations\n"
-            "- Use field='sub' for controlled subject vocabulary (most precise for topic searches)\n"
-            "- Use field='title' for known work titles\n"
-            "- Use field='any' for broad discovery when unsure\n"
-            "- Use resource_type='electronic' when user needs immediate online access\n"
-            "- Use sort='date' for recent publications, sort='rank' for best relevance\n"
-            "- Results include subject headings from the library's controlled vocabulary — use these for follow-up searches"
+            "Search 250M+ scholarly works via OpenAlex (articles, books, datasets, theses). "
+            "Returns titles, authors, DOIs, open-access status, citation counts, and abstracts.\n\n"
+            "FILTERS (all optional):\n"
+            "- year_from / year_to: publication year range (e.g. year_from=2020)\n"
+            "- open_access_only: true to limit to freely available papers\n"
+            "- type: 'article', 'book', 'dataset', 'dissertation', 'preprint'\n\n"
+            "TIPS:\n"
+            "- Use the returned DOI with generate_citation, save_to_zotero, or get_full_text_link\n"
+            "- For citations/references of a specific paper use get_citations / get_references\n"
+            "- For biomedical literature add search_biomedical for PubMed coverage"
         ),
         inputSchema={
             "type": "object",
             "properties": {
-                "query": {
+                "query": {"type": "string", "description": "Search query"},
+                "limit": {"type": "integer", "description": "Results to return (default 10, max 50)", "default": 10},
+                "page": {"type": "integer", "description": "Page number (default 1)", "default": 1},
+                "year_from": {"type": "integer", "description": "Earliest publication year"},
+                "year_to": {"type": "integer", "description": "Latest publication year"},
+                "open_access_only": {"type": "boolean", "description": "Limit to open-access works", "default": False},
+                "type": {
                     "type": "string",
-                    "description": "The search query. Supports boolean operators (AND, OR, NOT uppercase), phrase search (\"quoted\"), and wildcards (?, *)"
+                    "description": "Work type filter",
+                    "enum": ["article", "book", "dataset", "dissertation", "preprint"],
                 },
-                "limit": {
-                    "type": "integer",
-                    "description": "Maximum number of results to return (default: 10, max: 50)",
-                    "default": 10
-                },
-                "offset": {
-                    "type": "integer",
-                    "description": "Starting offset for pagination (default: 0)",
-                    "default": 0
-                },
-                "field": {
-                    "type": "string",
-                    "description": "Field to search in: 'any' (all fields, broad), 'title' (known works), 'creator' (author), 'sub' (subject headings, most precise), 'isbn', 'issn'",
-                    "enum": ["any", "title", "creator", "sub", "isbn", "issn"],
-                    "default": "any"
-                },
-                "sort": {
-                    "type": "string",
-                    "description": "Sort order: 'rank' (relevance), 'date' (newest first), 'author', 'title'",
-                    "enum": ["rank", "date", "author", "title"],
-                    "default": "rank"
-                },
-                "resource_type": {
-                    "type": "string",
-                    "description": "Type of resources: 'all' (everything), 'electronic' (online only — use when user needs immediate access), 'courses' (course reserves)",
-                    "enum": ["all", "electronic", "courses"],
-                    "default": "all"
-                },
-                "expanded_terms": {
-                    "type": "string",
-                    "description": (
-                        "Optional: additional search terms to OR with the main query. "
-                        "Generate academic synonyms/related terms. "
-                        "Example: for query 'machine learning', expanded_terms might be "
-                        "'deep learning OR neural networks OR artificial intelligence'. "
-                        "Server will construct: (query) OR (expanded_terms)"
-                    )
-                },
-                "comprehensive": {
-                    "type": "boolean",
-                    "description": (
-                        "Enable comprehensive search: runs parallel searches across "
-                        "multiple scopes (general, electronic, subject-focused) and "
-                        "merges results using rank fusion. Use for broad research questions. "
-                        "Costs 3-4x API calls but provides much broader coverage."
-                    ),
-                    "default": False
-                }
             },
-            "required": ["query"]
-        }
-    ),
-    Tool(
-        name="get_item_details",
-        description="Get detailed information about a specific library item using its record ID. Returns full metadata including description, subjects, availability, and access links.",
-        inputSchema={
-            "type": "object",
-            "properties": {
-                "record_id": {
-                    "type": "string",
-                    "description": "The record ID of the item (obtained from search results)"
-                }
-            },
-            "required": ["record_id"]
-        }
+            "required": ["query"],
+        },
     ),
     Tool(
         name="search_by_author",
         description=(
-            "Search for works by a specific author in the SFU Library. "
-            "For best results use 'LastName, FirstName' format. "
-            "Combine with search_library (field='sub') or search_by_subject to find an author's works on a specific topic."
+            "Find scholarly works by a specific author via OpenAlex. "
+            "Use 'LastName, FirstName' or just the last name. "
+            "Returns works with DOIs you can use for citations and Zotero."
         ),
         inputSchema={
             "type": "object",
             "properties": {
-                "author": {
-                    "type": "string",
-                    "description": "Author name to search for (best: 'LastName, FirstName')"
-                },
-                "limit": {
-                    "type": "integer",
-                    "description": "Maximum number of results (default: 10)",
-                    "default": 10
-                }
+                "author": {"type": "string", "description": "Author name (best: 'LastName, FirstName')"},
+                "limit": {"type": "integer", "description": "Results to return (default 10)", "default": 10},
             },
-            "required": ["author"]
-        }
+            "required": ["author"],
+        },
     ),
     Tool(
-        name="search_by_subject",
+        name="search_by_doi",
         description=(
-            "Search for resources by subject heading in the SFU Library. "
-            "Uses the library's controlled vocabulary (LCSH). "
-            "Check subject headings returned in search results for the exact vocabulary to use. "
-            "For broader discovery, combine with search_library (field='any') or search_electronic_resources."
+            "Look up a specific work by its DOI. Returns full metadata including "
+            "title, authors, abstract, open-access status, and citations. "
+            "Use this when you have a DOI and want full details."
         ),
         inputSchema={
             "type": "object",
             "properties": {
-                "subject": {
+                "doi": {"type": "string", "description": "DOI (with or without https://doi.org/ prefix)"},
+            },
+            "required": ["doi"],
+        },
+    ),
+    Tool(
+        name="search_by_topic",
+        description=(
+            "Search for works by academic topic or concept via OpenAlex. "
+            "Good for broad discipline-level discovery. "
+            "For narrower keyword searches use search_academic instead."
+        ),
+        inputSchema={
+            "type": "object",
+            "properties": {
+                "topic": {"type": "string", "description": "Academic topic or concept (e.g. 'machine learning', 'climate change')"},
+                "limit": {"type": "integer", "description": "Results to return (default 10)", "default": 10},
+                "open_access_only": {"type": "boolean", "description": "Limit to open-access works", "default": False},
+            },
+            "required": ["topic"],
+        },
+    ),
+    Tool(
+        name="get_citations",
+        description=(
+            "Get papers that cite a given work, via Semantic Scholar. "
+            "Useful for forward citation tracking. "
+            "Provide the DOI (preferred) or a Semantic Scholar paper ID."
+        ),
+        inputSchema={
+            "type": "object",
+            "properties": {
+                "doi": {"type": "string", "description": "DOI of the paper to find citations for"},
+                "limit": {"type": "integer", "description": "Max citations to return (default 20)", "default": 20},
+            },
+            "required": ["doi"],
+        },
+    ),
+    Tool(
+        name="get_references",
+        description=(
+            "Get the reference list of a paper (papers it cites), via Semantic Scholar. "
+            "Useful for backward citation tracking. "
+            "Provide the DOI."
+        ),
+        inputSchema={
+            "type": "object",
+            "properties": {
+                "doi": {"type": "string", "description": "DOI of the paper whose references to fetch"},
+                "limit": {"type": "integer", "description": "Max references to return (default 20)", "default": 20},
+            },
+            "required": ["doi"],
+        },
+    ),
+    Tool(
+        name="get_paper_summary",
+        description=(
+            "Get an AI-generated one-sentence summary (TLDR) of a paper from Semantic Scholar. "
+            "Provide the DOI."
+        ),
+        inputSchema={
+            "type": "object",
+            "properties": {
+                "doi": {"type": "string", "description": "DOI of the paper"},
+            },
+            "required": ["doi"],
+        },
+    ),
+    Tool(
+        name="find_open_access",
+        description=(
+            "Check whether a free full-text copy of a paper is available anywhere, "
+            "using Unpaywall. Searches PubMed Central, institutional repositories, "
+            "author websites, and legal preprint servers. Provide the DOI."
+        ),
+        inputSchema={
+            "type": "object",
+            "properties": {
+                "doi": {"type": "string", "description": "DOI to check for open-access availability"},
+            },
+            "required": ["doi"],
+        },
+    ),
+    Tool(
+        name="get_full_text_link",
+        description=(
+            "Get the best available access URL for a paper. "
+            "Tries in order: open-access copy, Unpaywall, SFU subscription (with EZProxy if needed), "
+            "then falls back to the DOI link. "
+            "SFU students/staff can authenticate via EZProxy in their browser."
+        ),
+        inputSchema={
+            "type": "object",
+            "properties": {
+                "doi": {"type": "string", "description": "DOI of the paper"},
+            },
+            "required": ["doi"],
+        },
+    ),
+    Tool(
+        name="browse_sfu_databases",
+        description=(
+            "Browse or search SFU Library's subscribed databases and electronic resources. "
+            "Returns database names, descriptions, subjects, content types, and access URLs. "
+            "Use this to discover which specialized databases SFU subscribes to for a given subject."
+        ),
+        inputSchema={
+            "type": "object",
+            "properties": {
+                "query": {"type": "string", "description": "Search term (database name or keyword)"},
+                "subject": {"type": "string", "description": "Filter by subject area (e.g. 'Psychology', 'Chemistry')"},
+                "content_type": {
                     "type": "string",
-                    "description": "Subject heading to search for (use exact terms from result subjects when possible)"
+                    "description": "Filter by content type (e.g. 'Full-text database', 'Datasets', 'Ebook collection')",
                 },
-                "limit": {
-                    "type": "integer",
-                    "description": "Maximum number of results (default: 10)",
-                    "default": 10
-                }
+                "free_only": {"type": "boolean", "description": "Show only freely accessible databases", "default": False},
+                "limit": {"type": "integer", "description": "Max results (default 20)", "default": 20},
             },
-            "required": ["subject"]
-        }
+            "required": [],
+        },
     ),
     Tool(
-        name="search_by_isbn",
-        description="Look up a specific book by its ISBN number.",
+        name="check_sfu_access",
+        description=(
+            "Check whether SFU Library subscribes to a specific database or resource. "
+            "Provide the database name, publisher, or URL. "
+            "Returns subscription status and EZProxy information."
+        ),
         inputSchema={
             "type": "object",
             "properties": {
-                "isbn": {
-                    "type": "string",
-                    "description": "ISBN number (10 or 13 digits)"
-                }
+                "name": {"type": "string", "description": "Database or resource name to check (e.g. 'JSTOR', 'Nature', 'Web of Science')"},
             },
-            "required": ["isbn"]
-        }
+            "required": ["name"],
+        },
     ),
     Tool(
-        name="search_electronic_resources",
-        description="Search specifically for electronic/online resources available through SFU Library (e-books, online journals, databases).",
+        name="search_biomedical",
+        description=(
+            "Search biomedical and life sciences literature via Europe PMC "
+            "(43M+ records from PubMed, PMC, and preprints). "
+            "Complements search_academic for health sciences, medicine, and biology."
+        ),
         inputSchema={
             "type": "object",
             "properties": {
-                "query": {
-                    "type": "string",
-                    "description": "Search query"
-                },
-                "limit": {
-                    "type": "integer",
-                    "description": "Maximum number of results (default: 10)",
-                    "default": 10
-                }
+                "query": {"type": "string", "description": "Biomedical search query"},
+                "limit": {"type": "integer", "description": "Results to return (default 10)", "default": 10},
             },
-            "required": ["query"]
-        }
+            "required": ["query"],
+        },
     ),
-    Tool(
-        name="get_full_text_links",
-        description="Extract all full-text access URLs (HTML, PDF, DOI) for a specific library item. Use this to get direct links to articles and documents.",
-        inputSchema={
-            "type": "object",
-            "properties": {
-                "record_id": {
-                    "type": "string",
-                    "description": "The record ID of the item (obtained from search results)"
-                }
-            },
-            "required": ["record_id"]
-        }
-    ),
+    # ── Citations ──────────────────────────────────────────────────────────────
     Tool(
         name="generate_citation",
-        description="Generate a citation for a library item in various formats (APA, MLA, Chicago, BibTeX).",
+        description=(
+            "Generate a formatted citation for a paper using its DOI. "
+            "Supports APA 7th, MLA 9th, Chicago 17th, and BibTeX formats. "
+            "Fetches metadata from OpenAlex and enriches with CrossRef if needed."
+        ),
         inputSchema={
             "type": "object",
             "properties": {
-                "record_id": {
-                    "type": "string",
-                    "description": "The record ID of the item to cite"
-                },
-                "format": {
-                    "type": "string",
-                    "description": "Citation format: 'apa' (APA 7th), 'mla' (MLA 9th), 'chicago' (Chicago 17th), 'bibtex'",
-                    "enum": ["apa", "mla", "chicago", "bibtex"],
-                    "default": "apa"
-                }
-            },
-            "required": ["record_id"]
-        }
-    ),
-    Tool(
-        name="batch_generate_citations",
-        description="Generate citations for multiple library items at once. Returns all citations in the specified format.",
-        inputSchema={
-            "type": "object",
-            "properties": {
-                "record_ids": {
-                    "type": "array",
-                    "items": {"type": "string"},
-                    "description": "List of record IDs to generate citations for (max 20)"
-                },
+                "doi": {"type": "string", "description": "DOI of the paper to cite"},
                 "format": {
                     "type": "string",
                     "description": "Citation format: 'apa', 'mla', 'chicago', 'bibtex'",
                     "enum": ["apa", "mla", "chicago", "bibtex"],
-                    "default": "apa"
-                }
+                    "default": "apa",
+                },
             },
-            "required": ["record_ids"]
-        }
+            "required": ["doi"],
+        },
     ),
     Tool(
-        name="export_search_results",
-        description="Search and export results in various formats (JSON, CSV, BibTeX, RIS). Useful for importing into reference managers or spreadsheets.",
+        name="batch_generate_citations",
+        description="Generate citations for multiple papers at once using their DOIs.",
         inputSchema={
             "type": "object",
             "properties": {
-                "query": {
-                    "type": "string",
-                    "description": "Search query"
+                "dois": {
+                    "type": "array",
+                    "items": {"type": "string"},
+                    "description": "List of DOIs (max 20)",
                 },
                 "format": {
                     "type": "string",
-                    "description": "Export format: 'json', 'csv', 'bibtex', 'ris' (EndNote/Zotero compatible)",
-                    "enum": ["json", "csv", "bibtex", "ris"],
-                    "default": "bibtex"
+                    "enum": ["apa", "mla", "chicago", "bibtex"],
+                    "default": "apa",
                 },
-                "limit": {
-                    "type": "integer",
-                    "description": "Maximum number of results to export (default: 10, max: 100)",
-                    "default": 10
-                }
             },
-            "required": ["query"]
-        }
+            "required": ["dois"],
+        },
     ),
     Tool(
-        name="batch_isbn_lookup",
-        description="Look up multiple books by their ISBN numbers in a single request. Returns basic info and availability for each.",
-        inputSchema={
-            "type": "object",
-            "properties": {
-                "isbn_list": {
-                    "type": "array",
-                    "items": {"type": "string"},
-                    "description": "List of ISBN numbers to look up (max 20)"
-                }
-            },
-            "required": ["isbn_list"]
-        }
-    ),
-    Tool(
-        name="save_to_zotero",
+        name="export_search_results",
         description=(
-            "Save a library item's metadata to the user's Zotero library. "
-            "Automatically checks for duplicates before saving. "
-            "Optionally specify a collection name to organize the item."
+            "Search and export results in various formats (JSON, CSV, BibTeX, RIS). "
+            "Useful for importing into reference managers or spreadsheets."
         ),
         inputSchema={
             "type": "object",
             "properties": {
-                "record_id": {
+                "query": {"type": "string", "description": "Search query"},
+                "format": {
                     "type": "string",
-                    "description": "The record ID of the item (obtained from search results)"
+                    "enum": ["json", "csv", "bibtex", "ris"],
+                    "default": "bibtex",
                 },
-                "collection_name": {
-                    "type": "string",
-                    "description": "Optional: Zotero collection name to add the item to (created if it doesn't exist)"
-                },
-                "parent_collection": {
-                    "type": "string",
-                    "description": "Optional: parent collection name. When specified, the item's collection becomes a subcollection under this parent."
-                },
+                "limit": {"type": "integer", "description": "Max results to export (default 10, max 50)", "default": 10},
             },
-            "required": ["record_id"]
-        }
+            "required": ["query"],
+        },
+    ),
+    # ── Zotero ────────────────────────────────────────────────────────────────
+    Tool(
+        name="save_to_zotero",
+        description=(
+            "Save a paper to the user's Zotero library using its DOI. "
+            "Automatically checks for duplicates. "
+            "Optionally specify a collection name."
+        ),
+        inputSchema={
+            "type": "object",
+            "properties": {
+                "doi": {"type": "string", "description": "DOI of the paper to save"},
+                "collection_name": {"type": "string", "description": "Zotero collection name (created if it doesn't exist)"},
+                "parent_collection": {"type": "string", "description": "Parent collection name for nested collections"},
+            },
+            "required": ["doi"],
+        },
     ),
     Tool(
         name="list_zotero_collections",
         description="List all collections in the user's Zotero library with item counts.",
-        inputSchema={
-            "type": "object",
-            "properties": {}
-        }
+        inputSchema={"type": "object", "properties": {}},
     ),
     Tool(
         name="batch_save_to_zotero",
         description=(
-            "Save multiple library items to a Zotero collection at once. "
-            "Checks each item for duplicates and skips items already in the library. "
-            "Returns a summary showing how many were saved, skipped, or failed."
+            "Save multiple papers to Zotero at once using their DOIs. "
+            "Checks each for duplicates and skips items already in the library."
         ),
         inputSchema={
             "type": "object",
             "properties": {
-                "record_ids": {
+                "dois": {
                     "type": "array",
                     "items": {"type": "string"},
-                    "description": "List of record IDs to save (max 20)"
+                    "description": "List of DOIs to save (max 20)",
                 },
-                "collection_name": {
-                    "type": "string",
-                    "description": "Zotero collection name to add items to (created if it doesn't exist)"
-                },
-                "parent_collection": {
-                    "type": "string",
-                    "description": "Optional: parent collection name. When specified, the collection becomes a subcollection under this parent."
-                },
+                "collection_name": {"type": "string", "description": "Zotero collection name"},
+                "parent_collection": {"type": "string", "description": "Parent collection name"},
             },
-            "required": ["record_ids", "collection_name"]
-        }
+            "required": ["dois", "collection_name"],
+        },
     ),
     Tool(
         name="search_zotero",
         description=(
-            "Search the user's existing Zotero library. Use this BEFORE saving to check for "
-            "duplicates, and to answer questions about what the user already has saved. "
-            "Returns titles, authors, dates, types, DOIs, collections, and tags."
+            "Search the user's existing Zotero library. "
+            "Use this BEFORE saving to check for duplicates, "
+            "or to answer questions about what the user already has saved."
         ),
         inputSchema={
             "type": "object",
             "properties": {
-                "query": {
-                    "type": "string",
-                    "description": "Search query to find items in the Zotero library"
-                },
-                "limit": {
-                    "type": "integer",
-                    "description": "Maximum number of results (default: 20, max: 100)",
-                    "default": 20
-                }
+                "query": {"type": "string", "description": "Search query"},
+                "limit": {"type": "integer", "description": "Max results (default 20)", "default": 20},
             },
-            "required": ["query"]
-        }
+            "required": ["query"],
+        },
     ),
     Tool(
         name="get_zotero_collection_items",
-        description=(
-            "List all items in a specific Zotero collection. Use to browse what's already "
-            "saved in a collection or to help the user review their saved research."
-        ),
+        description="List all items in a specific Zotero collection.",
         inputSchema={
             "type": "object",
             "properties": {
-                "collection_name": {
-                    "type": "string",
-                    "description": "Name of the Zotero collection to list items from"
-                },
-                "limit": {
-                    "type": "integer",
-                    "description": "Maximum number of items to return (default: 50)",
-                    "default": 50
-                }
+                "collection_name": {"type": "string", "description": "Collection name"},
+                "limit": {"type": "integer", "description": "Max items (default 50)", "default": 50},
             },
-            "required": ["collection_name"]
-        }
+            "required": ["collection_name"],
+        },
     ),
     Tool(
         name="get_zotero_status",
-        description=(
-            "Check Zotero API connection, credentials, and permissions."
-        ),
-        inputSchema={
-            "type": "object",
-            "properties": {},
-        },
+        description="Check Zotero API connection, credentials, and permissions.",
+        inputSchema={"type": "object", "properties": {}},
     ),
 ]
 
 
-# ─── Shared record resolution ─────────────────────────────────
-
-async def _resolve_record(record_id: str, client) -> dict | None:
-    """Resolve a record by ID using 3-tier fallback: API → cache → search."""
-    async with _request_semaphore:
-        item = client.get_item_details(record_id)
-    if item:
-        return item
-
-    item = _lookup_cached_record(record_id)
-    if item:
-        return item
-
-    async with _request_semaphore:
-        results = client.search(query=record_id, limit=1)
-    if results and results.get("docs"):
-        return results["docs"][0]
-
-    return None
-
-
-# ─── Tool handler dispatch ──────────────────────────────────────
+# ── Tool handler dispatch ─────────────────────────────────────────────────────
 
 async def handle_tool_call(
     name: str,
     arguments: dict[str, Any],
-    lib_client,
+    lib_client=None,  # kept for signature compatibility, unused
 ) -> list[TextContent]:
     """Handle a tool call by dispatching to the appropriate handler."""
     start_time = time.time()
     success = True
-
     try:
-        result = await _dispatch_tool(name, arguments, lib_client)
+        result = await _dispatch_tool(name, arguments)
         return result
     except Exception as e:
         success = False
-        logger.error("Tool %s failed: %s", name, e)
+        logger.error("Tool %s failed: %s", name, e, exc_info=True)
         return [TextContent(type="text", text=f"Error in {name}: {str(e)}")]
     finally:
-        latency = time.time() - start_time
-        _record_metric(name, latency, success)
+        _record_metric(name, time.time() - start_time, success)
 
 
-async def _dispatch_tool(
-    name: str,
-    arguments: dict[str, Any],
-    lib_client,
-) -> list[TextContent]:
-    """Route tool call to the correct handler."""
-
-    if name == "search_library":
-        return await _handle_search_library(arguments, lib_client)
-    elif name == "get_item_details":
-        return await _handle_get_item_details(arguments, lib_client)
-    elif name == "search_by_author":
-        return await _handle_search_by_author(arguments, lib_client)
-    elif name == "search_by_subject":
-        return await _handle_search_by_subject(arguments, lib_client)
-    elif name == "search_by_isbn":
-        return await _handle_search_by_isbn(arguments, lib_client)
-    elif name == "search_electronic_resources":
-        return await _handle_search_electronic(arguments, lib_client)
-    elif name == "get_full_text_links":
-        return await _handle_get_full_text_links(arguments, lib_client)
-    elif name == "generate_citation":
-        return await _handle_generate_citation(arguments, lib_client)
-    elif name == "batch_generate_citations":
-        return await _handle_batch_citations(arguments, lib_client)
-    elif name == "export_search_results":
-        return await _handle_export_search(arguments, lib_client)
-    elif name == "batch_isbn_lookup":
-        return await _handle_batch_isbn(arguments, lib_client)
-    elif name == "save_to_zotero":
-        return await _handle_save_to_zotero(arguments, lib_client)
-    elif name == "list_zotero_collections":
-        return _handle_list_zotero_collections()
-    elif name == "batch_save_to_zotero":
-        return await _handle_batch_save_to_zotero(arguments, lib_client)
-    elif name == "search_zotero":
-        return _handle_search_zotero(arguments)
-    elif name == "get_zotero_collection_items":
-        return _handle_get_zotero_collection_items(arguments)
-    elif name == "get_zotero_status":
-        return _handle_get_zotero_status()
-    else:
-        return [TextContent(type="text", text=f"Unknown tool: {name}")]
-
-
-# ─── Individual tool handlers ───────────────────────────────────
-
-async def _single_search(client, query: str, limit: int, offset: int,
-                         field: str, sort: str, tab: str, scope: str) -> dict | None:
-    """Execute a single search against the Primo API."""
-    async with _request_semaphore:
-        return client.search(
-            query=query, limit=limit, offset=offset,
-            field=field, sort=sort, tab=tab, scope=scope,
-        )
-
-
-def _reciprocal_rank_fusion(results_sets: list[dict | None], limit: int, k: int = 60) -> dict:
-    """Merge multiple result sets using Reciprocal Rank Fusion.
-
-    RRF formula: score(d) = sum(1 / (k + rank_i)) for each result set.
-    Deduplicates by record ID.
-
-    Args:
-        results_sets: List of Primo API response dicts (may contain None).
-        limit: Maximum number of merged results to return.
-        k: RRF constant (default 60, standard value).
-
-    Returns:
-        Merged results dict with docs and info.
-    """
-    scores: dict[str, float] = {}
-    doc_map: dict[str, dict] = {}
-    total_results = 0
-
-    for result_set in results_sets:
-        if not result_set or not result_set.get("docs"):
-            continue
-        total_results = max(total_results, result_set.get("info", {}).get("total", 0))
-        for rank, doc in enumerate(result_set["docs"]):
-            pnx = doc.get("pnx", {})
-            record_id = pnx.get("control", {}).get("recordid", [""])[0] if pnx.get("control", {}).get("recordid") else ""
-            if not record_id:
-                record_id = f"_fallback_{pnx.get('display', {}).get('title', [''])[0][:50]}"
-            scores[record_id] = scores.get(record_id, 0.0) + 1.0 / (k + rank)
-            if record_id not in doc_map:
-                doc_map[record_id] = doc
-
-    sorted_ids = sorted(scores.keys(), key=lambda rid: scores[rid], reverse=True)
-    merged_docs = [doc_map[rid] for rid in sorted_ids[:limit]]
-
-    return {
-        "docs": merged_docs,
-        "info": {"total": total_results, "first": 0, "last": len(merged_docs) - 1},
+async def _dispatch_tool(name: str, arguments: dict[str, Any]) -> list[TextContent]:
+    dispatch = {
+        "search_academic": _handle_search_academic,
+        "search_by_author": _handle_search_by_author,
+        "search_by_doi": _handle_search_by_doi,
+        "search_by_topic": _handle_search_by_topic,
+        "get_citations": _handle_get_citations,
+        "get_references": _handle_get_references,
+        "get_paper_summary": _handle_get_paper_summary,
+        "find_open_access": _handle_find_open_access,
+        "get_full_text_link": _handle_get_full_text_link,
+        "browse_sfu_databases": _handle_browse_sfu_databases,
+        "check_sfu_access": _handle_check_sfu_access,
+        "search_biomedical": _handle_search_biomedical,
+        "generate_citation": _handle_generate_citation,
+        "batch_generate_citations": _handle_batch_citations,
+        "export_search_results": _handle_export_search,
+        "save_to_zotero": _handle_save_to_zotero,
+        "list_zotero_collections": _handle_list_zotero_collections,
+        "batch_save_to_zotero": _handle_batch_save_to_zotero,
+        "search_zotero": _handle_search_zotero,
+        "get_zotero_collection_items": _handle_get_zotero_collection_items,
+        "get_zotero_status": _handle_get_zotero_status,
     }
+    handler = dispatch.get(name)
+    if handler is None:
+        return [TextContent(type="text", text=f"Unknown tool: {name}")]
+    return await handler(arguments)
 
 
-async def _handle_search_library(args: dict, client) -> list[TextContent]:
-    query = args.get("query", "")
+# ── Search handlers ───────────────────────────────────────────────────────────
+
+async def _handle_search_academic(args: dict) -> list[TextContent]:
+    query = sanitize_search_query(args.get("query", ""))
+    if not query:
+        return [TextContent(type="text", text="Empty search query.")]
     limit = min(args.get("limit", 10), 50)
-    offset = args.get("offset", 0)
-    field = args.get("field", "any")
-    sort = args.get("sort", "rank")
-    resource_type = args.get("resource_type", "all")
-    expanded_terms = args.get("expanded_terms", "")
-    comprehensive = args.get("comprehensive", False)
+    page = max(args.get("page", 1), 1)
 
-    # Construct combined boolean query if expanded_terms provided
-    if expanded_terms and expanded_terms.strip():
-        search_query = f"({query}) OR ({expanded_terms.strip()})"
-    else:
-        search_query = query
+    filters: dict[str, str] = {}
+    year_from = args.get("year_from")
+    year_to = args.get("year_to")
+    if year_from and year_to:
+        filters["publication_year"] = f"{year_from}-{year_to}"
+    elif year_from:
+        filters["from_publication_date"] = f"{year_from}-01-01"
+    elif year_to:
+        filters["to_publication_date"] = f"{year_to}-12-31"
+    if args.get("open_access_only"):
+        filters["open_access.is_oa"] = "true"
+    work_type = args.get("type", "")
+    if work_type:
+        filters["type"] = work_type
 
-    tab = "default_tab"
-    scope = "default_scope"
-    if resource_type == "electronic":
-        tab = "online_only_tab"
-        scope = "ElectronicOnly_scope"
-    elif resource_type == "courses":
-        tab = "course_tab"
-        scope = "course_scope"
-
-    features = _get_features()
-
-    # Determine how many results to fetch (over-fetch for re-ranking)
-    rerank_enabled = features.get("rerank_enabled", False)
-    fetch_limit = min(limit * 3, 50) if rerank_enabled else limit
-
-    # Fusion retrieval: parallel searches across multiple scopes
-    fusion_enabled = features.get("fusion_enabled", False)
-    if comprehensive and fusion_enabled:
-        search_tasks = [
-            _single_search(client, search_query, fetch_limit, offset, field, sort, tab, scope),
-            _single_search(client, search_query, fetch_limit, offset, "sub", sort, "default_tab", "default_scope"),
-            _single_search(client, search_query, fetch_limit, offset, field, sort, "online_only_tab", "ElectronicOnly_scope"),
-        ]
-        results_sets = await asyncio.gather(*search_tasks, return_exceptions=True)
-        valid_results = [r if not isinstance(r, Exception) else None for r in results_sets]
-        results = _reciprocal_rank_fusion(valid_results, fetch_limit)
-    else:
-        results = await _single_search(client, search_query, fetch_limit, offset, field, sort, tab, scope)
-
-    # Cache all returned docs by record ID
-    if results and results.get("docs"):
-        _cache_search_docs(results["docs"])
-
-    # Re-rank results if enabled
-    if rerank_enabled and results and results.get("docs"):
-        results["docs"] = rerank_results(results["docs"], query, limit)
-    elif results and results.get("docs") and len(results["docs"]) > limit:
-        results["docs"] = results["docs"][:limit]
-
-    search_metadata = {"query": query, "field": field, "sort": sort, "resource_type": resource_type}
-    if comprehensive and fusion_enabled:
-        search_metadata["comprehensive"] = True
-    formatted = format_search_results(results, metadata=search_metadata)
-    return [TextContent(type="text", text=formatted)]
-
-
-async def _handle_get_item_details(args: dict, client) -> list[TextContent]:
-    record_id = args.get("record_id", "")
     async with _request_semaphore:
-        item = client.get_item_details(record_id)
-    formatted = format_item_details(item)
-    return [TextContent(type="text", text=formatted)]
-
-
-async def _handle_search_by_author(args: dict, client) -> list[TextContent]:
-    author = args.get("author", "")
-    limit = args.get("limit", 10)
-    async with _request_semaphore:
-        results = client.search(query=author, limit=limit, field="creator")
-    if results and results.get("docs"):
-        _cache_search_docs(results["docs"])
-    search_metadata = {"query": author, "field": "creator", "sort": "rank"}
-    formatted = format_search_results(results, metadata=search_metadata)
-    return [TextContent(type="text", text=formatted)]
-
-
-async def _handle_search_by_subject(args: dict, client) -> list[TextContent]:
-    subject = args.get("subject", "")
-    limit = args.get("limit", 10)
-    async with _request_semaphore:
-        results = client.search(query=subject, limit=limit, field="sub")
-    if results and results.get("docs"):
-        _cache_search_docs(results["docs"])
-    search_metadata = {"query": subject, "field": "sub", "sort": "rank"}
-    formatted = format_search_results(results, metadata=search_metadata)
-    return [TextContent(type="text", text=formatted)]
-
-
-async def _handle_search_by_isbn(args: dict, client) -> list[TextContent]:
-    isbn = args.get("isbn", "")
-    async with _request_semaphore:
-        results = client.search(query=isbn, limit=5, field="isbn")
-    if results and results.get("docs"):
-        _cache_search_docs(results["docs"])
-    search_metadata = {"query": isbn, "field": "isbn", "sort": "rank"}
-    formatted = format_search_results(results, metadata=search_metadata)
-    return [TextContent(type="text", text=formatted)]
-
-
-async def _handle_search_electronic(args: dict, client) -> list[TextContent]:
-    query = args.get("query", "")
-    limit = args.get("limit", 10)
-    async with _request_semaphore:
-        results = client.search(
-            query=query, limit=limit,
-            tab="online_only_tab", scope="ElectronicOnly_scope",
+        data = await asyncio.get_event_loop().run_in_executor(
+            None,
+            lambda: _get_openalex().search_works(query, filters=filters, per_page=limit, page=page),
         )
-    if results and results.get("docs"):
-        _cache_search_docs(results["docs"])
-    search_metadata = {"query": query, "field": "any", "sort": "rank", "resource_type": "electronic"}
-    formatted = format_search_results(results, metadata=search_metadata)
-    return [TextContent(type="text", text=formatted)]
+
+    if data.get("results"):
+        _cache_works(data["results"])
+    return [TextContent(type="text", text=format_openalex_results(data, query))]
 
 
-async def _handle_get_full_text_links(args: dict, client) -> list[TextContent]:
-    record_id = args.get("record_id", "")
+async def _handle_search_by_author(args: dict) -> list[TextContent]:
+    author = args.get("author", "").strip()
+    if not author:
+        return [TextContent(type="text", text="No author name provided.")]
+    limit = min(args.get("limit", 10), 50)
 
     async with _request_semaphore:
-        item = client.get_item_details(record_id)
-    if not item:
-        item = _lookup_cached_record(record_id)
-    if not item:
+        data = await asyncio.get_event_loop().run_in_executor(
+            None,
+            lambda: _get_openalex().search_works(
+                query=author,
+                filters={"authorships.author.display_name.search": author},
+                per_page=limit,
+            ),
+        )
+
+    if data.get("results"):
+        _cache_works(data["results"])
+    return [TextContent(type="text", text=format_openalex_results(data, f"author:{author}"))]
+
+
+async def _handle_search_by_doi(args: dict) -> list[TextContent]:
+    doi = args.get("doi", "").strip()
+    if not doi:
+        return [TextContent(type="text", text="No DOI provided.")]
+
+    # Check work cache first
+    work = _lookup_work(doi)
+    if not work:
         async with _request_semaphore:
-            results = client.search(query=record_id, limit=1)
-        if results and results.get("docs"):
-            item = results["docs"][0]
+            work = await asyncio.get_event_loop().run_in_executor(
+                None,
+                lambda: _get_openalex().get_work_by_doi(doi),
+            )
 
-    if not item:
-        return [TextContent(type="text", text=f"Could not find item with record ID: {record_id}")]
+    if not work:
+        # Fallback to CrossRef
+        from lib.openalex import fetch_crossref_work
+        async with _request_semaphore:
+            work = await asyncio.get_event_loop().run_in_executor(
+                None, lambda: fetch_crossref_work(doi)
+            )
 
-    links = extract_full_text_links(item)
-    if not links:
-        return [TextContent(type="text", text="No access links found for this item.")]
+    if not work:
+        return [TextContent(type="text", text=f"No record found for DOI: {doi}")]
 
-    output = ["=" * 50, "FULL TEXT ACCESS LINKS", "=" * 50]
-    if links["doi_url"]:
-        output.append(f"\nDOI: {links['doi_url']}")
-    if links["open_access"]:
-        output.append("\nOpen Access: Yes")
-    if links["html_links"]:
-        output.append(f"\nHTML Links ({len(links['html_links'])}):")
-        for link in links["html_links"][:5]:
-            output.append(f"  - {link}")
-    if links["pdf_links"]:
-        output.append(f"\nPDF Links ({len(links['pdf_links'])}):")
-        for link in links["pdf_links"][:5]:
-            output.append(f"  - {link}")
-    if links["source_links"]:
-        output.append(f"\nSource Links ({len(links['source_links'])}):")
-        for link in links["source_links"][:5]:
-            output.append(f"  - {link}")
-    if not any([links["html_links"], links["pdf_links"], links["source_links"], links["doi_url"]]):
-        output.append("\nNo direct access links available for this item.")
-        output.append("Try searching for it on the library website.")
+    _cache_works([work])
+    data = {"results": [work], "meta": {"count": 1}}
+    return [TextContent(type="text", text=format_openalex_results(data, doi))]
+
+
+async def _handle_search_by_topic(args: dict) -> list[TextContent]:
+    topic = args.get("topic", "").strip()
+    if not topic:
+        return [TextContent(type="text", text="No topic provided.")]
+    limit = min(args.get("limit", 10), 50)
+
+    filters: dict[str, str] = {}
+    if args.get("open_access_only"):
+        filters["open_access.is_oa"] = "true"
+
+    async with _request_semaphore:
+        data = await asyncio.get_event_loop().run_in_executor(
+            None,
+            lambda: _get_openalex().search_works(
+                query=topic,
+                filters=filters or None,
+                sort="cited_by_count:desc",
+                per_page=limit,
+            ),
+        )
+
+    if data.get("results"):
+        _cache_works(data["results"])
+    return [TextContent(type="text", text=format_openalex_results(data, topic))]
+
+
+# ── Semantic Scholar handlers ─────────────────────────────────────────────────
+
+async def _handle_get_citations(args: dict) -> list[TextContent]:
+    doi = args.get("doi", "").strip()
+    if not doi:
+        return [TextContent(type="text", text="No DOI provided.")]
+    limit = min(args.get("limit", 20), 100)
+
+    async with _request_semaphore:
+        papers = await asyncio.get_event_loop().run_in_executor(
+            None,
+            lambda: _get_s2().get_citations(f"DOI:{doi}", limit=limit),
+        )
+
+    if not papers:
+        return [TextContent(type="text", text=f"No citing papers found for DOI: {doi}")]
+    return [TextContent(type="text", text=format_semantic_scholar_papers(papers, f"Papers citing {doi}"))]
+
+
+async def _handle_get_references(args: dict) -> list[TextContent]:
+    doi = args.get("doi", "").strip()
+    if not doi:
+        return [TextContent(type="text", text="No DOI provided.")]
+    limit = min(args.get("limit", 20), 100)
+
+    async with _request_semaphore:
+        papers = await asyncio.get_event_loop().run_in_executor(
+            None,
+            lambda: _get_s2().get_references(f"DOI:{doi}", limit=limit),
+        )
+
+    if not papers:
+        return [TextContent(type="text", text=f"No references found for DOI: {doi}")]
+    return [TextContent(type="text", text=format_semantic_scholar_papers(papers, f"References of {doi}"))]
+
+
+async def _handle_get_paper_summary(args: dict) -> list[TextContent]:
+    doi = args.get("doi", "").strip()
+    if not doi:
+        return [TextContent(type="text", text="No DOI provided.")]
+
+    async with _request_semaphore:
+        tldr = await asyncio.get_event_loop().run_in_executor(
+            None,
+            lambda: _get_s2().get_tldr(f"DOI:{doi}"),
+        )
+
+    if not tldr:
+        return [TextContent(type="text", text=f"No TLDR available for DOI: {doi}")]
+    return [TextContent(type="text", text=f"TLDR for {doi}:\n\n{tldr}")]
+
+
+# ── Access resolution handlers ────────────────────────────────────────────────
+
+async def _handle_find_open_access(args: dict) -> list[TextContent]:
+    doi = args.get("doi", "").strip()
+    if not doi:
+        return [TextContent(type="text", text="No DOI provided.")]
+
+    from lib.openalex import normalize_doi
+    from lib.access_resolver import AccessResolver
+    doi_norm = normalize_doi(doi)
+
+    resolver = _get_resolver()
+
+    async with _request_semaphore:
+        result = await asyncio.get_event_loop().run_in_executor(
+            None,
+            lambda: resolver._check_unpaywall(doi_norm),
+        )
+
+    doi_url = f"https://doi.org/{doi_norm}"
+    if result:
+        output = [
+            "Open Access: AVAILABLE",
+            f"URL: {result['url']}",
+        ]
+        if result.get("version"):
+            output.append(f"Version: {result['version']}")
+        if result.get("host_type"):
+            output.append(f"Host: {result['host_type']}")
+        output.append(f"DOI: {doi_url}")
+    else:
+        # Check if OpenAlex cached work is OA
+        work = _lookup_work(doi_norm)
+        if work and work.get("is_oa") and work.get("oa_url"):
+            output = [
+                "Open Access: AVAILABLE (via OpenAlex)",
+                f"URL: {work['oa_url']}",
+                f"DOI: {doi_url}",
+            ]
+        else:
+            output = [
+                "Open Access: NOT FOUND",
+                f"No freely available copy found via Unpaywall for {doi}.",
+                f"DOI: {doi_url}",
+            ]
 
     return [TextContent(type="text", text="\n".join(output))]
 
 
+async def _handle_get_full_text_link(args: dict) -> list[TextContent]:
+    doi = args.get("doi", "").strip()
+    if not doi:
+        return [TextContent(type="text", text="No DOI provided.")]
+
+    from lib.openalex import normalize_doi
+    doi_norm = normalize_doi(doi)
+
+    # Pull cached work metadata for OA info and source URL
+    work = _lookup_work(doi_norm)
+    if not work:
+        work = await asyncio.get_event_loop().run_in_executor(
+            None,
+            lambda: _get_openalex().get_work_by_doi(doi_norm),
+        )
+        if work:
+            _cache_works([work])
+
+    is_oa = (work or {}).get("is_oa", False)
+    oa_url = (work or {}).get("oa_url", "")
+    publisher = (work or {}).get("publisher", "")
+    source_url = (work or {}).get("oa_url", "") or f"https://doi.org/{doi_norm}"
+
+    async with _request_semaphore:
+        result = await asyncio.get_event_loop().run_in_executor(
+            None,
+            lambda: _get_resolver().resolve(
+                doi=doi_norm,
+                source_url=source_url,
+                publisher=publisher,
+                is_oa=is_oa,
+                oa_url=oa_url,
+            ),
+        )
+
+    access_labels = {
+        "oa": "Open Access",
+        "unpaywall": "Open Access (Unpaywall)",
+        "ezproxy": "SFU Subscription (EZProxy login required)",
+        "direct": "SFU Subscription (direct access)",
+        "doi_fallback": "DOI link (may require personal/institutional access)",
+    }
+
+    output = [
+        "=" * 50,
+        "FULL TEXT ACCESS",
+        "=" * 50,
+        f"Access type: {access_labels.get(result['access_type'], result['access_type'])}",
+        f"URL: {result['access_url']}",
+    ]
+    if result.get("db_name"):
+        output.append(f"Database: {result['db_name']}")
+    if result.get("proxy_needed"):
+        output.append("Note: Click the URL above and log in with your SFU credentials.")
+    if result.get("doi_url") and result["doi_url"] != result["access_url"]:
+        output.append(f"DOI fallback: {result['doi_url']}")
+
+    return [TextContent(type="text", text="\n".join(output))]
+
+
+# ── SFU Database Registry handlers ───────────────────────────────────────────
+
+async def _handle_browse_sfu_databases(args: dict) -> list[TextContent]:
+    query = args.get("query", "")
+    subject = args.get("subject", "")
+    content_type = args.get("content_type", "")
+    free_only = args.get("free_only", False)
+    limit = min(args.get("limit", 20), 100)
+
+    registry = _get_registry()
+    async with _request_semaphore:
+        docs = await asyncio.get_event_loop().run_in_executor(
+            None,
+            lambda: registry.search(
+                query=query,
+                subject=subject,
+                content_type=content_type,
+                free_only=free_only,
+                limit=limit,
+            ),
+        )
+
+    return [TextContent(type="text", text=format_sfu_databases_list(docs, query))]
+
+
+async def _handle_check_sfu_access(args: dict) -> list[TextContent]:
+    name = args.get("name", "").strip()
+    if not name:
+        return [TextContent(type="text", text="No database name provided.")]
+
+    registry = _get_registry()
+    async with _request_semaphore:
+        docs = await asyncio.get_event_loop().run_in_executor(
+            None,
+            lambda: registry.search(query=name, limit=5),
+        )
+
+    if not docs:
+        output = [
+            f"SFU Access Check: '{name}'",
+            "Result: NOT FOUND in SFU database registry.",
+            "SFU may not subscribe to this resource, or it may be listed under a different name.",
+        ]
+    else:
+        output = [
+            f"SFU Access Check: '{name}'",
+            f"Result: FOUND — {len(docs)} matching database(s)\n",
+        ]
+        for doc in docs:
+            output.append(format_sfu_database(doc))
+            output.append("")
+
+    return [TextContent(type="text", text="\n".join(output))]
+
+
+# ── Biomedical handler ────────────────────────────────────────────────────────
+
+async def _handle_search_biomedical(args: dict) -> list[TextContent]:
+    if not _get_features().get("europe_pmc_enabled", False):
+        # Fall back to OpenAlex with biomedical filter
+        args_copy = dict(args)
+        args_copy["query"] = args.get("query", "")
+        return await _handle_search_academic(args_copy)
+
+    query = args.get("query", "").strip()
+    if not query:
+        return [TextContent(type="text", text="No query provided.")]
+    limit = min(args.get("limit", 10), 25)
+
+    async with _request_semaphore:
+        data = await asyncio.get_event_loop().run_in_executor(
+            None,
+            lambda: _fetch_europe_pmc(query, limit),
+        )
+
+    return [TextContent(type="text", text=data)]
+
+
+def _fetch_europe_pmc(query: str, limit: int) -> str:
+    try:
+        resp = requests.get(
+            "https://www.ebi.ac.uk/europepmc/webservices/rest/search",
+            params={"query": query, "resultType": "core", "format": "json", "pageSize": limit},
+            headers={"User-Agent": "SFULibraryMCP/1.0"},
+            timeout=20,
+        )
+        resp.raise_for_status()
+        results = resp.json().get("resultList", {}).get("result", [])
+        if not results:
+            return "No results found in Europe PMC."
+        total = resp.json().get("hitCount", len(results))
+        lines = [f"Europe PMC: {total:,} results for '{query}'\n", "=" * 60 + "\n"]
+        for i, r in enumerate(results, 1):
+            title = r.get("title", "No title")
+            authors = r.get("authorString", "")
+            year = r.get("pubYear", "")
+            doi = r.get("doi", "")
+            pmid = r.get("pmid", "")
+            abstract = (r.get("abstractText", "") or "")[:200]
+            lines.append(f"{i}. {title}\n")
+            if authors:
+                lines.append(f"   Authors: {authors[:100]}\n")
+            if year:
+                lines.append(f"   Year: {year}\n")
+            if doi:
+                lines.append(f"   DOI: {doi}\n")
+            if pmid:
+                lines.append(f"   PMID: {pmid}\n")
+            if abstract:
+                lines.append(f"   Abstract: {abstract}...\n")
+            lines.append("\n")
+        return "".join(lines)
+    except Exception as e:
+        logger.error("Europe PMC request failed: %s", e)
+        return f"Europe PMC search failed: {e}"
+
+
+# ── Citation handlers ─────────────────────────────────────────────────────────
+
+async def _fetch_work_metadata(doi: str) -> dict | None:
+    """Fetch work metadata by DOI using cache → OpenAlex → CrossRef."""
+    from lib.openalex import normalize_doi
+    doi_norm = normalize_doi(doi)
+    work = _lookup_work(doi_norm) or _lookup_work(doi)
+    if work:
+        return work
+
+    work = await asyncio.get_event_loop().run_in_executor(
+        None,
+        lambda: _get_openalex().get_work_by_doi(doi_norm),
+    )
+    if work:
+        _cache_works([work])
+        return work
+
+    from lib.openalex import fetch_crossref_work
+    work = await asyncio.get_event_loop().run_in_executor(
+        None, lambda: fetch_crossref_work(doi_norm)
+    )
+    if work:
+        _cache_works([work])
+    return work
+
+
 def _format_single_citation(metadata: dict | None, fmt: str) -> str:
-    """Format a single citation in the given format."""
     formatters = {
         "apa": format_apa_citation,
         "mla": format_mla_citation,
         "chicago": format_chicago_citation,
         "bibtex": format_bibtex_entry,
     }
-    formatter = formatters.get(fmt, format_apa_citation)
-    return formatter(metadata)
+    return formatters.get(fmt, format_apa_citation)(metadata)
 
 
-async def _handle_generate_citation(args: dict, client) -> list[TextContent]:
-    record_id = args.get("record_id", "")
-    citation_format = args.get("format", "apa").lower()
+async def _handle_generate_citation(args: dict) -> list[TextContent]:
+    doi = args.get("doi", "").strip()
+    if not doi:
+        return [TextContent(type="text", text="No DOI provided.")]
+    fmt = args.get("format", "apa").lower()
 
     async with _request_semaphore:
-        item = client.get_item_details(record_id)
-    if not item:
-        item = _lookup_cached_record(record_id)
-    if not item:
-        async with _request_semaphore:
-            results = client.search(query=record_id, limit=1)
-        if results and results.get("docs"):
-            item = results["docs"][0]
+        metadata = await _fetch_work_metadata(doi)
 
-    if not item:
-        return [TextContent(type="text", text=f"Could not find item with record ID: {record_id}")]
+    if not metadata:
+        return [TextContent(type="text", text=f"Could not retrieve metadata for DOI: {doi}")]
 
-    metadata = extract_metadata(item)
     metadata = enrich_metadata_from_crossref(metadata)
-
     format_names = {
         "apa": "APA 7th Edition",
         "mla": "MLA 9th Edition",
         "chicago": "Chicago 17th Edition",
         "bibtex": "BibTeX",
     }
-    format_name = format_names.get(citation_format, "APA 7th Edition (default)")
-    citation = _format_single_citation(metadata, citation_format)
-
-    return [TextContent(type="text", text=f"--- {format_name} ---\n\n{citation}")]
+    citation = _format_single_citation(metadata, fmt)
+    return [TextContent(type="text", text=f"--- {format_names.get(fmt, fmt)} ---\n\n{citation}")]
 
 
-async def _handle_batch_citations(args: dict, client) -> list[TextContent]:
-    record_ids = args.get("record_ids", [])[:20]
-    citation_format = args.get("format", "apa").lower()
+async def _handle_batch_citations(args: dict) -> list[TextContent]:
+    dois = args.get("dois", [])[:20]
+    fmt = args.get("format", "apa").lower()
 
-    if not record_ids:
-        return [TextContent(type="text", text="No record IDs provided.")]
+    if not dois:
+        return [TextContent(type="text", text="No DOIs provided.")]
 
     format_names = {
-        "apa": "APA 7th Edition",
-        "mla": "MLA 9th Edition",
-        "chicago": "Chicago 17th Edition",
-        "bibtex": "BibTeX",
+        "apa": "APA 7th Edition", "mla": "MLA 9th Edition",
+        "chicago": "Chicago 17th Edition", "bibtex": "BibTeX",
     }
-    format_name = format_names.get(citation_format, "APA 7th Edition")
 
-    # Fetch items concurrently
-    async def fetch_item(rid: str) -> tuple[str, dict | None]:
+    async def fetch_one(doi: str) -> tuple[str, dict | None]:
         async with _request_semaphore:
-            item = client.get_item_details(rid)
-        if not item:
-            item = _lookup_cached_record(rid)
-        if not item:
-            async with _request_semaphore:
-                results = client.search(query=rid, limit=1)
-            if results and results.get("docs"):
-                item = results["docs"][0]
-        return rid, item
+            return doi, await _fetch_work_metadata(doi)
 
-    tasks = [fetch_item(rid) for rid in record_ids]
-    fetched = await asyncio.gather(*tasks, return_exceptions=True)
+    fetched = await asyncio.gather(*[fetch_one(doi) for doi in dois], return_exceptions=True)
 
-    output = [f"--- {format_name} Citations ({len(record_ids)} items) ---\n"]
+    output = [f"--- {format_names.get(fmt, fmt)} Citations ({len(dois)} items) ---\n"]
     for i, result in enumerate(fetched, 1):
         if isinstance(result, Exception):
             output.append(f"{i}. [Error: {result}]\n")
             continue
-        rid, item = result
-        if not item:
-            output.append(f"{i}. [Error: Could not find record {rid}]\n")
+        doi, metadata = result
+        if not metadata:
+            output.append(f"{i}. [Error: Could not retrieve metadata for {doi}]\n")
             continue
-        metadata = extract_metadata(item)
         metadata = enrich_metadata_from_crossref(metadata)
-        citation = _format_single_citation(metadata, citation_format)
-        if citation_format == "bibtex":
-            output.append(f"{citation}\n")
-        else:
-            output.append(f"{i}. {citation}\n")
+        citation = _format_single_citation(metadata, fmt)
+        output.append(f"{citation}\n" if fmt == "bibtex" else f"{i}. {citation}\n")
 
     return [TextContent(type="text", text="\n".join(output))]
 
 
-async def _handle_export_search(args: dict, client) -> list[TextContent]:
-    query = args.get("query", "")
+async def _handle_export_search(args: dict) -> list[TextContent]:
+    query = sanitize_search_query(args.get("query", ""))
     export_format = args.get("format", "bibtex").lower()
-    limit = min(args.get("limit", 10), 100)
+    limit = min(args.get("limit", 10), 50)
 
     async with _request_semaphore:
-        results = client.search(query=query, limit=limit)
-    if not results or not results.get("docs"):
-        return [TextContent(type="text", text="No results found to export.")]
+        data = await asyncio.get_event_loop().run_in_executor(
+            None,
+            lambda: _get_openalex().search_works(query, per_page=limit),
+        )
 
-    docs = results.get("docs", [])
-    total = results.get("info", {}).get("total", 0)
-    _cache_search_docs(docs)
+    works = data.get("results", [])
+    if not works:
+        return [TextContent(type="text", text="No results found.")]
+
+    _cache_works(works)
+    total = data.get("meta", {}).get("count", len(works))
 
     if export_format == "json":
-        export_data = []
-        for doc in docs:
-            pnx = doc.get("pnx", {})
-            display = pnx.get("display", {})
-            addata = pnx.get("addata", {})
-            control = pnx.get("control", {})
-            export_data.append({
-                "record_id": control.get("recordid", [""])[0] if control.get("recordid") else "",
-                "title": display.get("title", [""])[0],
-                "authors": display.get("creator", []),
-                "date": display.get("creationdate", [""])[0],
-                "type": display.get("type", [""])[0],
-                "publisher": display.get("publisher", [""])[0],
-                "isbn": addata.get("isbn", [""])[0] if addata.get("isbn") else "",
-                "issn": addata.get("issn", [""])[0] if addata.get("issn") else "",
-                "doi": addata.get("doi", [""])[0] if addata.get("doi") else "",
-            })
-        output = json.dumps(export_data, indent=2)
-        header = f"// JSON Export: {len(docs)} of {total:,} results for '{query}'\n\n"
-        return [TextContent(type="text", text=header + output)]
-
-    elif export_format == "csv":
-        lines = ["record_id,title,authors,date,type,publisher,isbn,issn,doi"]
-        for doc in docs:
-            pnx = doc.get("pnx", {})
-            display = pnx.get("display", {})
-            addata = pnx.get("addata", {})
-            control = pnx.get("control", {})
-
-            def escape_csv(val):
-                if not val:
-                    return ""
-                val = str(val).replace('"', '""')
-                if "," in val or '"' in val or "\n" in val:
-                    return f'"{val}"'
-                return val
-
-            row = [
-                escape_csv(control.get("recordid", [""])[0] if control.get("recordid") else ""),
-                escape_csv(display.get("title", [""])[0]),
-                escape_csv("; ".join(display.get("creator", []))),
-                escape_csv(display.get("creationdate", [""])[0]),
-                escape_csv(display.get("type", [""])[0]),
-                escape_csv(display.get("publisher", [""])[0]),
-                escape_csv(addata.get("isbn", [""])[0] if addata.get("isbn") else ""),
-                escape_csv(addata.get("issn", [""])[0] if addata.get("issn") else ""),
-                escape_csv(addata.get("doi", [""])[0] if addata.get("doi") else ""),
-            ]
-            lines.append(",".join(row))
-
-        header = f"# CSV Export: {len(docs)} of {total:,} results for '{query}'\n"
-        return [TextContent(type="text", text=header + "\n".join(lines))]
-
-    elif export_format == "bibtex":
-        entries = [format_bibtex_entry(enrich_metadata_from_crossref(extract_metadata(doc))) for doc in docs]
-        header = f"% BibTeX Export: {len(docs)} of {total:,} results for '{query}'\n\n"
-        return [TextContent(type="text", text=header + "\n\n".join(entries))]
-
-    elif export_format == "ris":
-        entries = [format_ris_entry(enrich_metadata_from_crossref(extract_metadata(doc))) for doc in docs]
-        header = f"# RIS Export: {len(docs)} of {total:,} results for '{query}'\n\n"
-        return [TextContent(type="text", text=header + "\n\n".join(entries))]
-
-    else:
-        return [TextContent(type="text", text=f"Unknown export format: {export_format}")]
-
-
-async def _handle_batch_isbn(args: dict, client) -> list[TextContent]:
-    isbn_list = args.get("isbn_list", [])[:20]
-
-    if not isbn_list:
-        return [TextContent(type="text", text="No ISBN numbers provided.")]
-
-    output = ["=" * 50, f"BATCH ISBN LOOKUP ({len(isbn_list)} items)", "=" * 50 + "\n"]
-
-    # Concurrent ISBN lookups
-    async def lookup_isbn(isbn: str) -> tuple[str, dict | None]:
-        isbn_clean = isbn.replace("-", "").replace(" ", "")
-        async with _request_semaphore:
-            results = client.search(query=isbn_clean, limit=1, field="isbn")
-        if results and results.get("docs"):
-            _cache_search_docs(results["docs"])
-            return isbn, results["docs"][0]
-        return isbn, None
-
-    tasks = [lookup_isbn(isbn) for isbn in isbn_list]
-    fetched = await asyncio.gather(*tasks, return_exceptions=True)
-
-    found_count = 0
-    not_found_count = 0
-
-    for result in fetched:
-        if isinstance(result, Exception):
-            output.append(f"ISBN: [Error: {result}]\n")
-            not_found_count += 1
-            continue
-
-        isbn, doc = result
-        if doc:
-            pnx = doc.get("pnx", {})
-            display = pnx.get("display", {})
-            delivery = pnx.get("delivery", {})
-
-            title = display.get("title", ["No title"])[0][:60]
-            authors = display.get("creator", ["Unknown"])
-            author = authors[0].split("$$")[0] if authors else "Unknown"
-            date = display.get("creationdate", ["N/A"])[0]
-            availability = delivery.get("availability", ["Unknown"])[0] if delivery.get("availability") else "Unknown"
-
-            output.append(f"ISBN: {isbn}")
-            output.append(f"  Status: FOUND")
-            output.append(f"  Title: {title}")
-            output.append(f"  Author: {author}")
-            output.append(f"  Date: {date}")
-            output.append(f"  Availability: {availability}")
-            output.append("")
-            found_count += 1
-        else:
-            output.append(f"ISBN: {isbn}")
-            output.append(f"  Status: NOT FOUND")
-            output.append("")
-            not_found_count += 1
-
-    output.append("-" * 50)
-    output.append(f"Summary: {found_count} found, {not_found_count} not found")
-
-    return [TextContent(type="text", text="\n".join(output))]
-
-
-# ─── Zotero handlers ──────────────────────────────────────────
-
-async def _handle_save_to_zotero(args: dict, client) -> list[TextContent]:
-    zotero_auth_err = _ensure_zotero_auth()
-    if zotero_auth_err:
-        return zotero_auth_err
-
-    record_id = args.get("record_id", "")
-    collection_name = args.get("collection_name", "")
-    parent_collection = args.get("parent_collection", "")
-
-    item = await _resolve_record(record_id, client)
-    if not item:
-        return [TextContent(type="text", text=f"Could not find item with record ID: {record_id}")]
-
-    metadata = extract_metadata(item)
-    if not metadata:
-        return [TextContent(type="text", text=f"Could not extract metadata for record {record_id}")]
-
-    metadata = enrich_metadata_from_crossref(metadata)
-
-    zot_client = _get_zotero_client()
-
-    # Duplicate check
-    try:
-        dup = zot_client.check_duplicate(metadata)
-    except ZoteroError as e:
-        return [TextContent(type="text", text=f"Zotero error during duplicate check: {e}")]
-
-    if dup["is_duplicate"]:
-        output = [
-            "=" * 50,
-            "ALREADY IN ZOTERO",
-            "=" * 50,
-            f"\nThis item is already in your Zotero library ({dup['match_type']} match).",
-            f"\nExisting item:",
-            dup["existing_item_summary"] or "N/A",
+        export_data = [
+            {
+                "title": w.get("title", ""),
+                "authors": w.get("authors", []),
+                "date": w.get("date", ""),
+                "type": w.get("type", ""),
+                "publisher": w.get("publisher", ""),
+                "source": w.get("source", ""),
+                "doi": w.get("doi", ""),
+                "issn": w.get("issn", ""),
+                "is_oa": w.get("is_oa", False),
+                "cited_by_count": w.get("cited_by_count", 0),
+                "openalex_id": w.get("openalex_id", ""),
+            }
+            for w in works
         ]
-        return [TextContent(type="text", text="\n".join(output))]
+        header = f"// JSON Export: {len(works)} of {total:,} results for '{query}'\n\n"
+        return [TextContent(type="text", text=header + json.dumps(export_data, indent=2))]
 
-    # Map metadata → Zotero item
-    zotero_item = zot_client.metadata_to_zotero_item(metadata)
+    if export_format == "csv":
+        lines = ["doi,title,authors,date,source,type,is_oa,cited_by_count"]
+        for w in works:
+            def esc(v):
+                v = str(v or "").replace('"', '""')
+                return f'"{v}"' if "," in v or '"' in v else v
+            lines.append(",".join([
+                esc(w.get("doi", "")), esc(w.get("title", "")),
+                esc("; ".join(w.get("authors", []))),
+                esc(w.get("date", "")), esc(w.get("source", "")),
+                esc(w.get("type", "")), esc(w.get("is_oa", False)),
+                esc(w.get("cited_by_count", 0)),
+            ]))
+        return [TextContent(type="text", text=f"# CSV Export: {len(works)} of {total:,} results\n" + "\n".join(lines))]
 
-    # Resolve parent collection first, then child collection
-    collection_key = None
-    if collection_name:
-        try:
-            parent_key = None
-            if parent_collection:
-                parent_key = zot_client.find_or_create_collection(parent_collection)
-            collection_key = zot_client.find_or_create_collection(collection_name, parent_key=parent_key)
-        except ZoteroError as e:
-            return [TextContent(type="text", text=f"Zotero collection error: {e}")]
+    if export_format == "bibtex":
+        entries = [format_bibtex_entry(enrich_metadata_from_crossref(w)) for w in works]
+        header = f"% BibTeX Export: {len(works)} of {total:,} results for '{query}'\n\n"
+        return [TextContent(type="text", text=header + "\n\n".join(entries))]
 
-    # Create item
-    try:
-        item_key = zot_client.create_item(zotero_item, collection_key)
-    except ZoteroError as e:
-        return [TextContent(type="text", text=f"Failed to create Zotero item: {e}")]
+    if export_format == "ris":
+        entries = [format_ris_entry(enrich_metadata_from_crossref(w)) for w in works]
+        header = f"# RIS Export: {len(works)} of {total:,} results for '{query}'\n\n"
+        return [TextContent(type="text", text=header + "\n\n".join(entries))]
 
-    output = [
-        "=" * 50,
-        "SAVED TO ZOTERO",
-        "=" * 50,
-        f"\nTitle: {metadata.get('title', 'Unknown')}",
-        f"Zotero Key: {item_key}",
-    ]
-    if collection_name:
-        output.append(f"Collection: {collection_name}")
-
-    return [TextContent(type="text", text="\n".join(output))]
+    return [TextContent(type="text", text=f"Unknown export format: {export_format}")]
 
 
-def _handle_list_zotero_collections() -> list[TextContent]:
+# ── Zotero handlers ───────────────────────────────────────────────────────────
+
+async def _handle_save_to_zotero(args: dict) -> list[TextContent]:
     auth_err = _ensure_zotero_auth()
     if auth_err:
         return auth_err
 
-    zot_client = _get_zotero_client()
-
-    try:
-        collections = zot_client.list_collections()
-    except ZoteroError as e:
-        return [TextContent(type="text", text=f"Zotero error: {e}")]
-
-    if not collections:
-        return [TextContent(type="text", text="No collections found in your Zotero library.")]
-
-    output = ["=" * 50, f"ZOTERO COLLECTIONS ({len(collections)})", "=" * 50, ""]
-    for c in collections:
-        parent = f" (in: {c['parent_key']})" if c.get("parent_key") else ""
-        output.append(f"  {c['name']} — {c['num_items']} items{parent}")
-        output.append(f"    Key: {c['key']}")
-
-    return [TextContent(type="text", text="\n".join(output))]
-
-
-async def _handle_batch_save_to_zotero(args: dict, client) -> list[TextContent]:
-    zotero_auth_err = _ensure_zotero_auth()
-    if zotero_auth_err:
-        return zotero_auth_err
-
-    record_ids = args.get("record_ids", [])[:20]
+    doi = args.get("doi", "").strip()
+    if not doi:
+        return [TextContent(type="text", text="No DOI provided.")]
     collection_name = args.get("collection_name", "")
     parent_collection = args.get("parent_collection", "")
 
-    if not record_ids:
-        return [TextContent(type="text", text="No record IDs provided.")]
+    async with _request_semaphore:
+        metadata = await _fetch_work_metadata(doi)
 
-    zot_client = _get_zotero_client()
+    if not metadata:
+        return [TextContent(type="text", text=f"Could not retrieve metadata for DOI: {doi}")]
 
-    # Resolve parent collection first, then child collection
+    metadata = enrich_metadata_from_crossref(metadata)
+    zot = _get_zotero_client()
+
+    try:
+        dup = zot.check_duplicate(metadata)
+    except ZoteroError as e:
+        return [TextContent(type="text", text=f"Zotero error during duplicate check: {e}")]
+
+    if dup["is_duplicate"]:
+        return [TextContent(type="text", text=(
+            "=" * 50 + "\nALREADY IN ZOTERO\n" + "=" * 50 +
+            f"\nThis item is already in your Zotero library ({dup['match_type']} match).\n"
+            f"\nExisting item:\n{dup.get('existing_item_summary', 'N/A')}"
+        ))]
+
+    zotero_item = zot.metadata_to_zotero_item(metadata)
     collection_key = None
     if collection_name:
         try:
-            parent_key = None
-            if parent_collection:
-                parent_key = zot_client.find_or_create_collection(parent_collection)
-            collection_key = zot_client.find_or_create_collection(collection_name, parent_key=parent_key)
+            parent_key = zot.find_or_create_collection(parent_collection) if parent_collection else None
+            collection_key = zot.find_or_create_collection(collection_name, parent_key=parent_key)
         except ZoteroError as e:
             return [TextContent(type="text", text=f"Zotero collection error: {e}")]
 
-    saved = 0
-    skipped = 0
-    failed = 0
+    try:
+        item_key = zot.create_item(zotero_item, collection_key)
+    except ZoteroError as e:
+        return [TextContent(type="text", text=f"Failed to create Zotero item: {e}")]
+
+    output = ["=" * 50, "SAVED TO ZOTERO", "=" * 50,
+              f"\nTitle: {metadata.get('title', 'Unknown')}", f"Zotero Key: {item_key}"]
+    if collection_name:
+        output.append(f"Collection: {collection_name}")
+    return [TextContent(type="text", text="\n".join(output))]
+
+
+async def _handle_list_zotero_collections(args: dict) -> list[TextContent]:
+    auth_err = _ensure_zotero_auth()
+    if auth_err:
+        return auth_err
+    try:
+        collections = _get_zotero_client().list_collections()
+    except ZoteroError as e:
+        return [TextContent(type="text", text=f"Zotero error: {e}")]
+    if not collections:
+        return [TextContent(type="text", text="No collections found in your Zotero library.")]
+    output = ["=" * 50, f"ZOTERO COLLECTIONS ({len(collections)})", "=" * 50, ""]
+    for c in collections:
+        parent = f" (in: {c['parent_key']})" if c.get("parent_key") else ""
+        output.append(f"  {c['name']} — {c['num_items']} items{parent}\n    Key: {c['key']}")
+    return [TextContent(type="text", text="\n".join(output))]
+
+
+async def _handle_batch_save_to_zotero(args: dict) -> list[TextContent]:
+    auth_err = _ensure_zotero_auth()
+    if auth_err:
+        return auth_err
+
+    dois = args.get("dois", [])[:20]
+    collection_name = args.get("collection_name", "")
+    parent_collection = args.get("parent_collection", "")
+
+    if not dois:
+        return [TextContent(type="text", text="No DOIs provided.")]
+
+    zot = _get_zotero_client()
+    collection_key = None
+    if collection_name:
+        try:
+            parent_key = zot.find_or_create_collection(parent_collection) if parent_collection else None
+            collection_key = zot.find_or_create_collection(collection_name, parent_key=parent_key)
+        except ZoteroError as e:
+            return [TextContent(type="text", text=f"Zotero collection error: {e}")]
+
+    saved, skipped, failed = 0, 0, 0
     details = []
 
-    for rid in record_ids:
-        item = await _resolve_record(rid, client)
-        if not item:
-            details.append(f"  {rid}: FAILED — record not found")
-            failed += 1
-            continue
-
-        metadata = extract_metadata(item)
+    for doi in dois:
+        async with _request_semaphore:
+            metadata = await _fetch_work_metadata(doi)
         if not metadata:
-            details.append(f"  {rid}: FAILED — no metadata")
+            details.append(f"  {doi}: FAILED — could not retrieve metadata")
             failed += 1
             continue
 
         metadata = enrich_metadata_from_crossref(metadata)
         title_short = metadata.get("title", "Unknown")[:60]
 
-        # Duplicate check
         try:
-            dup = zot_client.check_duplicate(metadata)
+            dup = zot.check_duplicate(metadata)
         except ZoteroError:
             dup = {"is_duplicate": False}
 
@@ -1214,128 +1234,89 @@ async def _handle_batch_save_to_zotero(args: dict, client) -> list[TextContent]:
             skipped += 1
             continue
 
-        # Create item
-        zotero_item = zot_client.metadata_to_zotero_item(metadata)
         try:
-            item_key = zot_client.create_item(zotero_item, collection_key)
+            zot.create_item(zot.metadata_to_zotero_item(metadata), collection_key)
+            details.append(f"  {title_short}: SAVED")
+            saved += 1
         except ZoteroError as e:
             details.append(f"  {title_short}: FAILED — {e}")
             failed += 1
-            continue
-
-        details.append(f"  {title_short}: SAVED")
-        saved += 1
 
     output = [
-        "=" * 50,
-        "BATCH SAVE TO ZOTERO",
-        "=" * 50,
+        "=" * 50, "BATCH SAVE TO ZOTERO", "=" * 50,
         f"\nCollection: {collection_name or '(none)'}",
-        f"Results: {saved} saved, {skipped} skipped (already in library), {failed} failed",
-        "",
+        f"Results: {saved} saved, {skipped} skipped, {failed} failed\n",
     ] + details
-
     return [TextContent(type="text", text="\n".join(output))]
 
 
-def _handle_search_zotero(args: dict) -> list[TextContent]:
+async def _handle_search_zotero(args: dict) -> list[TextContent]:
     auth_err = _ensure_zotero_auth()
     if auth_err:
         return auth_err
-
     query = args.get("query", "")
     limit = min(args.get("limit", 20), 100)
-
     if not query:
         return [TextContent(type="text", text="No search query provided.")]
-
-    zot_client = _get_zotero_client()
-
     try:
-        items = zot_client.search_items(query, limit)
+        items = _get_zotero_client().search_items(query, limit)
     except ZoteroError as e:
         return [TextContent(type="text", text=f"Zotero search error: {e}")]
-
     if not items:
         return [TextContent(type="text", text=f"No items found in Zotero for '{query}'.")]
-
+    zot = _get_zotero_client()
     output = ["=" * 50, f"ZOTERO SEARCH: '{query}' ({len(items)} results)", "=" * 50, ""]
     for i, item in enumerate(items, 1):
-        output.append(f"--- Item {i} ---")
-        output.append(zot_client.format_item_summary(item))
-        output.append("")
-
+        output.append(f"--- Item {i} ---\n{zot.format_item_summary(item)}\n")
     return [TextContent(type="text", text="\n".join(output))]
 
 
-def _handle_get_zotero_collection_items(args: dict) -> list[TextContent]:
+async def _handle_get_zotero_collection_items(args: dict) -> list[TextContent]:
     auth_err = _ensure_zotero_auth()
     if auth_err:
         return auth_err
-
     collection_name = args.get("collection_name", "")
     limit = min(args.get("limit", 50), 100)
-
     if not collection_name:
         return [TextContent(type="text", text="No collection name provided.")]
-
-    zot_client = _get_zotero_client()
-
+    zot = _get_zotero_client()
     try:
-        collection_key = zot_client.find_collection_by_name(collection_name)
+        collection_key = zot.find_collection_by_name(collection_name)
     except ZoteroError as e:
         return [TextContent(type="text", text=f"Zotero error: {e}")]
-
     if not collection_key:
-        return [TextContent(type="text", text=f"Collection '{collection_name}' not found in Zotero.")]
-
+        return [TextContent(type="text", text=f"Collection '{collection_name}' not found.")]
     try:
-        items = zot_client.get_collection_items(collection_key, limit)
+        items = zot.get_collection_items(collection_key, limit)
     except ZoteroError as e:
         return [TextContent(type="text", text=f"Zotero error: {e}")]
-
     if not items:
         return [TextContent(type="text", text=f"No items in collection '{collection_name}'.")]
-
-    output = [
-        "=" * 50,
-        f"ZOTERO COLLECTION: '{collection_name}' ({len(items)} items)",
-        "=" * 50,
-        "",
-    ]
+    output = ["=" * 50, f"ZOTERO COLLECTION: '{collection_name}' ({len(items)} items)", "=" * 50, ""]
     for i, item in enumerate(items, 1):
-        output.append(f"--- Item {i} ---")
-        output.append(zot_client.format_item_summary(item))
-        output.append("")
-
+        output.append(f"--- Item {i} ---\n{zot.format_item_summary(item)}\n")
     return [TextContent(type="text", text="\n".join(output))]
 
 
-def _handle_get_zotero_status() -> list[TextContent]:
-    """Handle get_zotero_status tool — verify credentials and report status."""
-    features = _get_features()
-    if not features.get("zotero_enabled", True):
+async def _handle_get_zotero_status(args: dict) -> list[TextContent]:
+    if not _get_features().get("zotero_enabled", True):
         return [TextContent(type="text", text="Zotero integration is disabled.")]
-
     try:
-        zot = _get_zotero_client()
-        result = zot.verify_credentials()
+        result = _get_zotero_client().verify_credentials()
     except ZoteroError as e:
         return [TextContent(type="text", text=f"Zotero error: {e}")]
-
     output = ["=" * 50, "ZOTERO STATUS", "=" * 50]
     if result["valid"]:
-        output.append(f"\nCredentials: VALID")
-        output.append(f"Username: {result.get('username', 'N/A')}")
-        output.append(f"User ID: {result.get('userID', 'N/A')}")
         access = result.get("access", {})
-        output.append(f"\nPermissions:")
-        output.append(f"  Library access: {access.get('library', False)}")
-        output.append(f"  File access: {access.get('files', False)}")
-        output.append(f"  Notes access: {access.get('notes', False)}")
-        output.append(f"  Write access: {access.get('write', False)}")
+        output += [
+            "\nCredentials: VALID",
+            f"Username: {result.get('username', 'N/A')}",
+            f"User ID: {result.get('userID', 'N/A')}",
+            "\nPermissions:",
+            f"  Library: {access.get('library', False)}",
+            f"  Files: {access.get('files', False)}",
+            f"  Write: {access.get('write', False)}",
+        ]
     else:
-        output.append(f"\nCredentials: INVALID")
-        output.append(f"Reason: {result.get('message', 'Unknown')}")
-
+        output += ["\nCredentials: INVALID", f"Reason: {result.get('message', 'Unknown')}"]
     return [TextContent(type="text", text="\n".join(output))]

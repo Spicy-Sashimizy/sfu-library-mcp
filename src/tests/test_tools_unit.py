@@ -1,335 +1,296 @@
-"""Unit tests for the tools module."""
+"""Unit tests for the tools module — new OpenAlex-based tool set."""
 
 import asyncio
-from unittest.mock import MagicMock, patch
+from unittest.mock import MagicMock, patch, AsyncMock
 
 import pytest
 
-from lib.tools import TOOL_DEFINITIONS, handle_tool_call, get_metrics, _reciprocal_rank_fusion
+from lib.tools import TOOL_DEFINITIONS, handle_tool_call, get_metrics
 
 
-class MockClient:
-    """Mock SFULibraryClient for tool dispatch testing."""
+# ── Fixtures ──────────────────────────────────────────────────────────────────
 
-    def __init__(self, search_result=None, item_result=None):
-        self._search_result = search_result
-        self._item_result = item_result
-        self.search_calls: list[dict] = []
+SAMPLE_WORK = {
+    "title": "Machine Learning in Practice",
+    "authors": ["LeCun, Yann", "Bengio, Yoshua"],
+    "creators": ["LeCun, Yann", "Bengio, Yoshua"],
+    "contributors": [],
+    "date": "2024",
+    "publisher": "MIT Press",
+    "type": "article",
+    "source": "Nature",
+    "isbn": "",
+    "issn": "0028-0836",
+    "doi": "10.1038/test123",
+    "volume": "12",
+    "issue": "3",
+    "spage": "100",
+    "epage": "120",
+    "pages": "100-120",
+    "record_id": "https://openalex.org/W123",
+    "is_cdi": False,
+    "resource_type": "article",
+    "openalex_id": "https://openalex.org/W123",
+    "is_oa": True,
+    "oa_url": "https://example.com/paper.pdf",
+    "cited_by_count": 42,
+    "abstract": "A foundational paper on machine learning.",
+    "topics": ["Machine Learning", "Neural Networks"],
+}
 
-        from lib.config import ServerConfig
-        self.config = ServerConfig()
+SAMPLE_OPENALEX_RESPONSE = {
+    "results": [SAMPLE_WORK],
+    "meta": {"count": 1, "page": 1, "per_page": 10},
+}
 
-    def search(self, query="", limit=10, offset=0, field="any",
-               precision="contains", sort="rank", tab="default_tab",
-               scope="default_scope"):
-        self.search_calls.append({
-            "query": query, "limit": limit, "offset": offset,
-            "field": field, "sort": sort, "tab": tab, "scope": scope,
-        })
-        return self._search_result
-
-    def get_item_details(self, doc_id, context="L"):
-        return self._item_result
-
-
-@pytest.fixture
-def mock_client():
-    return MockClient()
+SAMPLE_SFU_DB = {
+    "id": "test123",
+    "name": "PsycINFO",
+    "description": "Psychology and behavioral science database.",
+    "url": "https://search.ebscohost.com/",
+    "provider": "EBSCOhost",
+    "subjects": ["Psychology"],
+    "contentTypes": ["Index"],
+    "free": False,
+    "proxy": True,
+}
 
 
-@pytest.fixture
-def mock_client_with_results(sample_pnx_record, mock_search_response):
-    return MockClient(
-        search_result=mock_search_response,
-        item_result=sample_pnx_record,
-    )
-
+# ── Tool definition tests ─────────────────────────────────────────────────────
 
 class TestToolDefinitions:
-    def test_exactly_17_tools(self):
-        assert len(TOOL_DEFINITIONS) == 17
+    def test_tool_count(self):
+        assert len(TOOL_DEFINITIONS) == 21
 
-    def test_tool_names(self):
-        names = [t.name for t in TOOL_DEFINITIONS]
-        expected = [
-            "search_library", "get_item_details",
-            "search_by_author", "search_by_subject",
-            "search_by_isbn", "search_electronic_resources",
-            "get_full_text_links", "generate_citation",
-            "batch_generate_citations", "export_search_results",
-            "batch_isbn_lookup", "save_to_zotero",
-            "list_zotero_collections", "batch_save_to_zotero",
-            "search_zotero", "get_zotero_collection_items",
-            "get_zotero_status",
-        ]
-        assert names == expected
+    def test_new_tool_names_present(self):
+        names = {t.name for t in TOOL_DEFINITIONS}
+        expected_new = {
+            "search_academic", "search_by_author", "search_by_doi",
+            "search_by_topic", "get_citations", "get_references",
+            "get_paper_summary", "find_open_access", "get_full_text_link",
+            "browse_sfu_databases", "check_sfu_access", "search_biomedical",
+        }
+        assert expected_new.issubset(names)
 
-    def test_removed_tools_not_present(self):
-        names = [t.name for t in TOOL_DEFINITIONS]
-        for removed in ["authenticate", "get_token_status", "clear_cache",
-                        "read_article", "get_diagnostics", "zotero_authenticate"]:
-            assert removed not in names
+    def test_primo_tools_removed(self):
+        names = {t.name for t in TOOL_DEFINITIONS}
+        removed = {
+            "search_library", "get_item_details", "search_by_subject",
+            "search_by_isbn", "search_electronic_resources", "batch_isbn_lookup",
+            "get_full_text_links",
+        }
+        assert removed.isdisjoint(names)
 
-    def test_all_tools_have_schemas(self):
+    def test_zotero_tools_kept(self):
+        names = {t.name for t in TOOL_DEFINITIONS}
+        assert {"save_to_zotero", "list_zotero_collections", "batch_save_to_zotero",
+                "search_zotero", "get_zotero_collection_items", "get_zotero_status"}.issubset(names)
+
+    def test_all_tools_have_object_schemas(self):
         for tool in TOOL_DEFINITIONS:
             assert tool.inputSchema is not None
-            assert "type" in tool.inputSchema
-            assert tool.inputSchema["type"] == "object"
+            assert tool.inputSchema.get("type") == "object"
+
+    def test_doi_based_tools_require_doi(self):
+        doi_tools = {"search_by_doi", "get_citations", "get_references",
+                     "get_paper_summary", "find_open_access", "get_full_text_link",
+                     "generate_citation", "save_to_zotero"}
+        for tool in TOOL_DEFINITIONS:
+            if tool.name in doi_tools:
+                required = tool.inputSchema.get("required", [])
+                assert "doi" in required, f"{tool.name} should require doi"
 
 
-class TestToolDispatch:
+# ── Dispatch / handler tests ──────────────────────────────────────────────────
+
+class TestSearchAcademic:
     @pytest.mark.asyncio
-    async def test_search_library(self, mock_client_with_results):
-        result = await handle_tool_call(
-            "search_library",
-            {"query": "test"},
-            mock_client_with_results,
-        )
+    async def test_basic_search(self):
+        with patch("lib.tools._get_openalex") as mock_oa:
+            mock_oa.return_value.search_works.return_value = SAMPLE_OPENALEX_RESPONSE
+            result = await handle_tool_call("search_academic", {"query": "machine learning"})
         assert len(result) == 1
-        assert "Found" in result[0].text
+        assert "Machine Learning in Practice" in result[0].text
 
     @pytest.mark.asyncio
-    async def test_get_item_details(self, mock_client_with_results):
-        result = await handle_tool_call(
-            "get_item_details",
-            {"record_id": "alma123"},
-            mock_client_with_results,
-        )
-        assert len(result) == 1
-        assert "ITEM DETAILS" in result[0].text
+    async def test_empty_query(self):
+        result = await handle_tool_call("search_academic", {"query": ""})
+        assert "Empty search query" in result[0].text
 
     @pytest.mark.asyncio
-    async def test_search_by_author(self, mock_client_with_results):
-        result = await handle_tool_call(
-            "search_by_author",
-            {"author": "Einstein"},
-            mock_client_with_results,
-        )
-        assert "Found" in result[0].text
+    async def test_with_year_filter(self):
+        with patch("lib.tools._get_openalex") as mock_oa:
+            mock_oa.return_value.search_works.return_value = SAMPLE_OPENALEX_RESPONSE
+            result = await handle_tool_call(
+                "search_academic",
+                {"query": "climate", "year_from": 2020, "year_to": 2024},
+            )
+        assert "Machine Learning" in result[0].text
+        call_kwargs = mock_oa.return_value.search_works.call_args
+        filters = call_kwargs[1].get("filters") or call_kwargs[0][1]
+        assert "publication_year" in filters
 
     @pytest.mark.asyncio
-    async def test_search_by_subject(self, mock_client_with_results):
-        result = await handle_tool_call(
-            "search_by_subject",
-            {"subject": "physics"},
-            mock_client_with_results,
-        )
-        assert "Found" in result[0].text
+    async def test_no_results(self):
+        with patch("lib.tools._get_openalex") as mock_oa:
+            mock_oa.return_value.search_works.return_value = {"results": [], "meta": {"count": 0}}
+            result = await handle_tool_call("search_academic", {"query": "xyznotreal"})
+        assert "No results found" in result[0].text
+
+
+class TestSearchByDoi:
+    @pytest.mark.asyncio
+    async def test_found_via_openalex(self):
+        with patch("lib.tools._get_openalex") as mock_oa:
+            mock_oa.return_value.get_work_by_doi.return_value = SAMPLE_WORK
+            result = await handle_tool_call("search_by_doi", {"doi": "10.1038/test123"})
+        assert "Machine Learning in Practice" in result[0].text
 
     @pytest.mark.asyncio
-    async def test_search_by_isbn(self, mock_client_with_results):
-        result = await handle_tool_call(
-            "search_by_isbn",
-            {"isbn": "9780262018029"},
-            mock_client_with_results,
-        )
-        assert "Found" in result[0].text
+    async def test_empty_doi(self):
+        result = await handle_tool_call("search_by_doi", {"doi": ""})
+        assert "No DOI" in result[0].text
 
     @pytest.mark.asyncio
-    async def test_search_electronic(self, mock_client_with_results):
-        result = await handle_tool_call(
-            "search_electronic_resources",
-            {"query": "python"},
-            mock_client_with_results,
-        )
-        assert "Found" in result[0].text
+    async def test_not_found(self):
+        with patch("lib.tools._get_openalex") as mock_oa, \
+             patch("lib.openalex.fetch_crossref_work", return_value=None):
+            mock_oa.return_value.get_work_by_doi.return_value = None
+            result = await handle_tool_call("search_by_doi", {"doi": "10.9999/notreal"})
+        assert "No record found" in result[0].text
+
+
+class TestBrowseSfuDatabases:
+    @pytest.mark.asyncio
+    async def test_basic_browse(self):
+        with patch("lib.tools._get_registry") as mock_reg:
+            mock_reg.return_value.search.return_value = [SAMPLE_SFU_DB]
+            result = await handle_tool_call("browse_sfu_databases", {"query": "psychology"})
+        assert "PsycINFO" in result[0].text
 
     @pytest.mark.asyncio
-    async def test_get_full_text_links(self, mock_client_with_results):
-        result = await handle_tool_call(
-            "get_full_text_links",
-            {"record_id": "alma123"},
-            mock_client_with_results,
-        )
-        assert "FULL TEXT" in result[0].text
+    async def test_no_results(self):
+        with patch("lib.tools._get_registry") as mock_reg:
+            mock_reg.return_value.search.return_value = []
+            result = await handle_tool_call("browse_sfu_databases", {})
+        assert "No databases found" in result[0].text
+
+
+class TestCheckSfuAccess:
+    @pytest.mark.asyncio
+    async def test_found(self):
+        with patch("lib.tools._get_registry") as mock_reg:
+            mock_reg.return_value.search.return_value = [SAMPLE_SFU_DB]
+            result = await handle_tool_call("check_sfu_access", {"name": "PsycINFO"})
+        assert "FOUND" in result[0].text
+        assert "PsycINFO" in result[0].text
 
     @pytest.mark.asyncio
-    async def test_generate_citation_apa(self, mock_client_with_results):
-        result = await handle_tool_call(
-            "generate_citation",
-            {"record_id": "alma123", "format": "apa"},
-            mock_client_with_results,
-        )
+    async def test_not_found(self):
+        with patch("lib.tools._get_registry") as mock_reg:
+            mock_reg.return_value.search.return_value = []
+            result = await handle_tool_call("check_sfu_access", {"name": "FakeDatabase"})
+        assert "NOT FOUND" in result[0].text
+
+    @pytest.mark.asyncio
+    async def test_no_name(self):
+        result = await handle_tool_call("check_sfu_access", {"name": ""})
+        assert "No database name" in result[0].text
+
+
+class TestGenerateCitation:
+    @pytest.mark.asyncio
+    async def test_apa_citation(self):
+        with patch("lib.tools._fetch_work_metadata", new_callable=AsyncMock) as mock_fetch:
+            mock_fetch.return_value = SAMPLE_WORK
+            result = await handle_tool_call(
+                "generate_citation", {"doi": "10.1038/test123", "format": "apa"}
+            )
         assert "APA" in result[0].text
 
     @pytest.mark.asyncio
-    async def test_generate_citation_bibtex(self, mock_client_with_results):
-        result = await handle_tool_call(
-            "generate_citation",
-            {"record_id": "alma123", "format": "bibtex"},
-            mock_client_with_results,
-        )
+    async def test_bibtex_citation(self):
+        with patch("lib.tools._fetch_work_metadata", new_callable=AsyncMock) as mock_fetch:
+            mock_fetch.return_value = SAMPLE_WORK
+            result = await handle_tool_call(
+                "generate_citation", {"doi": "10.1038/test123", "format": "bibtex"}
+            )
         assert "BibTeX" in result[0].text
-        assert "@book{" in result[0].text
 
     @pytest.mark.asyncio
-    async def test_batch_citations(self, mock_client_with_results):
-        result = await handle_tool_call(
-            "batch_generate_citations",
-            {"record_ids": ["alma123", "alma456"], "format": "apa"},
-            mock_client_with_results,
-        )
+    async def test_no_doi(self):
+        result = await handle_tool_call("generate_citation", {"doi": ""})
+        assert "No DOI" in result[0].text
+
+    @pytest.mark.asyncio
+    async def test_not_found(self):
+        with patch("lib.tools._fetch_work_metadata", new_callable=AsyncMock) as mock_fetch:
+            mock_fetch.return_value = None
+            result = await handle_tool_call(
+                "generate_citation", {"doi": "10.9999/bad"}
+            )
+        assert "Could not retrieve" in result[0].text
+
+
+class TestBatchCitations:
+    @pytest.mark.asyncio
+    async def test_batch(self):
+        with patch("lib.tools._fetch_work_metadata", new_callable=AsyncMock) as mock_fetch:
+            mock_fetch.return_value = SAMPLE_WORK
+            result = await handle_tool_call(
+                "batch_generate_citations",
+                {"dois": ["10.1038/a", "10.1038/b"], "format": "apa"},
+            )
         assert "Citations" in result[0].text
 
     @pytest.mark.asyncio
-    async def test_export_bibtex(self, mock_client_with_results):
-        result = await handle_tool_call(
-            "export_search_results",
-            {"query": "test", "format": "bibtex", "limit": 5},
-            mock_client_with_results,
-        )
+    async def test_empty_list(self):
+        result = await handle_tool_call("batch_generate_citations", {"dois": []})
+        assert "No DOIs" in result[0].text
+
+
+class TestExportSearch:
+    @pytest.mark.asyncio
+    async def test_bibtex_export(self):
+        with patch("lib.tools._get_openalex") as mock_oa:
+            mock_oa.return_value.search_works.return_value = SAMPLE_OPENALEX_RESPONSE
+            result = await handle_tool_call(
+                "export_search_results", {"query": "test", "format": "bibtex"}
+            )
         assert "BibTeX Export" in result[0].text
 
     @pytest.mark.asyncio
-    async def test_export_csv(self, mock_client_with_results):
-        result = await handle_tool_call(
-            "export_search_results",
-            {"query": "test", "format": "csv"},
-            mock_client_with_results,
-        )
+    async def test_csv_export(self):
+        with patch("lib.tools._get_openalex") as mock_oa:
+            mock_oa.return_value.search_works.return_value = SAMPLE_OPENALEX_RESPONSE
+            result = await handle_tool_call(
+                "export_search_results", {"query": "test", "format": "csv"}
+            )
         assert "CSV Export" in result[0].text
 
     @pytest.mark.asyncio
-    async def test_export_json(self, mock_client_with_results):
-        result = await handle_tool_call(
-            "export_search_results",
-            {"query": "test", "format": "json"},
-            mock_client_with_results,
-        )
+    async def test_json_export(self):
+        with patch("lib.tools._get_openalex") as mock_oa:
+            mock_oa.return_value.search_works.return_value = SAMPLE_OPENALEX_RESPONSE
+            result = await handle_tool_call(
+                "export_search_results", {"query": "test", "format": "json"}
+            )
         assert "JSON Export" in result[0].text
 
-    @pytest.mark.asyncio
-    async def test_export_ris(self, mock_client_with_results):
-        result = await handle_tool_call(
-            "export_search_results",
-            {"query": "test", "format": "ris"},
-            mock_client_with_results,
-        )
-        assert "RIS Export" in result[0].text
 
+class TestUnknownTool:
     @pytest.mark.asyncio
-    async def test_batch_isbn_lookup(self, mock_client_with_results):
-        result = await handle_tool_call(
-            "batch_isbn_lookup",
-            {"isbn_list": ["978-0-262-01802-9"]},
-            mock_client_with_results,
-        )
-        assert "BATCH ISBN LOOKUP" in result[0].text
-
-    @pytest.mark.asyncio
-    async def test_unknown_tool(self, mock_client):
-        result = await handle_tool_call("nonexistent_tool", {}, mock_client)
+    async def test_unknown(self):
+        result = await handle_tool_call("nonexistent_tool", {})
         assert "Unknown tool" in result[0].text
-
-    @pytest.mark.asyncio
-    async def test_empty_batch_citations(self, mock_client):
-        result = await handle_tool_call(
-            "batch_generate_citations",
-            {"record_ids": []},
-            mock_client,
-        )
-        assert "No record IDs" in result[0].text
-
-    @pytest.mark.asyncio
-    async def test_empty_isbn_list(self, mock_client):
-        result = await handle_tool_call(
-            "batch_isbn_lookup",
-            {"isbn_list": []},
-            mock_client,
-        )
-        assert "No ISBN" in result[0].text
-
-    @pytest.mark.asyncio
-    async def test_search_with_expanded_terms(self, mock_client_with_results):
-        result = await handle_tool_call(
-            "search_library",
-            {
-                "query": "machine learning",
-                "expanded_terms": "deep learning OR neural networks",
-            },
-            mock_client_with_results,
-        )
-        assert "Found" in result[0].text
-        assert len(mock_client_with_results.search_calls) >= 1
-        sent_query = mock_client_with_results.search_calls[0]["query"]
-        assert "(machine learning) OR (deep learning OR neural networks)" == sent_query
-
-    @pytest.mark.asyncio
-    async def test_search_without_expanded_terms(self, mock_client_with_results):
-        result = await handle_tool_call(
-            "search_library",
-            {"query": "machine learning"},
-            mock_client_with_results,
-        )
-        assert "Found" in result[0].text
-        sent_query = mock_client_with_results.search_calls[0]["query"]
-        assert sent_query == "machine learning"
-
-    @pytest.mark.asyncio
-    async def test_comprehensive_search(self, mock_client_with_results):
-        """Comprehensive search should make multiple parallel calls."""
-        features = {
-            "fusion_enabled": True,
-            "rerank_enabled": False,
-        }
-        with patch("lib.tools._get_features", return_value=features):
-            result = await handle_tool_call(
-                "search_library",
-                {"query": "climate change", "comprehensive": True},
-                mock_client_with_results,
-            )
-        assert "Found" in result[0].text
-        assert len(mock_client_with_results.search_calls) == 3
-
-    @pytest.mark.asyncio
-    async def test_comprehensive_disabled_by_feature_flag(self, mock_client_with_results):
-        """When fusion_enabled is False, comprehensive should fall back to single search."""
-        features = {
-            "fusion_enabled": False,
-            "rerank_enabled": False,
-        }
-        with patch("lib.tools._get_features", return_value=features):
-            result = await handle_tool_call(
-                "search_library",
-                {"query": "climate change", "comprehensive": True},
-                mock_client_with_results,
-            )
-        assert "Found" in result[0].text
-        assert len(mock_client_with_results.search_calls) == 1
-
-
-class TestReciprocalRankFusion:
-    def test_deduplication(self, sample_pnx_record):
-        result_set_1 = {"docs": [sample_pnx_record], "info": {"total": 1}}
-        result_set_2 = {"docs": [sample_pnx_record], "info": {"total": 1}}
-        merged = _reciprocal_rank_fusion([result_set_1, result_set_2], limit=10)
-        assert len(merged["docs"]) == 1
-
-    def test_merges_different_records(self, sample_pnx_record, sample_article_record):
-        result_set_1 = {"docs": [sample_pnx_record], "info": {"total": 1}}
-        result_set_2 = {"docs": [sample_article_record], "info": {"total": 1}}
-        merged = _reciprocal_rank_fusion([result_set_1, result_set_2], limit=10)
-        assert len(merged["docs"]) == 2
-
-    def test_handles_none_results(self, sample_pnx_record):
-        result_set = {"docs": [sample_pnx_record], "info": {"total": 1}}
-        merged = _reciprocal_rank_fusion([None, result_set, None], limit=10)
-        assert len(merged["docs"]) == 1
-
-    def test_limit_respected(self, sample_pnx_record, sample_article_record):
-        result_set = {"docs": [sample_pnx_record, sample_article_record], "info": {"total": 2}}
-        merged = _reciprocal_rank_fusion([result_set], limit=1)
-        assert len(merged["docs"]) == 1
 
 
 class TestMetrics:
     @pytest.mark.asyncio
-    async def test_metrics_recorded(self, mock_client_with_results):
-        await handle_tool_call(
-            "search_library",
-            {"query": "test"},
-            mock_client_with_results,
-        )
+    async def test_metrics_recorded(self):
+        with patch("lib.tools._get_openalex") as mock_oa:
+            mock_oa.return_value.search_works.return_value = SAMPLE_OPENALEX_RESPONSE
+            await handle_tool_call("search_academic", {"query": "test"})
         metrics = get_metrics()
-        assert "search_library" in metrics
-        assert metrics["search_library"]["count"] >= 1
+        assert "search_academic" in metrics
+        assert metrics["search_academic"]["count"] >= 1

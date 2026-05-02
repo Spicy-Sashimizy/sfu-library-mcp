@@ -79,6 +79,9 @@ class TestValidateConfig:
         config = ServerConfig(
             zotero_api_key="testkey",
             zotero_user_id="12345",
+            openalex_mailto="test@sfu.ca",
+            unpaywall_email="test@sfu.ca",
+            semantic_scholar_api_key="testkey",
         )
         warnings = validate_config(config)
         assert len(warnings) == 0

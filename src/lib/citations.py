@@ -32,8 +32,8 @@ def enrich_metadata_from_crossref(metadata: dict) -> dict:
         return metadata
 
     try:
-        from lib.client import fetch_crossref_metadata
-        cr = fetch_crossref_metadata(doi)
+        from lib.openalex import fetch_crossref_work
+        cr = fetch_crossref_work(doi)
     except Exception:
         return metadata
 

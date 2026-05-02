@@ -43,14 +43,28 @@ class ServerConfig:
         "retry_enabled": True,
         "circuit_breaker_enabled": True,
         "metrics_enabled": True,
-        "fusion_enabled": True,
         "rerank_enabled": True,
         "zotero_enabled": True,
+        "semantic_scholar_enabled": True,
+        "europe_pmc_enabled": False,
     })
 
     # Zotero integration
     zotero_api_key: str = ""
     zotero_user_id: str = ""
+
+    # OpenAlex (polite pool — no auth required, but mailto gives 10 req/s vs 1 req/s)
+    openalex_mailto: str = ""
+
+    # Unpaywall (email required for access)
+    unpaywall_email: str = ""
+
+    # SFU Database Registry (Solr)
+    sfu_db_registry_cache_ttl: int = 86400   # 24 h
+    sfu_db_registry_cache_file: str = "/tmp/sfu_databases_cache.json"
+
+    # EZProxy
+    sfu_ezproxy_base: str = "https://proxy.lib.sfu.ca/login?url="
 
     # Semantic Scholar API
     semantic_scholar_api_key: str = ""
@@ -125,9 +139,10 @@ def load_config() -> ServerConfig:
         "retry_enabled": True,
         "circuit_breaker_enabled": True,
         "metrics_enabled": True,
-        "fusion_enabled": True,
         "rerank_enabled": True,
         "zotero_enabled": True,
+        "semantic_scholar_enabled": True,
+        "europe_pmc_enabled": False,
     }
     for key in default_features:
         env_key = f"SFU_FEATURE_{key.upper()}"
@@ -151,6 +166,17 @@ def load_config() -> ServerConfig:
         active_profile=os.environ.get("SFU_ACTIVE_PROFILE", "default"),
         zotero_api_key=_read_secret("zotero_api_key", "SFU_ZOTERO_API_KEY"),
         zotero_user_id=_read_secret("zotero_user_id", "SFU_ZOTERO_USER_ID"),
+        openalex_mailto=_read_secret("openalex_mailto", "OPENALEX_MAILTO"),
+        unpaywall_email=_read_secret("unpaywall_email", "UNPAYWALL_EMAIL"),
+        sfu_db_registry_cache_ttl=int(
+            os.environ.get("SFU_DB_REGISTRY_CACHE_TTL", "86400")
+        ),
+        sfu_db_registry_cache_file=os.environ.get(
+            "SFU_DB_REGISTRY_CACHE_FILE", "/tmp/sfu_databases_cache.json"
+        ),
+        sfu_ezproxy_base=os.environ.get(
+            "SFU_EZPROXY_BASE", "https://proxy.lib.sfu.ca/login?url="
+        ),
         semantic_scholar_api_key=_read_secret(
             "semantic_scholar_api_key", "SFU_SEMANTIC_SCHOLAR_API_KEY"
         ),
@@ -174,7 +200,15 @@ def validate_config(config: ServerConfig) -> list[str]:
     if config.log_level.upper() not in valid_levels:
         warnings.append(f"Invalid log_level: {config.log_level}")
 
-    # Semantic Scholar credential validation
+    # OpenAlex (optional, but polite pool is strongly recommended)
+    if not config.openalex_mailto:
+        warnings.append("OPENALEX_MAILTO is unset — OpenAlex requests limited to 1 req/s (set email for 10 req/s polite pool)")
+
+    # Unpaywall (required for OA fallback step)
+    if not config.unpaywall_email:
+        warnings.append("UNPAYWALL_EMAIL is unset — Unpaywall OA resolution disabled")
+
+    # Semantic Scholar (optional API key for higher rate limits)
     if not config.semantic_scholar_api_key:
         warnings.append("SFU_SEMANTIC_SCHOLAR_API_KEY is empty — S2 requests will be unauthenticated (lower rate limit)")
 
