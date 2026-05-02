@@ -56,6 +56,9 @@ class ServerConfig:
     # OpenAlex — api_key gives 100 req/s; mailto polite pool gives 10 req/s; neither = 1 req/s
     openalex_api_key: str = ""
     openalex_mailto: str = ""
+    # Daily call budget (free plan = ~1,000 searches/day; default 900 leaves 10% headroom)
+    openalex_daily_call_limit: int = 900
+    openalex_tracker_path: str = "/tmp/openalex_calls.json"
 
     # Unpaywall (email required for access)
     unpaywall_email: str = ""
@@ -169,6 +172,8 @@ def load_config() -> ServerConfig:
         zotero_user_id=_read_secret("zotero_user_id", "SFU_ZOTERO_USER_ID"),
         openalex_api_key=_read_secret("openalex_api_key", "OPENALEX_API_KEY"),
         openalex_mailto=_read_secret("openalex_mailto", "OPENALEX_MAILTO"),
+        openalex_daily_call_limit=int(os.environ.get("OPENALEX_DAILY_CALL_LIMIT", "900")),
+        openalex_tracker_path=os.environ.get("OPENALEX_TRACKER_PATH", "/tmp/openalex_calls.json"),
         unpaywall_email=_read_secret("unpaywall_email", "UNPAYWALL_EMAIL"),
         sfu_db_registry_cache_ttl=int(
             os.environ.get("SFU_DB_REGISTRY_CACHE_TTL", "86400")

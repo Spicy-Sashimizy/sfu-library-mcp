@@ -72,6 +72,8 @@ def _get_openalex() -> "OpenAlexClient":
         _openalex_client = OpenAlexClient(
             mailto=cfg.openalex_mailto,
             api_key=cfg.openalex_api_key,
+            daily_call_limit=cfg.openalex_daily_call_limit,
+            tracker_path=cfg.openalex_tracker_path,
         )
     return _openalex_client
 
@@ -517,6 +519,11 @@ TOOL_DEFINITIONS: list[Tool] = [
         description="Check Zotero API connection, credentials, and permissions.",
         inputSchema={"type": "object", "properties": {}},
     ),
+    Tool(
+        name="get_openalex_budget",
+        description="Check today's OpenAlex API call usage against the daily budget limit.",
+        inputSchema={"type": "object", "properties": {}},
+    ),
 ]
 
 
@@ -564,6 +571,7 @@ async def _dispatch_tool(name: str, arguments: dict[str, Any]) -> list[TextConte
         "search_zotero": _handle_search_zotero,
         "get_zotero_collection_items": _handle_get_zotero_collection_items,
         "get_zotero_status": _handle_get_zotero_status,
+        "get_openalex_budget": _handle_get_openalex_budget,
     }
     handler = dispatch.get(name)
     if handler is None:
@@ -1324,3 +1332,27 @@ async def _handle_get_zotero_status(args: dict) -> list[TextContent]:
     else:
         output += ["\nCredentials: INVALID", f"Reason: {result.get('message', 'Unknown')}"]
     return [TextContent(type="text", text="\n".join(output))]
+
+
+async def _handle_get_openalex_budget(args: dict) -> list[TextContent]:
+    s = _get_openalex().budget_status()
+    bar_filled = int(s["pct_used"] / 5)  # 20-char bar
+    bar = "█" * bar_filled + "░" * (20 - bar_filled)
+    if s["exhausted"]:
+        state = "EXHAUSTED — requests are blocked until midnight"
+    elif s["pct_used"] >= 80:
+        state = "WARNING — approaching daily limit"
+    else:
+        state = "OK"
+    lines = [
+        "=" * 50,
+        "OPENALEX DAILY BUDGET",
+        "=" * 50,
+        f"Status   : {state}",
+        f"Used     : {s['calls_today']:,} / {s['daily_limit']:,} calls  [{bar}] {s['pct_used']:.0f}%",
+        f"Remaining: {s['remaining']:,} calls",
+        "",
+        "Limits: api_key=100 req/s · polite pool=10 req/s · anonymous=1 req/s",
+        "Budget resets at local midnight.",
+    ]
+    return [TextContent(type="text", text="\n".join(lines))]

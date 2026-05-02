@@ -1,9 +1,15 @@
 """OpenAlex open academic search client + CrossRef DOI enrichment."""
 
+import json
 import logging
+import threading
+from datetime import date
+from pathlib import Path
 from typing import Any
 
 import requests
+
+from lib.cache import ResponseCache
 
 logger = logging.getLogger("sfu_library_mcp")
 
@@ -11,6 +17,76 @@ OPENALEX_BASE = "https://api.openalex.org"
 CROSSREF_BASE = "https://api.crossref.org/works"
 
 _USER_AGENT = "SFULibraryMCP/1.0 (mailto:lib-systems@sfu.ca)"
+
+
+# ── Daily budget tracker ──────────────────────────────────────────────────────
+
+class DailyCallTracker:
+    """Persists today's OpenAlex API call count to disk so restarts don't reset it.
+
+    Budget resets at local midnight. Hard-blocks requests when the daily limit
+    is reached; logs a warning at 80% usage.
+    """
+
+    def __init__(self, limit: int = 900, path: str = "/tmp/openalex_calls.json"):
+        self.limit = limit
+        self._path = Path(path)
+        self._lock = threading.Lock()
+        self._date: str = ""
+        self._count: int = 0
+        self._load()
+
+    def _today(self) -> str:
+        return date.today().isoformat()
+
+    def _load(self) -> None:
+        try:
+            if self._path.is_file():
+                data = json.loads(self._path.read_text())
+                if data.get("date") == self._today():
+                    self._count = int(data.get("count", 0))
+                    self._date = data["date"]
+                    return
+        except Exception:
+            pass
+        self._count = 0
+        self._date = self._today()
+
+    def _save(self) -> None:
+        try:
+            self._path.write_text(json.dumps({"date": self._date, "count": self._count}))
+        except Exception:
+            pass
+
+    def status(self) -> dict:
+        """Return current usage without incrementing."""
+        with self._lock:
+            today = self._today()
+            if today != self._date:
+                self._count = 0
+                self._date = today
+            return self._build_status()
+
+    def increment(self) -> dict:
+        """Record one API call and return updated status."""
+        with self._lock:
+            today = self._today()
+            if today != self._date:
+                self._count = 0
+                self._date = today
+            self._count += 1
+            self._save()
+            return self._build_status()
+
+    def _build_status(self) -> dict:
+        pct = round(self._count / self.limit * 100, 1) if self.limit else 0.0
+        return {
+            "calls_today": self._count,
+            "daily_limit": self.limit,
+            "remaining": max(0, self.limit - self._count),
+            "pct_used": pct,
+            "exhausted": self._count >= self.limit,
+        }
 
 
 # ── Helpers ──────────────────────────────────────────────────────────────────
@@ -150,12 +226,23 @@ class OpenAlexClient:
     """Client for the OpenAlex open academic search API (CC0).
 
     Auth priority: api_key (100 req/s) > mailto polite pool (10 req/s) > anonymous (1 req/s).
+    Includes a 5-minute response cache and a daily call tracker to stay within the $1/day budget.
     """
 
-    def __init__(self, mailto: str = "", api_key: str = "", timeout: int = 30):
+    def __init__(
+        self,
+        mailto: str = "",
+        api_key: str = "",
+        timeout: int = 30,
+        daily_call_limit: int = 900,
+        tracker_path: str = "/tmp/openalex_calls.json",
+    ):
         self.mailto = mailto
         self.api_key = api_key
         self.timeout = timeout
+        self._tracker = DailyCallTracker(limit=daily_call_limit, path=tracker_path)
+        # 5-minute response cache — prevents duplicate API calls for the same query
+        self._cache = ResponseCache(ttl=300, max_size=200, max_memory_mb=20)
 
     def _params(self, extra: dict) -> dict:
         p = dict(extra)
@@ -166,6 +253,31 @@ class OpenAlexClient:
         return p
 
     def _get(self, path: str, params: dict) -> dict | None:
+        # Hard block when daily limit is exhausted
+        status = self._tracker.status()
+        if status["exhausted"]:
+            logger.warning(
+                "OpenAlex daily limit reached (%d/%d calls) — request blocked to protect budget",
+                status["calls_today"], status["daily_limit"],
+            )
+            return None
+
+        # Response cache — zero cost for repeated identical queries
+        cache_key = self._cache.make_key(
+            path, json.dumps(self._params(params), sort_keys=True)
+        )
+        cached = self._cache.get(cache_key)
+        if cached is not None:
+            logger.debug("OpenAlex cache hit: %s", path)
+            return cached
+
+        # Warn at 80% of daily budget
+        if status["pct_used"] >= 80:
+            logger.warning(
+                "OpenAlex budget at %.0f%% (%d/%d calls today)",
+                status["pct_used"], status["calls_today"], status["daily_limit"],
+            )
+
         try:
             resp = requests.get(
                 f"{OPENALEX_BASE}{path}",
@@ -177,13 +289,26 @@ class OpenAlexClient:
                 logger.warning("OpenAlex rate limited (429)")
                 return None
             resp.raise_for_status()
-            return resp.json()
+            data = resp.json()
         except requests.Timeout:
             logger.error("OpenAlex request timed out")
             return None
         except Exception as e:
             logger.error("OpenAlex request failed: %s", e)
             return None
+
+        # Record the call and cache the result
+        new_status = self._tracker.increment()
+        self._cache.put(cache_key, data)
+        logger.debug(
+            "OpenAlex call #%d today (%.0f%% of %d daily limit)",
+            new_status["calls_today"], new_status["pct_used"], new_status["daily_limit"],
+        )
+        return data
+
+    def budget_status(self) -> dict:
+        """Return current daily call budget status."""
+        return self._tracker.status()
 
     def search_works(
         self,

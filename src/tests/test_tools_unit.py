@@ -60,7 +60,7 @@ SAMPLE_SFU_DB = {
 
 class TestToolDefinitions:
     def test_tool_count(self):
-        assert len(TOOL_DEFINITIONS) == 21
+        assert len(TOOL_DEFINITIONS) == 22
 
     def test_new_tool_names_present(self):
         names = {t.name for t in TOOL_DEFINITIONS}
