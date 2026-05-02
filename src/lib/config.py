@@ -53,7 +53,8 @@ class ServerConfig:
     zotero_api_key: str = ""
     zotero_user_id: str = ""
 
-    # OpenAlex (polite pool — no auth required, but mailto gives 10 req/s vs 1 req/s)
+    # OpenAlex — api_key gives 100 req/s; mailto polite pool gives 10 req/s; neither = 1 req/s
+    openalex_api_key: str = ""
     openalex_mailto: str = ""
 
     # Unpaywall (email required for access)
@@ -166,6 +167,7 @@ def load_config() -> ServerConfig:
         active_profile=os.environ.get("SFU_ACTIVE_PROFILE", "default"),
         zotero_api_key=_read_secret("zotero_api_key", "SFU_ZOTERO_API_KEY"),
         zotero_user_id=_read_secret("zotero_user_id", "SFU_ZOTERO_USER_ID"),
+        openalex_api_key=_read_secret("openalex_api_key", "OPENALEX_API_KEY"),
         openalex_mailto=_read_secret("openalex_mailto", "OPENALEX_MAILTO"),
         unpaywall_email=_read_secret("unpaywall_email", "UNPAYWALL_EMAIL"),
         sfu_db_registry_cache_ttl=int(
@@ -200,9 +202,9 @@ def validate_config(config: ServerConfig) -> list[str]:
     if config.log_level.upper() not in valid_levels:
         warnings.append(f"Invalid log_level: {config.log_level}")
 
-    # OpenAlex (optional, but polite pool is strongly recommended)
-    if not config.openalex_mailto:
-        warnings.append("OPENALEX_MAILTO is unset — OpenAlex requests limited to 1 req/s (set email for 10 req/s polite pool)")
+    # OpenAlex rate limit tier
+    if not config.openalex_api_key and not config.openalex_mailto:
+        warnings.append("Neither OPENALEX_API_KEY nor OPENALEX_MAILTO set — OpenAlex limited to 1 req/s")
 
     # Unpaywall (required for OA fallback step)
     if not config.unpaywall_email:

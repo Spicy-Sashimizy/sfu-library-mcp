@@ -68,7 +68,11 @@ def _get_openalex() -> "OpenAlexClient":
     global _openalex_client
     if _openalex_client is None:
         from lib.openalex import OpenAlexClient
-        _openalex_client = OpenAlexClient(mailto=_get_config().openalex_mailto)
+        cfg = _get_config()
+        _openalex_client = OpenAlexClient(
+            mailto=cfg.openalex_mailto,
+            api_key=cfg.openalex_api_key,
+        )
     return _openalex_client
 
 

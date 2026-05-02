@@ -147,15 +147,21 @@ def normalize_work(work: dict) -> dict:
 # ── OpenAlex client ───────────────────────────────────────────────────────────
 
 class OpenAlexClient:
-    """Client for the OpenAlex open academic search API (CC0, no auth)."""
+    """Client for the OpenAlex open academic search API (CC0).
 
-    def __init__(self, mailto: str = "", timeout: int = 30):
+    Auth priority: api_key (100 req/s) > mailto polite pool (10 req/s) > anonymous (1 req/s).
+    """
+
+    def __init__(self, mailto: str = "", api_key: str = "", timeout: int = 30):
         self.mailto = mailto
+        self.api_key = api_key
         self.timeout = timeout
 
     def _params(self, extra: dict) -> dict:
         p = dict(extra)
-        if self.mailto:
+        if self.api_key:
+            p.setdefault("api_key", self.api_key)
+        elif self.mailto:
             p.setdefault("mailto", self.mailto)
         return p
 
