@@ -37,6 +37,8 @@ services:
       - PROJECT_NAME=sfu-library-mcp-clone
       - POMMEL_HOST=claudebox-sfu-library-mcp-clone-pommel
       - POMMEL_PORT=7420
+      - NVIDIA_VISIBLE_DEVICES=all
+      - NVIDIA_DRIVER_CAPABILITIES=compute,utility
     networks:
       - claudebox-sfu-library-mcp-clone-net
       - claudebox-shared
@@ -46,6 +48,13 @@ services:
       - "com.claudebox.project=sfu-library-mcp-clone"
       - "com.claudebox.service=app"
       - "com.claudebox.managed=true"
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: all
+              capabilities: [gpu]
     depends_on:
       postgres:
         condition: service_healthy
