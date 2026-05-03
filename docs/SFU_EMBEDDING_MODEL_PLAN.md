@@ -235,6 +235,73 @@ User Query: "indigenous language preservation programs Canada"
 
 ---
 
+## Master TODO Checklist
+
+### Phase 1: Training Data Generation
+- [ ] Build Solr-integrated data generator script (`scripts/generate_sfu_training_data.py`)
+- [ ] Fetch and cache SFU Solr registry (766 records, 108 subjects, 109 providers)
+- [ ] Implement Strategy 1: Subject-aligned citation pairs from OpenAlex (target: 5,000 triplets)
+- [ ] Implement Strategy 2: Synthetic SFU-style query generation from Solr metadata (target: 3,000 triplets)
+- [ ] Implement Strategy 3: Provider-aware positive/negative pairs (target: 4,000 triplets)
+- [ ] Implement Strategy 4: Cross-subject hard negatives using SFU taxonomy (target: 3,000 triplets)
+- [ ] Validate total triplet count >= 15,000
+- [ ] Split data: 90% train / 5% validation / 5% test
+- [ ] Save to `data/sfu_training_triplets.jsonl` with metadata and provenance tags
+- [ ] Write data quality checks (deduplication, length filtering, subject coverage audit)
+
+### Phase 2: Base Model Selection
+- [ ] Run benchmark comparison of MiniLM-L6-v2 vs BGE-base-v1.5 on SFU-specific queries
+- [ ] Evaluate fine-tuning convergence speed on a 1,000-triplet pilot for both bases
+- [ ] Select base model and document rationale
+- [ ] Verify base model downloads and loads correctly on both container (CPU) and host (GPU)
+
+### Phase 3: Training
+- [ ] Set up training environment on host GPU machine (PyTorch, sentence-transformers, CUDA)
+- [ ] Configure training hyperparameters (LR, batch size, warmup, scheduler)
+- [ ] Implement training script with validation loop and early stopping
+- [ ] Run initial training (3 epochs) and monitor loss curves
+- [ ] Run hyperparameter sweep if initial results are below target NDCG
+- [ ] Save best checkpoint based on validation NDCG@10
+- [ ] Run full benchmark on test split — compare against all baselines
+- [ ] Verify no regression on general academic queries (NDCG@10 >= 0.11)
+- [ ] Verify improvement on SFU-specific queries (NDCG@10 > 0.25)
+- [ ] Verify Indigenous Studies queries improve > 5x over off-the-shelf
+- [ ] Verify Canadian Studies queries improve > 3x over off-the-shelf
+- [ ] Document final training config and results
+
+### Phase 4: Quantization & Validation
+- [ ] Export trained model to ONNX format
+- [ ] Quantize ONNX model to INT8
+- [ ] Validate quantized vs original cosine similarity > 0.98
+- [ ] Confirm model size < 30MB
+- [ ] Confirm inference latency < 15ms for 50 documents
+- [ ] Confirm RAM usage < 80MB
+
+### Phase 5: Integration & Deployment
+- [ ] Copy quantized model to `models/sfu-academic-embed-v1-int8/`
+- [ ] Set `SFU_EMBEDDING_MODEL_PATH` environment variable
+- [ ] Enable `SFU_FEATURE_LOCAL_EMBEDDING_ENABLED=true`
+- [ ] Verify reranker loads custom model on startup
+- [ ] Run end-to-end search test with real queries
+- [ ] Verify offline capability (no internet required)
+- [ ] Verify fallback behavior when model is missing
+
+### Phase 6: Evaluation & Documentation
+- [ ] Write SFU-specific evaluation query set (`data/sfu_eval_queries.json`)
+- [ ] Build evaluation script (`scripts/evaluate_sfu_queries.py`)
+- [ ] Run full evaluation and record final metrics
+- [ ] Document results in this plan (update Benchmark Results section)
+- [ ] Write deployment guide for future model updates
+
+### Phase 7: Continuous Improvement (Post-Launch)
+- [ ] Set up query logging infrastructure for implicit feedback
+- [ ] Plan quarterly retraining cadence
+- [ ] Build Solr diff detector for subscription changes
+- [ ] Implement incremental fine-tune pipeline (LoRA) for new domains
+- [ ] First quarterly retrain with real user query data
+
+---
+
 ## Implementation Plan
 
 ### Phase 1: SFU-Specific Training Data Generation (3-5 days)
@@ -323,36 +390,209 @@ Based on benchmark results, two candidates:
 
 ### Phase 3: Training (1-2 days)
 
+#### 3.1 Environment Setup
+
 ```bash
 # On gaming PC with GPU (outside container)
 # Or in container on CPU (slower but works)
 
-# Step 1: Generate training data
+# Required packages
+pip install sentence-transformers>=2.2.2 torch>=2.0 tensorboard wandb
+
+# Verify CUDA availability (GPU training)
+python -c "import torch; print(f'CUDA: {torch.cuda.is_available()}, Device: {torch.cuda.get_device_name(0) if torch.cuda.is_available() else \"CPU\"}')"
+```
+
+#### 3.2 Data Preparation
+
+```bash
+# Step 1: Generate training data from all 4 strategies
 python scripts/generate_training_data.py \
   --output data/sfu_training_triplets.jsonl \
   --citation-pairs 5000 \
   --synthetic-pairs 3000 \
   --related-pairs 4000 \
   --topics "indigenous studies,criminology,interactive arts,health sciences,canadian studies,political science,economics,biological sciences,environmental management,computer science"
+```
 
-# Step 2: Train
+**Data split strategy:**
+
+| Split | Percentage | Triplets | Purpose |
+|-------|-----------|----------|---------|
+| Train | 90% | ~13,500 | Model parameter updates |
+| Validation | 5% | ~750 | Early stopping, hyperparameter selection |
+| Test | 5% | ~750 | Final evaluation only (never used during training) |
+
+**Split constraints:**
+- Stratify by strategy type — each split should contain proportional representation of all 4 strategies
+- Stratify by subject — no subject should appear only in train or only in eval
+- Deduplicate across splits — no anchor text should appear in both train and validation
+- Filter triplets where anchor, positive, or negative is shorter than 10 tokens or longer than 512 tokens
+
+**Data format** (`data/sfu_training_triplets.jsonl`):
+
+```json
+{
+  "anchor": "indigenous language preservation programs in British Columbia",
+  "positive": "Revitalizing Indigenous Languages Through Community-Based Programs: Evidence from First Nations Communities in Western Canada",
+  "negative": "Computational Approaches to Natural Language Processing for Low-Resource Languages",
+  "strategy": "synthetic_query",
+  "subject": "Indigenous Studies",
+  "metadata": {"source": "openalex", "anchor_type": "synthetic_query", "positive_work_id": "W123456"}
+}
+```
+
+#### 3.3 Loss Function Selection
+
+**Primary: Multiple Negatives Ranking Loss (MNRL)**
+
+MNRL is the standard contrastive loss for embedding fine-tuning. Given a batch of (anchor, positive) pairs, it treats all other positives in the batch as in-batch negatives.
+
+| Loss Function | Use Case | Pros | Cons |
+|---------------|----------|------|------|
+| **MNRL** (selected) | Contrastive learning with in-batch negatives | Simple, effective, scales with batch size | Needs large batches for enough negatives |
+| TripletLoss | Explicit (anchor, pos, neg) triplets | Direct control over hard negatives | Slower convergence, margin tuning needed |
+| CosineSimilarityLoss | Pairwise similarity regression | Good for graded relevance | Doesn't learn boundaries well |
+| CachedMultipleNegativesRankingLoss | MNRL with gradient caching | Supports very large effective batch sizes on limited VRAM | More complex, minimal gain for our data size |
+
+**Why MNRL:** Our training data already includes curated hard negatives (Strategy 4), and MNRL's in-batch negative sampling effectively multiplies the number of negatives per anchor by (batch_size - 1). With batch_size=64, each anchor sees 63 negatives per step.
+
+**Optional enhancement:** If MNRL alone doesn't reach target NDCG, add a second training phase with TripletLoss using only the cross-subject hard negatives (Strategy 4) to sharpen boundary discrimination.
+
+#### 3.4 Hyperparameter Configuration
+
+**Initial configuration (start here):**
+
+| Hyperparameter | Value | Rationale |
+|----------------|-------|-----------|
+| Base model | `sentence-transformers/all-MiniLM-L6-v2` | Best speed/size tradeoff from benchmarks |
+| Embedding dimension | 384 | MiniLM default, sufficient for reranking |
+| Epochs | 3 | Standard for fine-tuning; more risks overfitting on 15K samples |
+| Batch size | 64 | Fills GPU memory on RTX 3070 (8GB); maximizes in-batch negatives for MNRL |
+| Learning rate | 2e-5 | Standard for transformer fine-tuning; low enough to preserve base model knowledge |
+| Warmup ratio | 0.1 | 10% of training steps with linear warmup to prevent early divergence |
+| LR scheduler | Linear decay | Smooth reduction after warmup; cosine is an alternative if loss plateaus |
+| Weight decay | 0.01 | Mild regularization to prevent overfitting |
+| Max sequence length | 256 | Covers 95%+ of titles+abstracts; saves memory vs 512 |
+| FP16 (mixed precision) | True (GPU only) | Halves memory usage, ~1.5x speedup, negligible quality loss |
+| Gradient accumulation | 1 (GPU) / 4 (CPU) | Effective batch size = batch_size × accumulation_steps |
+| Evaluation steps | Every 500 steps | Check validation NDCG during training |
+| Save strategy | Best + last | Keep the checkpoint with highest validation NDCG |
+
+**Hyperparameter sweep (if initial results are below target):**
+
+| Parameter | Values to Try | Priority |
+|-----------|--------------|----------|
+| Learning rate | 1e-5, 2e-5, 5e-5 | High — most impactful |
+| Batch size | 32, 64, 128 | High — affects MNRL negative count |
+| Epochs | 3, 5, 10 | Medium — watch for overfitting |
+| Warmup ratio | 0.05, 0.1, 0.2 | Low — minor effect |
+| Max seq length | 128, 256, 384 | Low — only if truncation is losing signal |
+
+#### 3.5 Training Execution
+
+```bash
+# Step 2: Train the model
 python scripts/train_embedding_model.py \
   --data data/sfu_training_triplets.jsonl \
   --output models/sfu-academic-embed-v1 \
   --base-model sentence-transformers/all-MiniLM-L6-v2 \
   --epochs 3 \
   --batch-size 64 \
-  --learning-rate 2e-5
+  --learning-rate 2e-5 \
+  --warmup-ratio 0.1 \
+  --weight-decay 0.01 \
+  --max-seq-length 256 \
+  --fp16 \
+  --eval-steps 500 \
+  --save-best-model \
+  --log-dir logs/sfu-embed-training
+```
 
-# Step 3: Benchmark against off-the-shelf
+**Expected training timeline:**
+
+| Stage | GPU (RTX 3070) | CPU (Ryzen 7 5700X3D) |
+|-------|---------------|----------------------|
+| Data loading + tokenization | ~2 min | ~5 min |
+| Epoch 1 (13,500 triplets) | ~40 min | ~5 hours |
+| Epoch 2 | ~40 min | ~5 hours |
+| Epoch 3 | ~40 min | ~5 hours |
+| Validation after each epoch | ~2 min | ~10 min |
+| **Total** | **~2-3 hours** | **~15-20 hours** |
+
+#### 3.6 Training Monitoring
+
+**Key metrics to track during training:**
+
+| Metric | What to Watch For | Action if Abnormal |
+|--------|-------------------|-------------------|
+| Training loss | Steady decrease; should drop 50-70% over 3 epochs | If flat: increase LR. If spiky: decrease LR or increase batch size |
+| Validation loss | Should track training loss with small gap | If diverges from train loss: overfitting — stop early or add regularization |
+| Validation NDCG@10 | Should increase each epoch; target > 0.20 by epoch 2 | If flat: data quality issue — inspect triplets manually |
+| Learning rate | Linear warmup then decay | Verify warmup completes in first ~600 steps |
+| GPU memory | Should stay under 7.5GB with FP16 + batch=64 | If OOM: reduce batch_size to 32 and set gradient_accumulation=2 |
+| Gradient norm | Should be stable (0.1–10.0 range) | If exploding (>100): reduce LR. If vanishing (<0.001): increase LR |
+
+**TensorBoard monitoring:**
+
+```bash
+# In a separate terminal during training
+tensorboard --logdir logs/sfu-embed-training --port 6006
+# Open http://localhost:6006 to view live training curves
+```
+
+**Early stopping criteria:**
+- Stop if validation loss increases for 3 consecutive evaluation steps
+- Stop if validation NDCG@10 decreases for 2 consecutive evaluations
+- Maximum training: 10 epochs (hard cap, even if still improving)
+
+#### 3.7 Post-Training Validation
+
+```bash
+# Step 3: Benchmark the trained model against all baselines
 python scripts/benchmark_embeddings.py \
   --custom-model models/sfu-academic-embed-v1 \
   --queries 50 --k 10
 ```
 
-**Expected training time:**
-- GPU (RTX 3070): 2-4 hours for 15K triplets, 3 epochs
-- CPU (Ryzen 7 5700X3D): 12-20 hours
+**Validation checklist:**
+
+| Check | Target | Pass/Fail Criteria |
+|-------|--------|-------------------|
+| General NDCG@10 | >= 0.11 | Must not regress below worst off-the-shelf model |
+| SFU-specific NDCG@10 | > 0.25 | Must show clear improvement over best off-the-shelf (0.12) |
+| Indigenous Studies queries | > 5x improvement | e.g., from 0.0002 to > 0.001 on benchmark queries |
+| Canadian Studies queries | > 3x improvement | e.g., from 0.005 to > 0.015 on benchmark queries |
+| Inference speed (50 docs) | < 15ms | Measured on container CPU |
+| Embedding dimension | 384 | Must match expected dimension |
+| Model loads without errors | Yes | Test in both GPU and CPU environments |
+
+**If validation fails:**
+
+| Failure Mode | Likely Cause | Fix |
+|-------------|-------------|-----|
+| General NDCG regressed | Catastrophic forgetting — model forgot general knowledge | Reduce LR to 1e-5, reduce epochs to 2, increase general-domain triplets |
+| SFU NDCG didn't improve | Training data doesn't capture SFU-specific signal | Audit triplet quality, increase Strategy 2 (synthetic queries) proportion |
+| Both metrics are flat | Base model not learning from data | Try BGE-base-v1.5 as base, increase data to 25K+ triplets |
+| Indigenous/Canadian queries unchanged | Insufficient representation in training data | Generate 2,000+ additional triplets specifically for these subjects |
+| Overfitting (train loss low, val loss high) | Model memorized training data | Add dropout, reduce epochs, increase data volume |
+
+#### 3.8 Model Versioning
+
+Save training artifacts for reproducibility:
+
+```
+models/sfu-academic-embed-v1/
+├── config.json                    # Model architecture config
+├── model.safetensors              # Trained weights
+├── tokenizer.json                 # Tokenizer
+├── tokenizer_config.json
+├── special_tokens_map.json
+├── training_args.json             # Exact hyperparameters used
+├── training_log.jsonl             # Per-step loss and metrics
+├── eval_results.json              # Final benchmark results
+└── README.md                      # Training summary and data provenance
+```
 
 ### Phase 4: Quantization & Validation (1 day)
 
