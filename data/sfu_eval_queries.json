@@ -1,0 +1,177 @@
+[
+  {
+    "query": "indigenous language revitalization First Nations British Columbia",
+    "subject": "Indigenous Studies",
+    "notes": "SFU has 46 Indigenous Studies databases; off-the-shelf models score ~0.0002"
+  },
+  {
+    "query": "residential school trauma intergenerational effects Indigenous communities",
+    "subject": "Indigenous Studies",
+    "notes": "Core SFU institutional priority area"
+  },
+  {
+    "query": "Truth and Reconciliation Commission calls to action implementation Canada",
+    "subject": "Indigenous Studies",
+    "notes": "Highly specific to Canadian institutional context"
+  },
+  {
+    "query": "land back movement Indigenous rights treaty negotiations British Columbia",
+    "subject": "Indigenous Studies",
+    "notes": "Tests regional specificity"
+  },
+  {
+    "query": "housing affordability crisis Metro Vancouver rental market",
+    "subject": "Canadian Studies",
+    "notes": "Local Canadian topic; off-the-shelf models score ~0.005"
+  },
+  {
+    "query": "Canadian immigration settlement services multicultural policy",
+    "subject": "Canadian Studies",
+    "notes": "SFU has 58 Canadian Studies databases"
+  },
+  {
+    "query": "BC provincial politics electoral reform referendum",
+    "subject": "Canadian Studies",
+    "notes": "Regional Canadian political science"
+  },
+  {
+    "query": "Chinese Canadian discrimination exclusion act immigration history",
+    "subject": "Canadian Studies",
+    "notes": "Canadian history — SFU specialty"
+  },
+  {
+    "query": "restorative justice alternatives incarceration recidivism reduction",
+    "subject": "Criminology",
+    "notes": "SFU criminology — unique program, 44 databases"
+  },
+  {
+    "query": "police use of force racial profiling Black Indigenous communities Canada",
+    "subject": "Criminology",
+    "notes": "Criminology + Canadian intersection"
+  },
+  {
+    "query": "cybercrime financial fraud digital forensics investigation",
+    "subject": "Criminology",
+    "notes": "Modern criminology topic"
+  },
+  {
+    "query": "prison population mental health services rehabilitation programs",
+    "subject": "Criminology",
+    "notes": "Corrections and criminology"
+  },
+  {
+    "query": "interactive media experience design user engagement game mechanics",
+    "subject": "Interactive Arts and Technology (SIAT)",
+    "notes": "SFU SIAT program — unique, 44 databases; off-the-shelf models perform poorly"
+  },
+  {
+    "query": "virtual reality augmented reality immersive learning environments",
+    "subject": "Interactive Arts and Technology (SIAT)",
+    "notes": "SIAT interdisciplinary area"
+  },
+  {
+    "query": "computational art generative algorithms creative machine learning",
+    "subject": "Interactive Arts and Technology (SIAT)",
+    "notes": "SIAT-Computing intersection"
+  },
+  {
+    "query": "human computer interaction accessibility inclusive design",
+    "subject": "Interactive Arts and Technology (SIAT)",
+    "notes": "Core SIAT/HCI topic"
+  },
+  {
+    "query": "biomedical physiology exercise rehabilitation muscle physiology",
+    "subject": "Biomedical Physiology and Kinesiology (BPK)",
+    "notes": "SFU BPK unique program — tests cross-disciplinary boundary"
+  },
+  {
+    "query": "kinesiology sport performance motor learning biomechanics",
+    "subject": "Biomedical Physiology and Kinesiology (BPK)",
+    "notes": "BPK core topic"
+  },
+  {
+    "query": "cardiovascular disease exercise intervention prevention outcomes",
+    "subject": "Biomedical Physiology and Kinesiology (BPK)",
+    "notes": "BPK-Health Sciences intersection"
+  },
+  {
+    "query": "ESG sustainable investing responsible finance portfolio performance",
+    "subject": "Finance",
+    "notes": "Beedie School of Business — 64 Finance databases"
+  },
+  {
+    "query": "Canadian banking regulation financial stability macroprudential policy",
+    "subject": "Finance",
+    "notes": "Finance + Canadian Studies intersection"
+  },
+  {
+    "query": "venture capital startup ecosystem innovation funding",
+    "subject": "Finance",
+    "notes": "Finance/entrepreneurship topic"
+  },
+  {
+    "query": "salmon aquaculture disease management Pacific Northwest fisheries",
+    "subject": "Resource and Environmental Management",
+    "notes": "BC-specific environmental topic"
+  },
+  {
+    "query": "wildfire management prescribed burning Indigenous traditional ecological knowledge",
+    "subject": "Resource and Environmental Management",
+    "notes": "Combines environmental management with Indigenous knowledge — SFU specialty"
+  },
+  {
+    "query": "old growth forest conservation biodiversity British Columbia",
+    "subject": "Resource and Environmental Management",
+    "notes": "BC-specific conservation topic"
+  },
+  {
+    "query": "Northern Gateway pipeline environmental assessment First Nations opposition",
+    "subject": "Resource and Environmental Management",
+    "notes": "BC environmental policy + Indigenous rights"
+  },
+  {
+    "query": "opioid crisis fentanyl overdose harm reduction policy Canada",
+    "subject": "Health Sciences",
+    "notes": "Canadian public health crisis — 46 Health Sciences databases"
+  },
+  {
+    "query": "Indigenous health disparities social determinants healthcare access",
+    "subject": "Health Sciences",
+    "notes": "Health Sciences + Indigenous Studies intersection"
+  },
+  {
+    "query": "long COVID post-acute sequelae epidemiology treatment",
+    "subject": "Health Sciences",
+    "notes": "Current health topic"
+  },
+  {
+    "query": "political risk country ratings international investment data",
+    "subject": "Political Science",
+    "notes": "Tests SFU Wharton ICRG database coverage — 56 Political Science databases"
+  },
+  {
+    "query": "media framing political polarization social media misinformation",
+    "subject": "Communication",
+    "notes": "Communication + Political Science intersection"
+  },
+  {
+    "query": "income inequality poverty measurement Gini coefficient Canada",
+    "subject": "Economics",
+    "notes": "Economics + Canadian Studies — 56 Economics databases"
+  },
+  {
+    "query": "digital humanities text mining archival primary sources",
+    "subject": "History",
+    "notes": "History + computing intersection — SFU has 124 History databases"
+  },
+  {
+    "query": "feminist theory gender studies intersectionality labour",
+    "subject": "Women's Studies",
+    "notes": "Humanities social sciences"
+  },
+  {
+    "query": "machine learning public health disease surveillance prediction",
+    "subject": "Health Sciences / Computing Science",
+    "notes": "Interdisciplinary — tests subject boundary"
+  }
+]
