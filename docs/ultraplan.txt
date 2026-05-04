@@ -1,0 +1,409 @@
+# Stacking, Data, and Production Wiring — Revised Plan
+
+## Context
+
+`docs/STACKING_AND_DATA_FIX_PLAN.md` documents Phases 0-7: dedup recovery (700 → 8,724 triplets), RRF eval harness, v2/v3 training. RRF stacking landed +12.8% NDCG. **Three structural problems remain, plus several inaccuracies in the original Phase G plan that exploration has corrected.**
+
+### What exploration confirmed
+- Production reranker is dead code: `from lib.reranker import rerank_results` at `src/lib/tools.py:27` has no callers; `_handle_search_academic` (line 720) returns OpenAlex docs straight to `format_openalex_results` with no rerank step.
+- v3+RRF lost 0.8% vs v2+RRF; postulated cause (`_make_text` enrichment overlapping BM25) is untested.
+- Strategy 3 caps confirmed: `max_total=4000` (line 656), `[:4]` subjects (line 659), `[:2]` docs (line 681).
+- Dedup truncated to 200 chars (`generate_sfu_training_data.py:870`), unseeded query gen (line 467), non-stable `hash()` for per-(provider,subject) RNG (line 673).
+
+### What the original draft got wrong (corrected here)
+- **`SFU_FEATURE_RRF_ENABLED` already exists.** `src/lib/config.py:160-166` already loads `rrf_enabled` and `rerank_enabled` from `SFU_FEATURE_*` env vars. The fix is *consuming* the flag at the call site, not adding it.
+- **MNRL is already the loss.** `train_embedding_model.py:364` is `MultipleNegativesRankingLoss(model)`, not `TripletLoss`. The Phase L "switch loss" task is a no-op.
+- **`--base-model` is already a CLI flag.** `train_embedding_model.py:697`. Switching to BGE-small is one CLI arg, not a code change.
+- **The reranker is Primo-shaped, but production returns OpenAlex flat docs.** `reranker.py` reads `doc["pnx"]["display"][...]`; OpenAlex docs are flat `title`, `authors`, `topics`, `cited_by_count`. There is no Primo path in `tools.py` anymore. Wiring requires a normalization layer or an OpenAlex-aware path.
+
+### User's added requirement (this revision)
+Provide training-data alternatives to OpenAlex due to API token limitations: local sources and synthetic generation. Phase I-bis is added to cover this.
+
+### Intended outcome
+1. Production actually runs RRF (current users get raw OpenAlex order).
+2. The v3 regression is mechanistically explained.
+3. Provider/subject coverage is genuinely uniform.
+4. The data pipeline can produce useful triplets even when OpenAlex is rate-limited or exhausted.
+
+---
+
+## Phase ordering and gates
+
+```
+G  Production wiring (RRF in MCP server)        ←── ship gate, no API spend
+│
+├── H  v3 enrichment ablation                   ←── 2 GPU-h, no API
+│
+├── I  Strategy 3 round-robin + persistent cache ←── 1 day code + 1 day API
+│
+├── I-bis  Non-OpenAlex training-data sources    ←── NEW — local/synthetic
+│   ├── Solr-only triplets (zero API)
+│   ├── LLM query generation (Ollama-local + Claude API)
+│   ├── arXiv / Crossref / S2 (separate quotas)
+│   └── Re-mining the cached 8,724 corpus
+│
+├── J  Dedup + reproducibility                   ←── 0.5 day, no API
+├── K  BM25-mined hard negatives                 ←── piggybacks on I/I-bis cache
+├── L  Training (BGE-small base, larger batch)   ←── 4 GPU-h
+├── M  Eval methodology (100+ queries, MRR/Recall)
+└── N  Deferred (S2 contexts, CrossEncoder, query logs)
+```
+
+`G` and `I-bis` are independent and can ship in either order; both are highest priority because `G` unblocks production benefit and `I-bis` unblocks all further data work that's currently rate-limited.
+
+---
+
+## Phase G — Production wiring (no API; ship first)
+
+### G.1 — Normalize the reranker on a doc shape that exists in production
+`reranker.py` reads `doc["pnx"]["display"]["title"]`; production `_handle_search_academic` returns OpenAlex flat dicts. Two options:
+
+- **G.1a (chosen): add a thin `_normalize_for_rerank(doc)` adapter in `reranker.py`** that returns a shape-stable view: `{"title", "abstract", "year", "type", "doi", "authors", "has_fulltext"}`. Drive `_score_title_relevance`, `_score_recency`, `_score_fulltext`, `_score_type_match`, `_score_completeness` off this view rather than off `pnx`. Adapter detects shape: if `doc.get("pnx")` exists, read pnx; else treat as OpenAlex flat (`title`, `abstract`, `publication_year`/`date`, `cited_by_count`, etc.).
+- Rejected: keeping two parallel score paths — duplicates code and the Primo path is currently dead.
+
+This refactor is a few-dozen-line, fully-testable change and resolves the "production gets nothing" problem.
+
+### G.2 — Consume the existing env flags at the call site
+- `_get_features()` in `tools.py:47` already returns `rrf_enabled` and `rerank_enabled` (loaded from `SFU_FEATURE_*` in `config.py:162-166`). They just have no consumer.
+- Add a `_maybe_rerank(docs, query, limit)` helper near the top of `tools.py`:
+  - Short-circuit to `docs[:limit]` if `_get_features().get("rerank_enabled")` is False.
+  - Else call `rerank_results(docs, query, limit, use_embedding=True, use_rrf=_get_features().get("rrf_enabled"))`.
+  - Wrap in try/except that logs and falls back to `docs[:limit]` (never break search on reranker error).
+- Call it inside `_handle_search_academic` (line ~745) on `data["results"]` before `format_openalex_results(data, query)`. Mirror in `_handle_search_by_topic` (line 804) and any future paper-returning handler. Skip metadata-only handlers (`_handle_browse_sfu_databases`, hours, location).
+
+### G.3 — Tests
+- Extend `src/tests/test_reranker.py`:
+  - New tests passing OpenAlex-flat docs through `rerank_results`. The existing 13 tests use `pnx` and must still pass.
+  - Test that `_normalize_for_rerank` correctly extracts both shapes.
+- New `src/tests/test_tools_rerank.py` (or extend existing tests):
+  - `monkeypatch` `rerank_results`, call `_handle_search_academic`, assert reranker was invoked when `rerank_enabled=True`, skipped when False, and `use_rrf` propagates from the feature flag.
+
+### G.4 — Observability
+Add one log line at the end of `rerank_results`: `logger.info("rerank: rrf=%s embed=%s docs=%d -> %d", use_rrf, bool(semantic_scores), len(docs), limit)`. Bump version string in `config.py` so the deploy is identifiable.
+
+### G.5 — Roll-out
+1. Deploy with both flags **off** (current default) — confirms the wiring change is invisible.
+2. Flip `SFU_FEATURE_RERANK_ENABLED=true` (default in `config.py:155` is already True; verify env doesn't override).
+3. After 24h soak, flip `SFU_FEATURE_RRF_ENABLED=true`.
+
+```ascii
+ production today                  after Phase G
+─────────────                     ─────────────
+ query → openalex.search_works     query → openalex.search_works
+       → format_openalex_results          → _maybe_rerank ──► rerank_results
+                                                    │           │
+                                                    │           ├─ _normalize_for_rerank (OpenAlex shape)
+                                                    │           ├─ semantic similarity (embedding model)
+                                                    │           └─ RRF (if SFU_FEATURE_RRF_ENABLED)
+                                                    ▼
+                                           format_openalex_results
+```
+
+---
+
+## Phase H — Isolate the v3 regression
+
+Hypothesis from the existing doc: `_make_text` enrichment (`Venue | Topics | Keywords` appended at `generate_sfu_training_data.py:322-345`) makes v3's embeddings less orthogonal to BM25, suppressing RRF gain. Testable in ~2 GPU-hours with zero API spend.
+
+### H.1 — Verify raw triplets are re-renderable
+The v3 enrichment lives in the *rendered text* stored in `data/sfu_training_triplets.jsonl`, not in the raw OpenAlex work. Before any ablation work, **read the raw JSONL and confirm** the rendered text alone is what's stored vs. whether the work dict is preserved. If only rendered text is stored, the raw schema must change to keep the original work fields so re-rendering can happen during `--reclean-only`. Without this fix, H.2 needs new API calls and breaks the "no API spend" budget.
+
+### H.2 — Add enrichment toggles to `_make_text`
+- New constants `_ENRICH_VENUE`, `_ENRICH_TOPICS`, `_ENRICH_KEYWORDS` (default True).
+- CLI flags `--enrich-venue/--no-enrich-venue`, etc., plus `--enrich-anchors-only`.
+- Plumb through all four strategy functions.
+
+### H.3 — Train two ablations
+- **v3a**: strategy 3 fix only, no enrichment anywhere (closest to v2's text shape).
+- **v3b**: strategy 3 fix + anchor-only enrichment (query keeps context, doc side stays clean).
+- Identical hyperparameters to v3 (6 epochs, batch 32, max_seq 512, LR 2e-5). RTX 4070 Ti SUPER ≈ 1h each.
+
+### H.4 — Decision rule
+| Variant | Alone | + RRF |
+|---|---|---|
+| v2 | 0.5891 | 0.6643 |
+| v3 | 0.5951 | 0.6590 |
+| v3a | ? | ? |
+| v3b | ? | ? |
+
+Ship the variant with highest `+RRF` NDCG. If v3 still wins, the regression is within the 35-query eval's noise band → Phase M is the higher priority.
+
+---
+
+## Phase I — Strategy 3 coverage rebuild + persistent OpenAlex cache
+
+### I.1 — Round-robin sampling in `run_strategy3` (`scripts/generate_sfu_training_data.py:585-725`)
+- Replace the global `count >= max_total` early-exit with a per-provider quota: `target_per_provider = max_total // len(providers)` (≈36 with current defaults).
+- Outer loop iterates **all** providers. Inner loop emits up to `target_per_provider` per provider.
+- Replace `subjects[:4]` (line 659) with RNG-sampled `min(8, len(subjects))` per provider — alphabetical bias goes away.
+- Replace `docs_for_pair[:2]` (line 681) with RNG-sampled `min(3, len(docs_for_pair))`.
+
+### I.2 — Persistent OpenAlex paper cache
+- New `scripts/openalex_cache.py` lifting the on-disk pattern already in `evaluate_sfu_queries.py:74-86, 102-163`. Generic `get_or_fetch(key, fetch_fn)`.
+- Cache file: `data/openalex_works_cache.json` keyed by `f"subject::{name}"`, `f"citing::{work_id}"`.
+- Reuse across strategies 1, 3, 4. No TTL — papers don't change. Manual delete on intentional refresh.
+
+### I.3 — Stable per-(provider, subject) seed
+Replace `random.Random(hash((provider, subject)))` (line 673) with sha1-based seed (Python's `hash()` is randomized per process unless `PYTHONHASHSEED` is set):
+```python
+import hashlib
+seed_int = int(hashlib.sha1(f"{provider}::{subject}".encode()).hexdigest()[:8], 16)
+sample_rng = random.Random(seed_int)
+```
+
+### I.4 — Cover unsubscribed SFU subjects
+Engineering, Nursing, Women's Studies, SIAT, Environmental Science have zero providers in Solr. Add a synthetic provider entry "SFU Library Direct" assigned to those 5 in the run, so they receive provider-aware triplets. Document as pseudo-provider in metadata.
+
+### I.5 — Acceptance
+- Re-run with default `--provider-pairs 4000`. Expect 109 distinct providers and 100% subject coverage in output.
+- If subject diversity per provider needs more, bump to `--provider-pairs 6000` per the original doc's recommendation.
+
+---
+
+## Phase I-bis — Training data without OpenAlex (NEW — addresses user request)
+
+OpenAlex enforces a 100k/day premium / 1k/day free quota and the local tracker hard-blocks at 900 (`config.py:69`, `openalex.py:243-260`). Below are four mutually-orthogonal sources that produce useful triplets with **zero or independent API budget**.
+
+```ascii
+   no-API ──────► A: Solr-only triplets (Solr cache already on disk)
+                  │
+   in-corpus ───► B: Re-mine the 8,724 cached papers (no new fetches)
+                  │
+   local-LLM ───► C: Ollama-served paraphrase / question generation
+                  │
+   independent ─► D: arXiv / Crossref / Semantic Scholar (separate quotas)
+   API quotas       (S2 client already exists in src/lib/semantic_scholar.py)
+```
+
+### A. Solr-only triplets (zero API; ~3-6k triplets)
+The `SFUDatabaseRegistry` exposes 766 records (`solr_cache.json`) with `name`, `subjects`, `provider`, `publicNote`, `description`, `contentTypes`. New strategy `run_strategy5` in `generate_sfu_training_data.py`:
+- **Anchor**: `_generate_queries_from_db_record(rec)` (already exists, line 445) — mined from name/subject/description.
+- **Positive**: a *different* DB record sharing ≥1 subject with the anchor record (description+name as text).
+- **Negative**: random DB record sharing zero subjects.
+- Dedup by (anchor, positive_db_id). Expected yield: 766 records × 5 queries × ~5 valid positives ≈ 4-6k after filtering.
+- Cost: 0 API calls. Solr cache already exists.
+
+### B. Re-mining the existing corpus (zero API; ~5k extra triplets)
+The 8,724 clean triplets contain ~17k unique paper texts. Build new triplets by:
+- For each anchor in the existing dataset whose paper text we have, find the **k-nearest in-corpus papers by sentence-BERT cosine** as additional positives. Use the *current* fine-tuned model so similarity is calibrated to the SFU domain.
+- Add synthetic queries for each cached paper via template substitution against its title/topic.
+- Cost: 0 API calls. CPU-only, ~30 min once.
+
+### C. LLM-generated synthetic queries (local Ollama or Claude API)
+Two implementations, one CLI:
+- **`scripts/generate_synthetic_queries.py`** (new). For each cached paper text in `data/sfu_training_triplets.clean.jsonl`, call an LLM with: *"Given this paper abstract, write 3 short search queries (5-12 words each) a student in `{subject}` would type to find it."* Cache responses in `data/synthetic_queries_cache.json`.
+- Backend selection via `--llm {ollama,claude,openai}`:
+  - **`ollama`**: Local Llama-3 8B / Qwen-2.5 7B via `http://localhost:11434/api/generate`. Zero external cost. Fastest path on the dev box. The repo already has `ollama-proxy.py`.
+  - **`claude`**: Claude API (Haiku 4.5 — fast/cheap) for higher quality. Use prompt caching on the system prompt to amortize cost.
+  - Cost scales with corpus, not with OpenAlex quota.
+- Each generated query becomes an **anchor**, paired with the source paper as **positive**, and a different-subject paper from the corpus as **negative**. Expected yield: 8,724 papers × 3 queries ≈ 26k synthetic triplets.
+
+### D. Independent paper sources (separate quotas)
+- **Semantic Scholar**: `src/lib/semantic_scholar.py` already exists with `search_papers`. Free tier: 100 req / 5 min unauthenticated. Add a `--source s2` flag to strategy 1; same citation-pair logic as OpenAlex but mining S2's citation graph. Quota independent of OpenAlex.
+- **arXiv API**: `http://export.arxiv.org/api/query` — no rate limit beyond polite use, no key, no daily cap. Subject-aligned: arXiv categories (cs.LG, math.PR, ...) map cleanly to SFU's STEM subjects. New `scripts/arxiv_fetcher.py` analogous to `fetch_works_for_subject`.
+- **Crossref REST**: `https://api.crossref.org/works` — polite pool 50 req/s with mailto. Already `lib/openalex.py:fetch_crossref_work` exists for single-DOI; extend to subject queries.
+- All three populate the same `data/openalex_works_cache.json` (rename to `data/papers_cache.json` to reflect multi-source).
+
+### Strategy yields summary
+
+| Source | Triplets / run | API cost | New code |
+|---|---|---|---|
+| Strategy 5 (Solr-only) | 4-6k | 0 | `run_strategy5` |
+| In-corpus re-mining | ~5k | 0 | `scripts/remine_corpus.py` |
+| LLM synthetic (Ollama) | ~26k | 0 | `scripts/generate_synthetic_queries.py` |
+| LLM synthetic (Claude) | ~26k | ~$5 with prompt caching | same script, `--llm claude` |
+| arXiv | 5-10k | 0 | `scripts/arxiv_fetcher.py` |
+| S2 citation graph | 3-8k | 0 (separate quota) | `run_strategy1 --source s2` |
+
+### Acceptance for I-bis
+- A successful `--strategy 5` run on the disk Solr cache produces ≥4,000 valid triplets covering ≥100 SFU subjects, with no network calls.
+- LLM synthetic generation produces ≥3 queries for ≥80% of cached papers (some will refuse / produce gibberish — that's fine).
+- A combined run (`--strategy 1 2 3 4 5 --llm-synthetic --arxiv-citations`) without the OpenAlex live API produces ≥30k clean triplets.
+
+---
+
+## Phase J — Dedup + reproducibility quality fixes
+
+### J.1 — Stop truncating the dedup key
+`generate_sfu_training_data.py:870` uses `(anchor[:200], positive[:200])`. Replace with sha1 hashes:
+```python
+pair_key = (
+    hashlib.sha1(anchor.encode()).hexdigest(),
+    hashlib.sha1(positive.encode()).hexdigest(),
+)
+```
+
+### J.2 — Verify negative length checks
+Existing doc claims this is in v3; confirm in code (`run_quality_checks` lines 880-895) and remove the legacy 2-token min on anchors only if it actually causes issues. The 2-token min is *intentional* per existing doc — keep it for synthetic-query support.
+
+### J.3 — Seed `_generate_queries_from_db_record` (line 445)
+Currently `random.sample(QUERY_TEMPLATES, ...)` uses the global RNG — non-reproducible. Use a per-record sha1 seed (same trick as I.3).
+
+### J.4 — Reproducibility regression test
+New `scripts/tests/test_generate_data_repro.py`. Run the pipeline twice on a 50-record Solr fixture with the same seed; assert output JSONL is byte-identical.
+
+---
+
+## Phase K — BM25-mined hard negatives
+
+Strategies 1 and 3 currently use *random* cross-subject negatives. Model never sees lexically-similar-but-topically-wrong papers (the canonical DPR/ANCE finding).
+
+### K.1 — `scripts/mine_hard_negatives.py`
+For each (anchor, positive, subject):
+- Query OpenAlex (or S2 / arXiv if I-bis cache is built) with the anchor text, take top 20.
+- Filter to papers whose primary subject ≠ anchor's AND that aren't the positive.
+- Pick the highest-ranked such paper as the hard negative.
+- Cache in `data/hard_negatives_cache.json` keyed by anchor sha1.
+- Reuse the rate-limit/backoff pattern in `evaluate_sfu_queries.py:123-149`.
+
+### K.2 — Two negatives per anchor
+Strategies 1 and 3 emit (anchor, positive, random_neg) **and** (anchor, positive, hard_neg). Doubles those strategies' triplet counts. With MNRL already in use (`train_embedding_model.py:364`), the explicit hard negative becomes a labeled negative *plus* in-batch negatives.
+
+### K.3 — Acceptance
+Triplet-eval mean margin on `data/splits/test.jsonl` rises ≥+0.02 vs current best.
+
+---
+
+## Phase L — Training improvements (BGE-small base + larger batch)
+
+### L.1 — MNRL: no change
+Already `MultipleNegativesRankingLoss` at `train_embedding_model.py:364`. Skip.
+
+### L.2 — BGE-small as alternative base model
+Existing `--base-model` flag (`train_embedding_model.py:697`) accepts any HF model id. Train two checkpoints:
+- `models/sfu-academic-embed-v4-mini` — `--base-model sentence-transformers/all-MiniLM-L6-v2` (current)
+- `models/sfu-academic-embed-v4-bge` — `--base-model BAAI/bge-small-en-v1.5`
+
+Both with the Phase H winner's text rendering + Phase K hard negatives + Phase I-bis synthetic data.
+
+### L.3 — Hyperparameter tweaks
+- Batch 32 → 64 (more in-batch negatives for MNRL).
+- LR 2e-5 → 3e-5 (larger dataset tolerates higher LR).
+- 6 epochs unless val_score plateaus earlier.
+
+### L.4 — Acceptance
+On the Phase M expanded eval set, best-of-L.2 must beat best-of-Phase-H by ≥3% NDCG@10 with 95% CI excluding zero.
+
+---
+
+## Phase M — Eval methodology
+
+35-query eval (`data/sfu_eval_queries.json`, 14 subjects) is too small for 1-2% deltas.
+
+### M.1 — Expand to 100+ queries / 40+ subjects
+Sources:
+- Rephrased Solr DB descriptions (1 per top-50 DBs by subject diversity).
+- SFU library research-guide / FAQ pages (publicly browseable).
+- Real query logs once Phase G ships and logging is in place.
+
+Each query gets `subject(s)`, `difficulty {easy,medium,hard}`, `notes`.
+
+### M.2 — Add MRR@10 and Recall@10 to `evaluate_sfu_queries.py:179-186`
+NDCG alone hides whether the relevant doc is at rank 1 vs rank 10. Report all three.
+
+### M.3 — De-bias the relevance proxy
+Current `log(citation_count + 1)` correlates with OpenAlex's BM25 `relevance_score`, which is why "BM25 wins by construction" (0.8058). Mixed proxy:
+```
+rel(p, q) = 0.5 * log(p.citations + 1) + 0.5 * cos(embed(p), embed(seed_paper_for_q))
+```
+where `seed_paper_for_q` is one human-picked paper per query (≈ 8 person-hours for 100 queries).
+
+### M.4 — Single results file
+Migrate from `results/sfu_eval_results.json` to append-only `results/sfu_eval_history.jsonl`:
+```json
+{"timestamp": ..., "model": ..., "fusion": ..., "ndcg10": ..., "mrr10": ..., "recall10": ..., "per_subject": {...}, "notes": ...}
+```
+New `scripts/eval_compare.py` pretty-prints any two runs side-by-side, including a paired-bootstrap 95% CI on the delta.
+
+### M.5 — Statistical-significance gate
+A positive Δ NDCG with 95% CI overlapping zero is **not** a ship signal.
+
+---
+
+## Phase N — Deferred
+
+Carried from the existing doc:
+- Semantic Scholar citation-context anchors (citing-sentence as gold-query) — moved into Phase I-bis.D as a co-source.
+- CrossEncoder Tier 1.5 reranker (~50-100ms latency, +3-5% NDCG).
+- Real query-log capture once Phase G ships.
+- LambdaMART learned blend (Tier 2 stacking).
+
+---
+
+## Critical files
+
+| File | Phases |
+|---|---|
+| `src/lib/reranker.py` | G.1 (add `_normalize_for_rerank`, drive scorers off normalized view), G.4 (log line) |
+| `src/lib/tools.py` | G.2 (`_maybe_rerank` helper, wire into `_handle_search_academic` line 720, `_handle_search_by_topic` line 804) |
+| `src/lib/config.py` | G.4 (version bump only — env flags already exist at lines 160-166) |
+| `src/tests/test_reranker.py` | G.3 (OpenAlex-shape tests) |
+| `src/tests/test_tools_rerank.py` (NEW) | G.3 (handler integration) |
+| `scripts/generate_sfu_training_data.py` | H.2 (322-345), I (585-725), I-bis A (`run_strategy5`), J (445, 870) |
+| `scripts/openalex_cache.py` (NEW) | I.2 |
+| `scripts/generate_synthetic_queries.py` (NEW) | I-bis C |
+| `scripts/remine_corpus.py` (NEW) | I-bis B |
+| `scripts/arxiv_fetcher.py` (NEW) | I-bis D |
+| `scripts/mine_hard_negatives.py` (NEW) | K |
+| `scripts/train_embedding_model.py` | L.3 (hyperparams via CLI; already supports `--base-model`, MNRL) |
+| `scripts/evaluate_sfu_queries.py` | M.2 (MRR/Recall), M.3 (mixed proxy), M.4 (history file) |
+| `scripts/eval_compare.py` (NEW) | M.4 |
+| `data/sfu_eval_queries.json` | M.1 (35 → 100+) |
+| `data/papers_cache.json` (NEW, replaces `data/openalex_eval_cache.json` long-term) | I.2, I-bis |
+| `data/hard_negatives_cache.json` (NEW) | K |
+| `data/synthetic_queries_cache.json` (NEW) | I-bis C |
+
+---
+
+## Existing utilities to reuse
+
+- `evaluate_sfu_queries.py:74-163` — disk cache + 429 backoff. Lift wholesale into `scripts/openalex_cache.py`.
+- `reranker.py:151-176` `_compute_rrf_scores` — already correct; Phase G just needs to reach it from the live path.
+- `train_embedding_model.py` — already MNRL, already checkpoint-resumable, already exposes `--base-model`. No structural changes needed.
+- `sfu_databases.py:SFUDatabaseRegistry` — already loads + caches Solr corpus; reuse for I-bis A.
+- `semantic_scholar.py:SemanticScholarClient` — already exists with `search_papers`; reuse for I-bis D.
+- `_generate_queries_from_db_record` (line 445) — already produces synthetic queries from Solr; reuse in I-bis A and B.
+
+---
+
+## Verification — end-to-end
+
+**Phase G:**
+1. `pytest src/tests/test_reranker.py src/tests/test_tools_rerank.py` — all pass.
+2. Boot MCP server with `SFU_FEATURE_RRF_ENABLED=true`. Issue a search via the MCP client. Confirm `rerank: rrf=True embed=True docs=N -> M` log line.
+3. Boot with flag false, same query: confirm `rrf=False`. Doc order between the two should differ.
+
+**Phase H:**
+1. `python -m scripts.generate_sfu_training_data --reclean-only --no-enrich-venue --no-enrich-topics --no-enrich-keywords` produces v3a clean file ≥ 8,000 triplets (no API calls).
+2. Train v3a, v3b. Run `evaluate_sfu_queries.py` with v2/v3/v3a/v3b × {alone, +RRF}.
+
+**Phase I:**
+1. After re-run, `set(t["metadata"]["provider"] for t in triplets if t["strategy"] == "provider_aware")` has ≥ 87 distinct values; `set(t["subject"] for t in triplets) == 108_SFU_subjects`.
+
+**Phase I-bis:**
+1. `python -m scripts.generate_sfu_training_data --strategy 5` produces ≥ 4,000 triplets with no network calls (verify via `OPENALEX_DAILY_CALL_LIMIT=0`).
+2. `python -m scripts.generate_synthetic_queries --llm ollama` runs against a local Ollama instance and produces ≥ 3 queries for ≥ 80% of cached papers.
+3. A combined run with all I-bis sources produces ≥ 30k clean triplets without exhausting OpenAlex tracker.
+
+**Phase J:**
+1. Two runs of the 50-record fixture with the same seed produce byte-identical output.
+
+**Phase K:**
+1. `python -m scripts.evaluate_test_split --models v3+hardneg` shows mean-margin Δ ≥ +0.02 vs v3.
+
+**Phase L:**
+1. NDCG@10 on Phase M eval set: best-of-v4 ≥ best-of-(v2+RRF, v3a+RRF) by ≥ 3 points with 95% CI excluding zero.
+
+**Phase M:**
+1. `data/sfu_eval_queries.json` has ≥100 queries / ≥40 subjects.
+2. `evaluate_sfu_queries.py` outputs ndcg10, mrr10, recall10.
+3. `scripts/eval_compare.py v2-rrf v4-bge-rrf` prints Δ + 95% CI.
+
+---
+
+## Out of scope
+
+- Tier 2/3 stacking (LambdaMART, learned blends) — gated on Phase M.
+- ColBERT / transformer rankers — Phase L's BGE-small swap is the maximum architectural change this round.
+- Scraping SFU full-text — license forbids.
+- Productionizing CrossEncoder reranker — Phase N; latency budget for the MCP server isn't established yet.

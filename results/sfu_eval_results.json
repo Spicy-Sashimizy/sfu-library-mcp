@@ -1,0 +1,628 @@
+[
+  {
+    "model": "all-MiniLM-L6-v2",
+    "mean_ndcg_at_k": 0.5749195901135901,
+    "median_ndcg_at_k": 0.5961283835496529,
+    "std_ndcg_at_k": 0.14861574316559192,
+    "num_queries": 35,
+    "k": 10,
+    "subject_breakdown": {
+      "Indigenous Studies": {
+        "mean_ndcg": 0.46184454310048895,
+        "queries": 4
+      },
+      "Canadian Studies": {
+        "mean_ndcg": 0.5534188428933324,
+        "queries": 4
+      },
+      "Criminology": {
+        "mean_ndcg": 0.5123251435324411,
+        "queries": 4
+      },
+      "Interactive Arts and Technology (SIAT)": {
+        "mean_ndcg": 0.6069213138887688,
+        "queries": 4
+      },
+      "Biomedical Physiology and Kinesiology (BPK)": {
+        "mean_ndcg": 0.6490221664825345,
+        "queries": 3
+      },
+      "Finance": {
+        "mean_ndcg": 0.5322424479362765,
+        "queries": 3
+      },
+      "Resource and Environmental Management": {
+        "mean_ndcg": 0.6513038145446377,
+        "queries": 4
+      },
+      "Health Sciences": {
+        "mean_ndcg": 0.5817768660143786,
+        "queries": 3
+      },
+      "Political Science": {
+        "mean_ndcg": 0.45969920435573175,
+        "queries": 1
+      },
+      "Communication": {
+        "mean_ndcg": 0.7856985707264885,
+        "queries": 1
+      },
+      "Economics": {
+        "mean_ndcg": 0.8259704042810312,
+        "queries": 1
+      },
+      "History": {
+        "mean_ndcg": 0.7007979686474014,
+        "queries": 1
+      },
+      "Women's Studies": {
+        "mean_ndcg": 0.5494386455001288,
+        "queries": 1
+      },
+      "Health Sciences / Computing Science": {
+        "mean_ndcg": 0.3682017873266258,
+        "queries": 1
+      }
+    },
+    "per_query": [
+      {
+        "query": "Truth and Reconciliation Commission calls to action implementation Canada",
+        "subject": "Indigenous Studies",
+        "ndcg_at_k": 0.27038714170134526,
+        "num_results": 50,
+        "notes": "Highly specific to Canadian institutional context"
+      },
+      {
+        "query": "cybercrime financial fraud digital forensics investigation",
+        "subject": "Criminology",
+        "ndcg_at_k": 0.27172596902457175,
+        "num_results": 50,
+        "notes": "Modern criminology topic"
+      },
+      {
+        "query": "machine learning public health disease surveillance prediction",
+        "subject": "Health Sciences / Computing Science",
+        "ndcg_at_k": 0.3682017873266258,
+        "num_results": 50,
+        "notes": "Interdisciplinary \u2014 tests subject boundary"
+      },
+      {
+        "query": "ESG sustainable investing responsible finance portfolio performance",
+        "subject": "Finance",
+        "ndcg_at_k": 0.38834632985054307,
+        "num_results": 50,
+        "notes": "Beedie School of Business \u2014 64 Finance databases"
+      },
+      {
+        "query": "human computer interaction accessibility inclusive design",
+        "subject": "Interactive Arts and Technology (SIAT)",
+        "ndcg_at_k": 0.4054422054414314,
+        "num_results": 50,
+        "notes": "Core SIAT/HCI topic"
+      },
+      {
+        "query": "residential school trauma intergenerational effects Indigenous communities",
+        "subject": "Indigenous Studies",
+        "ndcg_at_k": 0.4254056449427193,
+        "num_results": 50,
+        "notes": "Core SFU institutional priority area"
+      },
+      {
+        "query": "Canadian immigration settlement services multicultural policy",
+        "subject": "Canadian Studies",
+        "ndcg_at_k": 0.43471512908520193,
+        "num_results": 50,
+        "notes": "SFU has 58 Canadian Studies databases"
+      },
+      {
+        "query": "prison population mental health services rehabilitation programs",
+        "subject": "Criminology",
+        "ndcg_at_k": 0.446787594102899,
+        "num_results": 50,
+        "notes": "Corrections and criminology"
+      },
+      {
+        "query": "venture capital startup ecosystem innovation funding",
+        "subject": "Finance",
+        "ndcg_at_k": 0.4508280004261959,
+        "num_results": 50,
+        "notes": "Finance/entrepreneurship topic"
+      },
+      {
+        "query": "indigenous language revitalization First Nations British Columbia",
+        "subject": "Indigenous Studies",
+        "ndcg_at_k": 0.45108740354832455,
+        "num_results": 50,
+        "notes": "SFU has 46 Indigenous Studies databases; off-the-shelf models score ~0.0002"
+      },
+      {
+        "query": "political risk country ratings international investment data",
+        "subject": "Political Science",
+        "ndcg_at_k": 0.45969920435573175,
+        "num_results": 50,
+        "notes": "Tests SFU Wharton ICRG database coverage \u2014 56 Political Science databases"
+      },
+      {
+        "query": "Indigenous health disparities social determinants healthcare access",
+        "subject": "Health Sciences",
+        "ndcg_at_k": 0.4684485805882354,
+        "num_results": 50,
+        "notes": "Health Sciences + Indigenous Studies intersection"
+      },
+      {
+        "query": "old growth forest conservation biodiversity British Columbia",
+        "subject": "Resource and Environmental Management",
+        "ndcg_at_k": 0.48673369634424946,
+        "num_results": 50,
+        "notes": "BC-specific conservation topic"
+      },
+      {
+        "query": "feminist theory gender studies intersectionality labour",
+        "subject": "Women's Studies",
+        "ndcg_at_k": 0.5494386455001288,
+        "num_results": 50,
+        "notes": "Humanities social sciences"
+      },
+      {
+        "query": "Chinese Canadian discrimination exclusion act immigration history",
+        "subject": "Canadian Studies",
+        "ndcg_at_k": 0.5622561903830643,
+        "num_results": 50,
+        "notes": "Canadian history \u2014 SFU specialty"
+      },
+      {
+        "query": "BC provincial politics electoral reform referendum",
+        "subject": "Canadian Studies",
+        "ndcg_at_k": 0.5641250663617946,
+        "num_results": 50,
+        "notes": "Regional Canadian political science"
+      },
+      {
+        "query": "opioid crisis fentanyl overdose harm reduction policy Canada",
+        "subject": "Health Sciences",
+        "ndcg_at_k": 0.5949972510555421,
+        "num_results": 49,
+        "notes": "Canadian public health crisis \u2014 46 Health Sciences databases"
+      },
+      {
+        "query": "virtual reality augmented reality immersive learning environments",
+        "subject": "Interactive Arts and Technology (SIAT)",
+        "ndcg_at_k": 0.5961283835496529,
+        "num_results": 50,
+        "notes": "SIAT interdisciplinary area"
+      },
+      {
+        "query": "police use of force racial profiling Black Indigenous communities Canada",
+        "subject": "Criminology",
+        "ndcg_at_k": 0.6151180622108092,
+        "num_results": 50,
+        "notes": "Criminology + Canadian intersection"
+      },
+      {
+        "query": "kinesiology sport performance motor learning biomechanics",
+        "subject": "Biomedical Physiology and Kinesiology (BPK)",
+        "ndcg_at_k": 0.6158602761238723,
+        "num_results": 50,
+        "notes": "BPK core topic"
+      },
+      {
+        "query": "cardiovascular disease exercise intervention prevention outcomes",
+        "subject": "Biomedical Physiology and Kinesiology (BPK)",
+        "ndcg_at_k": 0.6176166841792562,
+        "num_results": 50,
+        "notes": "BPK-Health Sciences intersection"
+      },
+      {
+        "query": "computational art generative algorithms creative machine learning",
+        "subject": "Interactive Arts and Technology (SIAT)",
+        "ndcg_at_k": 0.6228474105752749,
+        "num_results": 49,
+        "notes": "SIAT-Computing intersection"
+      },
+      {
+        "query": "Northern Gateway pipeline environmental assessment First Nations opposition",
+        "subject": "Resource and Environmental Management",
+        "ndcg_at_k": 0.6250381957731006,
+        "num_results": 50,
+        "notes": "BC environmental policy + Indigenous rights"
+      },
+      {
+        "query": "housing affordability crisis Metro Vancouver rental market",
+        "subject": "Canadian Studies",
+        "ndcg_at_k": 0.6525789857432689,
+        "num_results": 50,
+        "notes": "Local Canadian topic; off-the-shelf models score ~0.005"
+      },
+      {
+        "query": "wildfire management prescribed burning Indigenous traditional ecological knowledge",
+        "subject": "Resource and Environmental Management",
+        "ndcg_at_k": 0.6806315264966949,
+        "num_results": 50,
+        "notes": "Combines environmental management with Indigenous knowledge \u2014 SFU specialty"
+      },
+      {
+        "query": "long COVID post-acute sequelae epidemiology treatment",
+        "subject": "Health Sciences",
+        "ndcg_at_k": 0.6818847663993584,
+        "num_results": 50,
+        "notes": "Current health topic"
+      },
+      {
+        "query": "land back movement Indigenous rights treaty negotiations British Columbia",
+        "subject": "Indigenous Studies",
+        "ndcg_at_k": 0.7004979822095668,
+        "num_results": 50,
+        "notes": "Tests regional specificity"
+      },
+      {
+        "query": "digital humanities text mining archival primary sources",
+        "subject": "History",
+        "ndcg_at_k": 0.7007979686474014,
+        "num_results": 50,
+        "notes": "History + computing intersection \u2014 SFU has 124 History databases"
+      },
+      {
+        "query": "biomedical physiology exercise rehabilitation muscle physiology",
+        "subject": "Biomedical Physiology and Kinesiology (BPK)",
+        "ndcg_at_k": 0.713589539144475,
+        "num_results": 50,
+        "notes": "SFU BPK unique program \u2014 tests cross-disciplinary boundary"
+      },
+      {
+        "query": "restorative justice alternatives incarceration recidivism reduction",
+        "subject": "Criminology",
+        "ndcg_at_k": 0.7156689487914846,
+        "num_results": 50,
+        "notes": "SFU criminology \u2014 unique program, 44 databases"
+      },
+      {
+        "query": "Canadian banking regulation financial stability macroprudential policy",
+        "subject": "Finance",
+        "ndcg_at_k": 0.7575530135320904,
+        "num_results": 50,
+        "notes": "Finance + Canadian Studies intersection"
+      },
+      {
+        "query": "media framing political polarization social media misinformation",
+        "subject": "Communication",
+        "ndcg_at_k": 0.7856985707264885,
+        "num_results": 50,
+        "notes": "Communication + Political Science intersection"
+      },
+      {
+        "query": "interactive media experience design user engagement game mechanics",
+        "subject": "Interactive Arts and Technology (SIAT)",
+        "ndcg_at_k": 0.803267255988716,
+        "num_results": 50,
+        "notes": "SFU SIAT program \u2014 unique, 44 databases; off-the-shelf models perform poorly"
+      },
+      {
+        "query": "salmon aquaculture disease management Pacific Northwest fisheries",
+        "subject": "Resource and Environmental Management",
+        "ndcg_at_k": 0.8128118395645055,
+        "num_results": 50,
+        "notes": "BC-specific environmental topic"
+      },
+      {
+        "query": "income inequality poverty measurement Gini coefficient Canada",
+        "subject": "Economics",
+        "ndcg_at_k": 0.8259704042810312,
+        "num_results": 50,
+        "notes": "Economics + Canadian Studies \u2014 56 Economics databases"
+      }
+    ]
+  },
+  {
+    "model": "sfu-custom (sfu-academic-embed-v1)",
+    "mean_ndcg_at_k": 0.5875511130675756,
+    "median_ndcg_at_k": 0.619476886722021,
+    "std_ndcg_at_k": 0.14455856344286971,
+    "num_queries": 35,
+    "k": 10,
+    "subject_breakdown": {
+      "Indigenous Studies": {
+        "mean_ndcg": 0.4913608082585308,
+        "queries": 4
+      },
+      "Canadian Studies": {
+        "mean_ndcg": 0.5415327836385534,
+        "queries": 4
+      },
+      "Criminology": {
+        "mean_ndcg": 0.5296433398933788,
+        "queries": 4
+      },
+      "Interactive Arts and Technology (SIAT)": {
+        "mean_ndcg": 0.6100889967303518,
+        "queries": 4
+      },
+      "Biomedical Physiology and Kinesiology (BPK)": {
+        "mean_ndcg": 0.6645558624539721,
+        "queries": 3
+      },
+      "Finance": {
+        "mean_ndcg": 0.6148965058832093,
+        "queries": 3
+      },
+      "Resource and Environmental Management": {
+        "mean_ndcg": 0.6572657221675955,
+        "queries": 4
+      },
+      "Health Sciences": {
+        "mean_ndcg": 0.5602276476992375,
+        "queries": 3
+      },
+      "Political Science": {
+        "mean_ndcg": 0.48142339010803814,
+        "queries": 1
+      },
+      "Communication": {
+        "mean_ndcg": 0.7754935988272377,
+        "queries": 1
+      },
+      "Economics": {
+        "mean_ndcg": 0.8239862303070596,
+        "queries": 1
+      },
+      "History": {
+        "mean_ndcg": 0.6855559144367029,
+        "queries": 1
+      },
+      "Women's Studies": {
+        "mean_ndcg": 0.5906923331198332,
+        "queries": 1
+      },
+      "Health Sciences / Computing Science": {
+        "mean_ndcg": 0.3685308397033791,
+        "queries": 1
+      }
+    },
+    "per_query": [
+      {
+        "query": "cybercrime financial fraud digital forensics investigation",
+        "subject": "Criminology",
+        "ndcg_at_k": 0.23799103415055384,
+        "num_results": 50,
+        "notes": "Modern criminology topic"
+      },
+      {
+        "query": "Truth and Reconciliation Commission calls to action implementation Canada",
+        "subject": "Indigenous Studies",
+        "ndcg_at_k": 0.29630583358127827,
+        "num_results": 50,
+        "notes": "Highly specific to Canadian institutional context"
+      },
+      {
+        "query": "machine learning public health disease surveillance prediction",
+        "subject": "Health Sciences / Computing Science",
+        "ndcg_at_k": 0.3685308397033791,
+        "num_results": 50,
+        "notes": "Interdisciplinary \u2014 tests subject boundary"
+      },
+      {
+        "query": "venture capital startup ecosystem innovation funding",
+        "subject": "Finance",
+        "ndcg_at_k": 0.38379483865528435,
+        "num_results": 50,
+        "notes": "Finance/entrepreneurship topic"
+      },
+      {
+        "query": "human computer interaction accessibility inclusive design",
+        "subject": "Interactive Arts and Technology (SIAT)",
+        "ndcg_at_k": 0.3997602144262863,
+        "num_results": 50,
+        "notes": "Core SIAT/HCI topic"
+      },
+      {
+        "query": "Indigenous health disparities social determinants healthcare access",
+        "subject": "Health Sciences",
+        "ndcg_at_k": 0.4512301234471668,
+        "num_results": 50,
+        "notes": "Health Sciences + Indigenous Studies intersection"
+      },
+      {
+        "query": "residential school trauma intergenerational effects Indigenous communities",
+        "subject": "Indigenous Studies",
+        "ndcg_at_k": 0.4560098683753923,
+        "num_results": 50,
+        "notes": "Core SFU institutional priority area"
+      },
+      {
+        "query": "Canadian immigration settlement services multicultural policy",
+        "subject": "Canadian Studies",
+        "ndcg_at_k": 0.46540129460634405,
+        "num_results": 50,
+        "notes": "SFU has 58 Canadian Studies databases"
+      },
+      {
+        "query": "political risk country ratings international investment data",
+        "subject": "Political Science",
+        "ndcg_at_k": 0.48142339010803814,
+        "num_results": 50,
+        "notes": "Tests SFU Wharton ICRG database coverage \u2014 56 Political Science databases"
+      },
+      {
+        "query": "old growth forest conservation biodiversity British Columbia",
+        "subject": "Resource and Environmental Management",
+        "ndcg_at_k": 0.4825575454325748,
+        "num_results": 50,
+        "notes": "BC-specific conservation topic"
+      },
+      {
+        "query": "prison population mental health services rehabilitation programs",
+        "subject": "Criminology",
+        "ndcg_at_k": 0.5222055851520426,
+        "num_results": 50,
+        "notes": "Corrections and criminology"
+      },
+      {
+        "query": "BC provincial politics electoral reform referendum",
+        "subject": "Canadian Studies",
+        "ndcg_at_k": 0.5274026429874611,
+        "num_results": 50,
+        "notes": "Regional Canadian political science"
+      },
+      {
+        "query": "indigenous language revitalization First Nations British Columbia",
+        "subject": "Indigenous Studies",
+        "ndcg_at_k": 0.5299405290886846,
+        "num_results": 50,
+        "notes": "SFU has 46 Indigenous Studies databases; off-the-shelf models score ~0.0002"
+      },
+      {
+        "query": "Chinese Canadian discrimination exclusion act immigration history",
+        "subject": "Canadian Studies",
+        "ndcg_at_k": 0.5653996423070934,
+        "num_results": 50,
+        "notes": "Canadian history \u2014 SFU specialty"
+      },
+      {
+        "query": "opioid crisis fentanyl overdose harm reduction policy Canada",
+        "subject": "Health Sciences",
+        "ndcg_at_k": 0.5733941187902339,
+        "num_results": 49,
+        "notes": "Canadian public health crisis \u2014 46 Health Sciences databases"
+      },
+      {
+        "query": "feminist theory gender studies intersectionality labour",
+        "subject": "Women's Studies",
+        "ndcg_at_k": 0.5906923331198332,
+        "num_results": 50,
+        "notes": "Humanities social sciences"
+      },
+      {
+        "query": "housing affordability crisis Metro Vancouver rental market",
+        "subject": "Canadian Studies",
+        "ndcg_at_k": 0.6079275546533152,
+        "num_results": 50,
+        "notes": "Local Canadian topic; off-the-shelf models score ~0.005"
+      },
+      {
+        "query": "kinesiology sport performance motor learning biomechanics",
+        "subject": "Biomedical Physiology and Kinesiology (BPK)",
+        "ndcg_at_k": 0.619476886722021,
+        "num_results": 50,
+        "notes": "BPK core topic"
+      },
+      {
+        "query": "cardiovascular disease exercise intervention prevention outcomes",
+        "subject": "Biomedical Physiology and Kinesiology (BPK)",
+        "ndcg_at_k": 0.6244954755365163,
+        "num_results": 50,
+        "notes": "BPK-Health Sciences intersection"
+      },
+      {
+        "query": "Northern Gateway pipeline environmental assessment First Nations opposition",
+        "subject": "Resource and Environmental Management",
+        "ndcg_at_k": 0.626177528852177,
+        "num_results": 50,
+        "notes": "BC environmental policy + Indigenous rights"
+      },
+      {
+        "query": "computational art generative algorithms creative machine learning",
+        "subject": "Interactive Arts and Technology (SIAT)",
+        "ndcg_at_k": 0.6301878391640129,
+        "num_results": 49,
+        "notes": "SIAT-Computing intersection"
+      },
+      {
+        "query": "virtual reality augmented reality immersive learning environments",
+        "subject": "Interactive Arts and Technology (SIAT)",
+        "ndcg_at_k": 0.6311938427235954,
+        "num_results": 50,
+        "notes": "SIAT interdisciplinary area"
+      },
+      {
+        "query": "police use of force racial profiling Black Indigenous communities Canada",
+        "subject": "Criminology",
+        "ndcg_at_k": 0.6440583170330862,
+        "num_results": 50,
+        "notes": "Criminology + Canadian intersection"
+      },
+      {
+        "query": "long COVID post-acute sequelae epidemiology treatment",
+        "subject": "Health Sciences",
+        "ndcg_at_k": 0.6560587008603117,
+        "num_results": 50,
+        "notes": "Current health topic"
+      },
+      {
+        "query": "land back movement Indigenous rights treaty negotiations British Columbia",
+        "subject": "Indigenous Studies",
+        "ndcg_at_k": 0.6831870019887679,
+        "num_results": 50,
+        "notes": "Tests regional specificity"
+      },
+      {
+        "query": "digital humanities text mining archival primary sources",
+        "subject": "History",
+        "ndcg_at_k": 0.6855559144367029,
+        "num_results": 50,
+        "notes": "History + computing intersection \u2014 SFU has 124 History databases"
+      },
+      {
+        "query": "wildfire management prescribed burning Indigenous traditional ecological knowledge",
+        "subject": "Resource and Environmental Management",
+        "ndcg_at_k": 0.6952383023744902,
+        "num_results": 50,
+        "notes": "Combines environmental management with Indigenous knowledge \u2014 SFU specialty"
+      },
+      {
+        "query": "ESG sustainable investing responsible finance portfolio performance",
+        "subject": "Finance",
+        "ndcg_at_k": 0.710432743578457,
+        "num_results": 50,
+        "notes": "Beedie School of Business \u2014 64 Finance databases"
+      },
+      {
+        "query": "restorative justice alternatives incarceration recidivism reduction",
+        "subject": "Criminology",
+        "ndcg_at_k": 0.7143184232378323,
+        "num_results": 50,
+        "notes": "SFU criminology \u2014 unique program, 44 databases"
+      },
+      {
+        "query": "biomedical physiology exercise rehabilitation muscle physiology",
+        "subject": "Biomedical Physiology and Kinesiology (BPK)",
+        "ndcg_at_k": 0.749695225103379,
+        "num_results": 50,
+        "notes": "SFU BPK unique program \u2014 tests cross-disciplinary boundary"
+      },
+      {
+        "query": "Canadian banking regulation financial stability macroprudential policy",
+        "subject": "Finance",
+        "ndcg_at_k": 0.7504619354158868,
+        "num_results": 50,
+        "notes": "Finance + Canadian Studies intersection"
+      },
+      {
+        "query": "media framing political polarization social media misinformation",
+        "subject": "Communication",
+        "ndcg_at_k": 0.7754935988272377,
+        "num_results": 50,
+        "notes": "Communication + Political Science intersection"
+      },
+      {
+        "query": "interactive media experience design user engagement game mechanics",
+        "subject": "Interactive Arts and Technology (SIAT)",
+        "ndcg_at_k": 0.7792140906075127,
+        "num_results": 50,
+        "notes": "SFU SIAT program \u2014 unique, 44 databases; off-the-shelf models perform poorly"
+      },
+      {
+        "query": "income inequality poverty measurement Gini coefficient Canada",
+        "subject": "Economics",
+        "ndcg_at_k": 0.8239862303070596,
+        "num_results": 50,
+        "notes": "Economics + Canadian Studies \u2014 56 Economics databases"
+      },
+      {
+        "query": "salmon aquaculture disease management Pacific Northwest fisheries",
+        "subject": "Resource and Environmental Management",
+        "ndcg_at_k": 0.82508951201114,
+        "num_results": 50,
+        "notes": "BC-specific environmental topic"
+      }
+    ]
+  }
+]

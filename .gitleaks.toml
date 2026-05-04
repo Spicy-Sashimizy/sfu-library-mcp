@@ -171,6 +171,10 @@ paths = [
   '''CLAUDE\.md''',
   '''README\.md''',
 
+  # Training data / eval JSONL — may contain author emails in paper abstracts
+  '''data/.*\.jsonl''',
+  '''data/.*\.json''',
+
   # Server files that handle API key routing (not hardcoded)
   '''server\.py''',
 
