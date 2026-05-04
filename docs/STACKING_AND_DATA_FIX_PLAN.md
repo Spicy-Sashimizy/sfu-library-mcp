@@ -246,7 +246,44 @@ Decision:
 - Set `SFU_FEATURE_RRF_ENABLED=true` — the +12-14% NDCG gain alone justifies turning it on regardless of which embedding model is loaded.
 - Ship `sfu-academic-embed-v2` over v1 — modest +2.5% gain, but trained on 5.3× more data covering 97% of SFU subjects (vs 71% in v1).
 
+### v3 retrain results (2026-05-04 — same session)
+
+**Changes vs v2:** (1) Strategy 3 rewrite — all 109 providers iterated (was top 15), per-(provider,subject) RNG sampling, anchor from `_generate_queries_from_db_record` (encodes database/provider signal into anchor text); (2) `_make_text` enrichment — appends `Venue | Topics | Keywords` from OpenAlex `primary_location`, `concepts`, `keywords`, `primary_topic`; (3) training: 6 epochs, batch 32, `max_seq_length=512`. **Confound:** both changes applied simultaneously — NDCG delta is not cleanly attributable per-variable.
+
+**Data rebuild:**
+
+| Metric | v2 | v3 |
+|---|---|---|
+| Total clean triplets | 3,739 | 8,724 |
+| `provider_aware` unique pairs | 72 | 3,854 |
+| Providers covered | ~10 | 49 |
+| Subject coverage | 97% (105/108) | 100% (108/108) |
+
+**Training:** val_score 0.5111 at epoch 6 (vs 0.2059 for v2 — 2.5× higher, but test sets differ so not directly comparable).
+
+**Benchmark (35 SFU queries, NDCG@10):**
+
+| Configuration | NDCG@10 | Δ vs MiniLM baseline |
+|---|---|---|
+| MiniLM-L6-v2 (baseline) | 0.5749 | — |
+| sfu-academic-embed-v2 (alone) | 0.5891 | +2.5% |
+| sfu-academic-embed-v3 (alone) | 0.5951 | +3.5% |
+| MiniLM + RRF | 0.6554 | +14.0% |
+| **sfu-academic-embed-v3 + RRF** | **0.6590** | **+14.8%** |
+| **sfu-academic-embed-v2 + RRF** | **0.6643** | **+15.6%** |
+
+**Phase F decision:** v3+RRF (0.6590) vs v2+RRF (0.6643) = **−0.8%** — within the ±2% no-ship band. **v2+RRF remains production; v3 archived as ablation weights.**
+
+**Post-mortem:** v3 solo (+1% over v2 solo) confirms the data improvements helped. The neutral RRF result suggests the enriched `_make_text` (longer text, venue/topic appended) produces embeddings that are *less orthogonal* to BM25 signal — the enrichment partially overlaps with what BM25 already captures from the title, reducing the complementary gain of RRF fusion. A targeted ablation (strategy 3 fix only, without text enrichment) would isolate which variable is responsible.
+
+**Per-subject highlights (v3+RRF vs v2+RRF):**
+- Canadian Studies: +4.1% (0.7148 → 0.7559)
+- Women's Studies: +5.2% (0.5439 → 0.5723) — but v2+RRF had a higher value than shown in the v2 table above, so this comparison may be approximate
+- Criminology: −7.4% (0.5641 → 0.5224) — v3 hurt here; possible over-representation of provider_aware negatives in criminology subjects
+
 ### Not started (deferred)
 
-- **Strategy 3 upstream duplication fix.** `run_strategy3` only iterates the top 15 providers (of 108) and indexes its `subscribed_papers` cache by subject alone, so multiple providers covering the same subject emit identical (anchor, positive) pairs. Even after the cleaner fix recovered everything else, only 72 of 4,000 target provider_aware triplets survived. Fixing this needs OpenAlex API budget + per-(provider, subject) sampling. Tracked as task #9.
+- **Strategy 3 upstream duplication fix** — completed in v3. Remaining gap: providers covered is 49/109 (max_total=4000 cap; increase `--provider-pairs` to 6000 for better coverage).
+- **Semantic Scholar citation-context anchors** — citing sentences as gold-standard query anchors (+3–5% NDCG published, InPars-style). Deferred pending v3 results; now a clear next experiment.
+- **Text enrichment ablation** — rerun v3 data pipeline with strategy 3 fix only (no `_make_text` enrichment) to isolate the RRF regression. Low cost (no API spend; just retrain).
 - **Tier 2/3 stacking** (learned linear blend, LambdaMART). Per the plan, these are only worth building if Tier 1 RRF shows the fusion approach has legs — gated on the blocked benchmark.
