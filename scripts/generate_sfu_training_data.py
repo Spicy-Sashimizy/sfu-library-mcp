@@ -742,15 +742,20 @@ def run_strategy4(
 def run_quality_checks(input_file: Path, output_file: Path) -> dict:
     """Deduplicate and length-filter the training data.
 
+    Dedup is by (anchor, positive) pair only. Multiple positives per anchor
+    are kept on purpose — contrastive learning benefits from many positive
+    examples sharing an anchor (e.g. one synthetic query → many relevant
+    papers). Earlier versions deduped by anchor alone, which discarded ~83%
+    of the dataset and collapsed provider/citation strategies to a handful
+    of triplets.
+
     Returns stats dict with counts before/after filtering.
     """
     logger.info("=== Running data quality checks ===")
 
-    seen_anchors: set[str] = set()
     seen_pairs: set[tuple[str, str]] = set()
     stats = {
         "total_read": 0,
-        "removed_duplicate_anchor": 0,
         "removed_duplicate_pair": 0,
         "removed_too_short": 0,
         "removed_too_long": 0,
@@ -781,31 +786,34 @@ def run_quality_checks(input_file: Path, output_file: Path) -> dict:
                 stats["removed_anchor_eq_positive"] += 1
                 continue
 
-            # Deduplicate by anchor
-            anchor_key = anchor[:200]
-            if anchor_key in seen_anchors:
-                stats["removed_duplicate_anchor"] += 1
-                continue
-            seen_anchors.add(anchor_key)
-
-            # Deduplicate by (anchor, positive) pair
-            pair_key = (anchor[:100], positive[:100])
+            # Deduplicate by (anchor, positive) pair only
+            pair_key = (anchor[:200], positive[:200])
             if pair_key in seen_pairs:
                 stats["removed_duplicate_pair"] += 1
                 continue
             seen_pairs.add(pair_key)
 
-            # Length check
-            for text_name, text in [("anchor", anchor), ("positive", positive)]:
+            # Length check. Anchor min is 2 tokens — real search queries are
+            # often 2-8 tokens (e.g. "circular economy waste reduction"), and
+            # the synthetic_query strategy intentionally emits short queries.
+            # Positive/negative are paper text and should have ≥10 tokens.
+            length_ok = True
+            for label, text, min_tok in (
+                ("anchor", anchor, 2),
+                ("positive", positive, 10),
+                ("negative", negative, 10),
+            ):
                 n = _token_count_approx(text)
-                if n < 10:
+                if n < min_tok:
                     stats["removed_too_short"] += 1
+                    length_ok = False
                     break
                 if n > 512:
                     stats["removed_too_long"] += 1
+                    length_ok = False
                     break
-            else:
-                # All checks passed
+
+            if length_ok:
                 fout.write(json.dumps(item) + "\n")
                 stats["kept"] += 1
                 strategy_counts[item.get("strategy", "unknown")] += 1
@@ -927,6 +935,8 @@ def main():
                         help="Skip train/val/test split creation")
     parser.add_argument("--skip-quality-check", action="store_true",
                         help="Skip deduplication and quality filtering")
+    parser.add_argument("--reclean-only", action="store_true",
+                        help="Only re-run quality checks + splits on existing raw file")
     args = parser.parse_args()
 
     random.seed(args.seed)
@@ -937,6 +947,26 @@ def main():
     output_file.parent.mkdir(parents=True, exist_ok=True)
 
     state_file = checkpoint_dir / "generation_state.json"
+
+    # Reclean-only path: skip generation entirely, just rerun quality + splits
+    if args.reclean_only:
+        if not output_file.exists():
+            logger.error("Raw file %s not found — nothing to reclean.", output_file)
+            sys.exit(1)
+        clean_file = output_file.with_suffix(".clean.jsonl")
+        qc_stats = run_quality_checks(output_file, clean_file)
+        (checkpoint_dir / "quality_check_stats.json").write_text(
+            json.dumps(qc_stats, indent=2)
+        )
+        logger.info("Clean data written to %s", clean_file)
+        if not args.skip_splits:
+            split_stats = create_data_splits(clean_file, Path(args.splits_dir))
+            (checkpoint_dir / "split_stats.json").write_text(json.dumps(split_stats, indent=2))
+        print("\nReclean complete:")
+        print(f"  Read:  {qc_stats['total_read']:,}")
+        print(f"  Kept:  {qc_stats['kept']:,} ({100*qc_stats['kept']/max(1,qc_stats['total_read']):.1f}%)")
+        print(f"  Strategy breakdown: {qc_stats['strategy_breakdown']}")
+        return
 
     # Load or create state
     if args.resume and state_file.exists():
