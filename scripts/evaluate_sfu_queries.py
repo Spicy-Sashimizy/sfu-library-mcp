@@ -36,6 +36,24 @@ logger = logging.getLogger(__name__)
 OPENALEX_BASE = "https://api.openalex.org"
 HEADERS = {"User-Agent": "SFULibraryMCP-Eval/1.0 (mailto:lib-systems@sfu.ca)"}
 DEFAULT_EVAL_QUERIES = str(Path(__file__).parent.parent / "data/sfu_eval_queries.json")
+QUERY_CACHE_FILE = Path(__file__).parent.parent / "data/openalex_eval_cache.json"
+
+
+def _load_query_cache() -> dict:
+    if QUERY_CACHE_FILE.exists():
+        try:
+            return json.loads(QUERY_CACHE_FILE.read_text())
+        except Exception:
+            return {}
+    return {}
+
+
+def _save_query_cache(cache: dict) -> None:
+    QUERY_CACHE_FILE.parent.mkdir(parents=True, exist_ok=True)
+    QUERY_CACHE_FILE.write_text(json.dumps(cache))
+
+
+_QUERY_CACHE = _load_query_cache()
 
 
 def _reconstruct_abstract(inv_index: dict | None) -> str:
@@ -49,24 +67,46 @@ def _reconstruct_abstract(inv_index: dict | None) -> str:
     return " ".join(w for _, w in positions)
 
 
-def fetch_openalex_results(query: str, k: int = 50) -> list[dict]:
-    """Fetch top-k OpenAlex results for a query via BM25."""
-    try:
-        resp = requests.get(
-            f"{OPENALEX_BASE}/works",
-            params={
-                "search": query,
-                "per_page": k,
-                "sort": "relevance_score:desc",
-                "select": "id,title,publication_year,cited_by_count,abstract_inverted_index,type",
-            },
-            headers=HEADERS,
-            timeout=30,
-        )
-        resp.raise_for_status()
-        data = resp.json()
-    except Exception as e:
-        logger.warning("OpenAlex fetch failed for '%s': %s", query, e)
+def fetch_openalex_results(query: str, k: int = 50, use_cache: bool = True) -> list[dict]:
+    """Fetch top-k OpenAlex results for a query via BM25.
+
+    Cached on disk by (query, k) so re-runs across multiple models share fetches
+    and avoid rate-limiting. Includes 429 retry-with-backoff.
+    """
+    cache_key = f"{k}::{query}"
+    if use_cache and cache_key in _QUERY_CACHE:
+        return _QUERY_CACHE[cache_key]
+
+    backoff = 5.0
+    for attempt in range(5):
+        try:
+            resp = requests.get(
+                f"{OPENALEX_BASE}/works",
+                params={
+                    "search": query,
+                    "per_page": k,
+                    "sort": "relevance_score:desc",
+                    "select": "id,title,publication_year,cited_by_count,abstract_inverted_index,type",
+                    "mailto": "lib-systems@sfu.ca",  # OpenAlex polite-pool routing
+                },
+                headers=HEADERS,
+                timeout=30,
+            )
+            if resp.status_code == 429:
+                logger.info("  429 from OpenAlex, backing off %.1fs (attempt %d/4)", backoff, attempt + 1)
+                time.sleep(backoff)
+                backoff *= 2
+                continue
+            resp.raise_for_status()
+            data = resp.json()
+            break
+        except Exception as e:
+            if attempt == 3:
+                logger.warning("OpenAlex fetch failed for '%s': %s", query, e)
+                return []
+            time.sleep(backoff)
+            backoff *= 2
+    else:
         return []
 
     results = []
@@ -75,6 +115,10 @@ def fetch_openalex_results(query: str, k: int = 50) -> list[dict]:
         w["abstract"] = abstract
         if w.get("title"):
             results.append(w)
+
+    if use_cache and results:
+        _QUERY_CACHE[cache_key] = results
+        _save_query_cache(_QUERY_CACHE)
     return results
 
 
@@ -131,6 +175,33 @@ def rerank_with_embedding(query: str, papers: list[dict], model) -> list[dict]:
     return [papers[i] for i in ranked]
 
 
+def rerank_with_rrf(query: str, papers: list[dict], model, k: int = 60) -> list[dict]:
+    """Rerank by Reciprocal Rank Fusion of OpenAlex BM25 rank + embedding rank.
+
+    RRF score:  Σ_r  1 / (k + rank_r(d))    (k=60 is the literature default)
+
+    The input `papers` arrives in OpenAlex BM25 order (rank 0..N-1). We compute
+    the embedding rank separately, then fuse. Documents that score well on
+    either ranker bubble up; documents both rankers agree on bubble up the most.
+    Crucially, neither ranker gets to fully suppress a result the other one
+    rates highly — which is why RRF rescues queries where one signal is blind.
+    """
+    bm25_rank = {id(p): i for i, p in enumerate(papers)}
+
+    embed_ranked = rerank_with_embedding(query, papers, model)
+    embed_rank = {id(p): i for i, p in enumerate(embed_ranked)}
+
+    fused = sorted(
+        range(len(papers)),
+        key=lambda i: (
+            1.0 / (k + bm25_rank[id(papers[i])])
+            + 1.0 / (k + embed_rank[id(papers[i])])
+        ),
+        reverse=True,
+    )
+    return [papers[i] for i in fused]
+
+
 def evaluate_model(
     model_name: str,
     model,
@@ -138,8 +209,13 @@ def evaluate_model(
     k: int = 10,
     results_per_query: int = 50,
     delay: float = 0.5,
+    fusion: str = "none",
 ) -> dict:
-    """Evaluate a model on the SFU eval query set. Returns per-query and aggregate metrics."""
+    """Evaluate a model on the SFU eval query set. Returns per-query and aggregate metrics.
+
+    fusion: "none" → embedding cosine alone (current behaviour)
+            "rrf"  → reciprocal rank fusion of BM25 + embedding ranks
+    """
     all_ndcg: list[float] = []
     subject_ndcg: dict[str, list[float]] = {}
     query_results: list[dict] = []
@@ -151,6 +227,8 @@ def evaluate_model(
         logger.info("  [%d/%d] '%s'", qi + 1, len(eval_queries), query[:60])
 
         # Fetch OpenAlex results (BM25 ranking)
+        cache_key = f"{results_per_query}::{query}"
+        was_cached = cache_key in _QUERY_CACHE
         papers = fetch_openalex_results(query, k=results_per_query)
         if not papers:
             logger.warning("  No results for query: %s", query)
@@ -160,8 +238,10 @@ def evaluate_model(
         relevance_scores = compute_relevance_proxy(papers)
 
         if model is not None:
-            # Rerank with embedding model
-            reranked = rerank_with_embedding(query, papers, model)
+            if fusion == "rrf":
+                reranked = rerank_with_rrf(query, papers, model)
+            else:
+                reranked = rerank_with_embedding(query, papers, model)
             reranked_relevance = compute_relevance_proxy(reranked)
         else:
             # BM25 only — use OpenAlex rank order as-is
@@ -182,7 +262,9 @@ def evaluate_model(
             "notes": q_item.get("notes", ""),
         })
 
-        time.sleep(delay)
+        # Only delay if we actually hit the API
+        if not was_cached:
+            time.sleep(delay)
 
     # Aggregate metrics
     mean_ndcg = float(np.mean(all_ndcg)) if all_ndcg else 0.0
@@ -277,8 +359,12 @@ def main():
                         help="OpenAlex results to fetch per query")
     parser.add_argument("--output", type=str, default=None,
                         help="Save full results to JSON file")
-    parser.add_argument("--delay", type=float, default=0.5,
+    parser.add_argument("--delay", type=float, default=1.2,
                         help="Delay between OpenAlex API requests (seconds)")
+    parser.add_argument("--fusion", choices=["none", "rrf", "both"], default="none",
+                        help="Reranking strategy: 'none' = embedding only, "
+                             "'rrf' = reciprocal rank fusion of BM25 + embedding, "
+                             "'both' = run each custom model twice (with and without RRF)")
     args = parser.parse_args()
 
     # Load eval queries
@@ -327,17 +413,22 @@ def main():
             custom = SentenceTransformer(str(custom_path))
             models_to_eval.append((f"sfu-custom ({custom_path.name})", custom))
 
+    fusion_modes = ["none", "rrf"] if args.fusion == "both" else [args.fusion]
+
     for model_name, model in models_to_eval:
-        logger.info("\nEvaluating: %s", model_name)
-        result = evaluate_model(
-            model_name=model_name,
-            model=model,
-            eval_queries=eval_queries,
-            k=args.k,
-            results_per_query=args.results_per_query,
-            delay=args.delay,
-        )
-        all_results.append(result)
+        for fusion in fusion_modes:
+            label = model_name if fusion == "none" else f"{model_name} + RRF"
+            logger.info("\nEvaluating: %s", label)
+            result = evaluate_model(
+                model_name=label,
+                model=model,
+                eval_queries=eval_queries,
+                k=args.k,
+                results_per_query=args.results_per_query,
+                delay=args.delay,
+                fusion=fusion,
+            )
+            all_results.append(result)
 
     if not all_results:
         logger.error("No models evaluated. Use --bm25-only or provide a --baseline-model.")

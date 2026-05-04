@@ -1,0 +1,35 @@
+[
+  {
+    "name": "MiniLM-L6-v2 (off-the-shelf)",
+    "accuracy": 0.654054054054054,
+    "mean_margin": 0.09144363552331924,
+    "by_strategy": {
+      "synthetic_query": 0.6115107913669064,
+      "cross_subject_hard_negative": 0.6521739130434783,
+      "citation_pair": 0.95,
+      "provider_aware": 0.6666666666666666
+    }
+  },
+  {
+    "name": "sfu-academic-embed-v1",
+    "accuracy": 0.7783783783783784,
+    "mean_margin": 0.085526242852211,
+    "by_strategy": {
+      "synthetic_query": 0.762589928057554,
+      "cross_subject_hard_negative": 0.6956521739130435,
+      "citation_pair": 0.95,
+      "provider_aware": 1.0
+    }
+  },
+  {
+    "name": "sfu-academic-embed-v2 (6 epochs)",
+    "accuracy": 0.7513513513513513,
+    "mean_margin": 0.09420164674520493,
+    "by_strategy": {
+      "synthetic_query": 0.7410071942446043,
+      "cross_subject_hard_negative": 0.6086956521739131,
+      "citation_pair": 0.95,
+      "provider_aware": 1.0
+    }
+  }
+]

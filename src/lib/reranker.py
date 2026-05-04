@@ -145,20 +145,56 @@ def _compute_semantic_scores(query: str, docs: list[dict], model_path: str | Non
     return scores
 
 
+_RRF_K = 60  # Reciprocal Rank Fusion constant; standard literature default
+
+
+def _compute_rrf_scores(semantic_scores: list[float], n_docs: int) -> list[float]:
+    """Fuse original Primo doc order with embedding rank via Reciprocal Rank Fusion.
+
+    Primo returns docs in BM25-derived relevance order, so the input position
+    is itself a lexical-relevance signal. RRF combines two ranked lists:
+
+        rrf(d) = 1 / (k + rank_lexical(d))  +  1 / (k + rank_embedding(d))
+
+    Returns scores normalised to [0, 1] so they slot into the existing weighted
+    sum in place of raw cosine similarity. Documents that rank well on either
+    signal — or both — surface; neither ranker can fully suppress a doc the
+    other rates highly. This is the property that rescues queries where one
+    signal is blind (e.g. niche topics where embeddings fail but lexical hits).
+    """
+    embed_order = sorted(range(n_docs), key=lambda i: semantic_scores[i], reverse=True)
+    embed_rank = [0] * n_docs
+    for rank, idx in enumerate(embed_order):
+        embed_rank[idx] = rank
+
+    scores = [
+        1.0 / (_RRF_K + i) + 1.0 / (_RRF_K + embed_rank[i])
+        for i in range(n_docs)
+    ]
+    max_possible = 2.0 / _RRF_K  # both rankings put doc at position 0
+    return [s / max_possible for s in scores]
+
+
 def rerank_results(
     docs: list[dict],
     query: str,
     limit: int,
     use_embedding: bool = True,
+    use_rrf: bool = False,
     embedding_model_path: str | None = None,
 ) -> list[dict]:
     """Re-rank search results using weighted multi-signal scoring.
 
     Args:
-        docs: List of document dicts (with pnx structure).
+        docs: List of document dicts (with pnx structure), in Primo's
+            relevance-derived order (used as the lexical signal for RRF).
         query: The original search query for title relevance scoring.
         limit: Maximum number of results to return.
         use_embedding: Whether to use local embedding model for semantic scoring.
+        use_rrf: Whether to fuse original doc order with embedding rank via
+            Reciprocal Rank Fusion. Replaces raw cosine in the semantic weight
+            slot. No-op when use_embedding is False or no embedding scores
+            could be computed.
         embedding_model_path: Custom path to embedding model (None = default).
 
     Returns:
@@ -176,7 +212,13 @@ def rerank_results(
         if semantic_scores:
             logger.debug("Semantic reranking active (%d docs scored)", len(semantic_scores))
 
-    weights = _WEIGHTS_WITH_EMBEDDING if semantic_scores else _WEIGHTS_NO_EMBEDDING
+    # Optionally fuse with original lexical rank
+    semantic_signal = semantic_scores
+    if use_rrf and semantic_scores:
+        semantic_signal = _compute_rrf_scores(semantic_scores, len(docs))
+        logger.debug("RRF fusion active (k=%d)", _RRF_K)
+
+    weights = _WEIGHTS_WITH_EMBEDDING if semantic_signal else _WEIGHTS_NO_EMBEDDING
 
     scored: list[tuple[float, int, dict]] = []
     for idx, doc in enumerate(docs):
@@ -194,8 +236,8 @@ def rerank_results(
             + weights["completeness"] * completeness_score
         )
 
-        if semantic_scores:
-            composite += weights["semantic_similarity"] * semantic_scores[idx]
+        if semantic_signal:
+            composite += weights["semantic_similarity"] * semantic_signal[idx]
 
         scored.append((composite, -idx, doc))
 

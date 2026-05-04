@@ -186,11 +186,43 @@ Decision:
 
 ## Success criteria
 
-| Metric | Threshold | How measured |
+| Metric | Threshold | Outcome |
 |---|---|---|
-| Cleaned triplets recovered | ≥ 3,500 (vs. 700 today) | wc -l on cleaned file |
-| Subject coverage in clean data | ≥ 95% (vs. 71% today) | scripts/inspect_coverage.py |
-| Provider coverage in training | ≥ 50% (vs. 14% today) | same |
-| RRF NDCG@10 vs v1-only | ≥ +3% | scripts/evaluate_sfu_queries.py |
-| Final NDCG@10 (v2 + RRF) | ≥ 0.66 (vs. 0.5876 today) | same |
-| Production reranker tests | All passing | pytest src/tests/ |
+| Cleaned triplets recovered | ≥ 3,500 (vs. 700 today) | **3,739 ✅** |
+| Subject coverage in clean data | ≥ 95% (vs. 71% today) | **97% ✅** |
+| Provider coverage in training | ≥ 50% (vs. 14% today) | **11% ❌** (strategy3 upstream bug) |
+| RRF NDCG@10 vs v1-only | ≥ +3% | ⏳ blocked on OpenAlex quota |
+| Final NDCG@10 (v2 + RRF) | ≥ 0.66 (vs. 0.5876 today) | ⏳ blocked on OpenAlex quota |
+| Production reranker tests | All passing | **13/13 ✅** |
+
+---
+
+## Execution outcomes (2026-05-04)
+
+### Done
+- **Phase 1 (dedup + length fix):** Cleaning step rewritten. Dedup by (anchor, positive) pair only; anchor min length lowered from 10 to 2 tokens (real search queries are 2-8 tokens by design, were being filtered out).
+- **Phase 2 (re-clean):** 700 → 3,739 triplets (5.3x recovery), 71% → 97% subject coverage, no API calls needed.
+- **Phase 3 (RRF in eval):** Implemented as `--fusion {none,rrf,both}` flag; added OpenAlex response cache + 429 retry with exponential backoff so re-runs across multiple models share fetches.
+- **Phase 5 (port RRF to production reranker):** New `_compute_rrf_scores()` in `src/lib/reranker.py`, gated behind `SFU_FEATURE_RRF_ENABLED` env flag (default off). `rerank_results(use_rrf=True)` fuses Primo doc order with embedding rank. 7 new RRF-specific tests, all passing alongside existing 6.
+- **Phase 6 (retrain v2):** Trained on the full 3,739-triplet dataset on RTX 4070 Ti SUPER. First run (3 epochs) underconverged (val_score 0.1668, training loss still descending). Re-trained at 6 epochs → val_score 0.2059 (best at epoch 5, plateaued at epoch 6). Final loss 3.80 (down from 5.94 at start).
+
+### Offline triplet eval (no API needed)
+
+185 held-out test triplets from `data/splits/test.jsonl`:
+
+| Model | Triplet accuracy | Mean margin |
+|---|---|---|
+| MiniLM-L6-v2 (off-the-shelf) | 65.4% | 0.0914 |
+| sfu-academic-embed-v1 | 77.8% | 0.0855 |
+| sfu-academic-embed-v2 (6 epochs) | 75.1% | **0.0942** |
+
+**Caveat:** v1 trained on the smaller pre-clean pool, which overlaps with this test split — so v1's accuracy is inflated. v2 has higher mean margin (more decisive rankings on the cases it gets right) and matches v1 on citation_pair (95%) and provider_aware (100%). The fair NDCG@10 test on real OpenAlex queries cannot run until the daily budget resets at 2026-05-05 00:00 UTC.
+
+### Blocked
+
+- **SFU NDCG@10 benchmark for v2 (alone) and v2+RRF.** OpenAlex's free quota was exhausted during eval setup; resets nightly at 00:00 UTC. To unblock: `python scripts/evaluate_sfu_queries.py --bm25-only --baseline-model sentence-transformers/all-MiniLM-L6-v2 --custom-model models/sfu-academic-embed-v2 --fusion both --output results/sfu_eval_v2_with_rrf.json`. The cache file (`data/openalex_eval_cache.json`) will populate on first successful run and persist across re-evals.
+
+### Not started (deferred)
+
+- **Strategy 3 upstream duplication fix.** `run_strategy3` only iterates the top 15 providers (of 108) and indexes its `subscribed_papers` cache by subject alone, so multiple providers covering the same subject emit identical (anchor, positive) pairs. Even after the cleaner fix recovered everything else, only 72 of 4,000 target provider_aware triplets survived. Fixing this needs OpenAlex API budget + per-(provider, subject) sampling. Tracked as task #9.
+- **Tier 2/3 stacking** (learned linear blend, LambdaMART). Per the plan, these are only worth building if Tier 1 RRF shows the fusion approach has legs — gated on the blocked benchmark.

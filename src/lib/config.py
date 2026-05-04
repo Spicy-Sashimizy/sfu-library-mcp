@@ -48,6 +48,10 @@ class ServerConfig:
         "semantic_scholar_enabled": True,
         "europe_pmc_enabled": False,
         "local_embedding_enabled": True,
+        # When True, reranker fuses original Primo doc order (lexical/BM25 proxy)
+        # with embedding cosine ranks via Reciprocal Rank Fusion. Off by default
+        # until the SFU NDCG benchmark confirms it beats single-ranker scoring.
+        "rrf_enabled": False,
     })
 
     # Local embedding model
@@ -153,6 +157,7 @@ def load_config() -> ServerConfig:
         "semantic_scholar_enabled": True,
         "europe_pmc_enabled": False,
         "local_embedding_enabled": True,
+        "rrf_enabled": False,
     }
     for key in default_features:
         env_key = f"SFU_FEATURE_{key.upper()}"

@@ -143,3 +143,10 @@ local_settings.*
 *.before-fix
 *.pre-fix-backup
 
+# Trained model artifacts (large, regeneratable)
+models/sfu-academic-embed-*/
+logs/
+
+# OpenAlex API response cache (regenerated on demand)
+data/openalex_eval_cache.json
+
