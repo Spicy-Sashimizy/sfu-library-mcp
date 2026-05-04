@@ -6,15 +6,15 @@
     "strategy4"
   ],
   "triplets_per_strategy": {
-    "strategy1": 0,
-    "strategy2": 2869,
-    "strategy3": 265,
-    "strategy4": 471
+    "strategy1": 1901,
+    "strategy2": 2853,
+    "strategy3": 4000,
+    "strategy4": 480
   },
-  "total_triplets": 3605,
+  "total_triplets": 9234,
   "output_file": "data/sfu_training_triplets.jsonl",
   "quality_check_done": true,
   "splits_done": true,
-  "started_at": "2026-05-04T02:23:41.207280",
-  "updated_at": "2026-05-04T02:35:48.148578"
+  "started_at": "2026-05-04T15:09:12.570814",
+  "updated_at": "2026-05-04T15:24:40.993268"
 }
