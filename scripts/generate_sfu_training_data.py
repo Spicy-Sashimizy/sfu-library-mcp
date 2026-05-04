@@ -33,6 +33,7 @@ Usage:
 """
 
 import argparse
+import hashlib
 import json
 import logging
 import random
@@ -319,29 +320,46 @@ def fetch_works_citing(work_id: str, per_page: int = 15) -> list[dict]:
     return results
 
 
-def _make_text(work: dict) -> str:
+# Enrichment toggles for _make_text — controlled by CLI flags (Phase H.2).
+# v3a ablation: --no-enrich-venue --no-enrich-topics --no-enrich-keywords (all False)
+# v3b ablation: --enrich-anchors-only sets _ENRICH_DOC_SIDE=False so positives/negatives
+#   get no enrichment while anchors (in strategy 4) still call _make_text with True.
+_ENRICH_VENUE = True
+_ENRICH_TOPICS = True
+_ENRICH_KEYWORDS = True
+_ENRICH_DOC_SIDE = True  # when False, positives/negatives are stripped; anchors unaffected
+
+
+def _make_text(
+    work: dict,
+    enrich_venue: bool = _ENRICH_VENUE,
+    enrich_topics: bool = _ENRICH_TOPICS,
+    enrich_keywords: bool = _ENRICH_KEYWORDS,
+) -> str:
     title = work.get("title", "").strip()
     abstract = work.get("abstract", "").strip()
     base = f"{title}. {abstract}" if title and abstract else (title or abstract)
 
-    venue = (((work.get("primary_location") or {}).get("source") or {}).get("display_name") or "").strip()
-    concepts = work.get("concepts") or []
-    top_concepts = ", ".join(
-        c.get("display_name", "") for c in concepts[:3] if c.get("display_name")
-    )
-    keywords = work.get("keywords") or []
-    top_keywords = ", ".join(
-        k.get("keyword", "") for k in keywords[:5] if k.get("keyword")
-    )
-    primary_topic = ((work.get("primary_topic") or {}).get("display_name") or "").strip()
-
     parts = [base]
-    if venue:
-        parts.append(f"Venue: {venue}")
-    if top_concepts or primary_topic:
-        parts.append(f"Topics: {top_concepts or primary_topic}")
-    if top_keywords:
-        parts.append(f"Keywords: {top_keywords}")
+    if enrich_venue:
+        venue = (((work.get("primary_location") or {}).get("source") or {}).get("display_name") or "").strip()
+        if venue:
+            parts.append(f"Venue: {venue}")
+    if enrich_topics:
+        concepts = work.get("concepts") or []
+        top_concepts = ", ".join(
+            c.get("display_name", "") for c in concepts[:3] if c.get("display_name")
+        )
+        primary_topic = ((work.get("primary_topic") or {}).get("display_name") or "").strip()
+        if top_concepts or primary_topic:
+            parts.append(f"Topics: {top_concepts or primary_topic}")
+    if enrich_keywords:
+        keywords = work.get("keywords") or []
+        top_keywords = ", ".join(
+            k.get("keyword", "") for k in keywords[:5] if k.get("keyword")
+        )
+        if top_keywords:
+            parts.append(f"Keywords: {top_keywords}")
     return " | ".join(parts)
 
 
@@ -442,8 +460,16 @@ def run_strategy1(
 
 # ── Strategy 2: Synthetic SFU-style queries from Solr metadata ────────────────
 
+def _record_rng(record: dict) -> random.Random:
+    """Return a stable per-record RNG so query generation is reproducible (J.3)."""
+    key = f"{record.get('name', '')}::{record.get('id', '')}"
+    seed_int = int(hashlib.sha1(key.encode()).hexdigest()[:8], 16)
+    return random.Random(seed_int)
+
+
 def _generate_queries_from_db_record(record: dict) -> list[str]:
     """Generate natural language search queries from a Solr database record."""
+    rng = _record_rng(record)
     queries = []
     name = record.get("name", "")
     subjects = record.get("subjects", [])
@@ -464,8 +490,8 @@ def _generate_queries_from_db_record(record: dict) -> list[str]:
             if frag and not frag.lower().startswith(("this", "the database", "a database")):
                 desc_fragment = frag
 
-    for template in random.sample(QUERY_TEMPLATES, min(4, len(QUERY_TEMPLATES))):
-        subject = random.choice(subjects) if subjects else "academic"
+    for template in rng.sample(QUERY_TEMPLATES, min(4, len(QUERY_TEMPLATES))):
+        subject = rng.choice(subjects) if subjects else "academic"
         try:
             q = template.format(
                 name=name,
@@ -631,6 +657,11 @@ def run_strategy3(
     logger.info("  %d providers, %d (provider, subject) pairs",
                 len(all_providers), len(provider_subject_docs))
 
+    # Per-provider quota so no single provider dominates (I.1)
+    n_providers = max(1, len(all_providers))
+    target_per_provider = max(1, max_total // n_providers)
+    provider_count: dict[str, int] = defaultdict(int)
+
     # Heuristic negative pool: subjects covered by NO provider in the registry.
     covered_subjects: set[str] = set()
     for _, subj_set in all_providers:
@@ -656,8 +687,20 @@ def run_strategy3(
             if count >= max_total:
                 break
 
-            for subject in list(subjects)[:4]:
-                if count >= max_total:
+            # Skip this provider if it has already hit its quota (I.1)
+            if provider_count[provider] >= target_per_provider:
+                continue
+
+            # RNG-sampled subjects — replace alphabetical [:4] bias (I.1)
+            subj_rng = random.Random(
+                int(hashlib.sha1(f"{provider}::subjects".encode()).hexdigest()[:8], 16)
+            )
+            subject_sample = subj_rng.sample(
+                list(subjects), min(8, len(subjects))
+            )
+
+            for subject in subject_sample:
+                if count >= max_total or provider_count[provider] >= target_per_provider:
                     break
 
                 if subject not in subject_papers:
@@ -669,8 +712,9 @@ def run_strategy3(
                 if not works:
                     continue
 
-                # Per-(provider, subject) deterministic sample to diversify positives.
-                sample_rng = random.Random(hash((provider, subject)))
+                # sha1-based stable seed — replaces non-reproducible hash() (I.3)
+                seed_int = int(hashlib.sha1(f"{provider}::{subject}".encode()).hexdigest()[:8], 16)
+                sample_rng = random.Random(seed_int)
                 k = min(6, len(works))
                 sampled = sample_rng.sample(works, k=k)
 
@@ -678,7 +722,11 @@ def run_strategy3(
                 if not docs_for_pair:
                     continue
 
-                for doc in docs_for_pair[:2]:
+                # RNG-sampled docs — replace deterministic [:2] bias (I.1)
+                doc_k = min(3, len(docs_for_pair))
+                selected_docs = sample_rng.sample(docs_for_pair, doc_k)
+
+                for doc in selected_docs:
                     if count >= max_total:
                         break
 
@@ -720,8 +768,147 @@ def run_strategy3(
                             }
                             out.write(json.dumps(triplet) + "\n")
                             count += 1
+                            provider_count[provider] += 1
 
     logger.info("Strategy 3 complete: %d triplets", count)
+    return count
+
+
+# ── Strategy 5: Solr-only triplets (zero API — I-bis A) ──────────────────────
+
+def _solr_doc_text(rec: dict) -> str:
+    """Render a Solr DB record as plain text for use as positive/negative."""
+    name = rec.get("name", "").strip()
+    desc = rec.get("publicNote", "") or rec.get("description", "")
+    if isinstance(desc, list):
+        desc = " ".join(desc)
+    desc = str(desc).strip()
+    subjects = rec.get("subjects", [])
+    if isinstance(subjects, str):
+        subjects = [subjects]
+    subj_str = ", ".join(subjects[:3]) if subjects else ""
+    parts = [p for p in [name, desc[:300], subj_str] if p]
+    return " | ".join(parts)
+
+
+def run_strategy5(
+    solr_docs: list[dict],
+    max_total: int,
+    output_file: Path,
+    state: GenerationState,
+    state_file: Path,
+    seed: int = 42,
+) -> int:
+    """Solr-only triplets: no API calls required (I-bis A).
+
+    For each Solr record:
+      Anchor  = synthetic queries generated from name/subject/description
+      Positive = a different Solr record sharing ≥1 subject
+      Negative = a random Solr record sharing zero subjects
+    """
+    logger.info("=== Strategy 5: Solr-only triplets (target: %d, zero API) ===", max_total)
+
+    if not solr_docs:
+        logger.warning("  No Solr docs loaded — strategy 5 cannot run")
+        return 0
+
+    # Pre-index by subject → records for fast positive lookup
+    subject_to_recs: dict[str, list[dict]] = defaultdict(list)
+    for rec in solr_docs:
+        subjects = rec.get("subjects", [])
+        if isinstance(subjects, str):
+            subjects = [subjects]
+        for s in subjects:
+            subject_to_recs[s].append(rec)
+
+    rng = random.Random(seed)
+    seen_pairs: set[tuple[str, str]] = set()
+    count = 0
+
+    with output_file.open("a") as out:
+        for rec in rng.sample(solr_docs, len(solr_docs)):
+            if count >= max_total:
+                break
+
+            rec_id = rec.get("id") or rec.get("name", "")
+            subjects = rec.get("subjects", [])
+            if isinstance(subjects, str):
+                subjects = [subjects]
+            if not subjects:
+                continue
+
+            queries = _generate_queries_from_db_record(rec)
+            if not queries:
+                continue
+
+            # Candidate positives: other records sharing ≥1 subject
+            positive_candidates: list[dict] = []
+            for s in subjects:
+                for cand in subject_to_recs.get(s, []):
+                    cand_id = cand.get("id") or cand.get("name", "")
+                    if cand_id != rec_id:
+                        positive_candidates.append(cand)
+
+            if not positive_candidates:
+                continue
+
+            # Candidate negatives: records sharing zero subjects
+            rec_subj_set = set(subjects)
+            negative_candidates = [
+                r for r in solr_docs
+                if not rec_subj_set.intersection(
+                    set(r.get("subjects", []) if isinstance(r.get("subjects", []), list)
+                        else [r.get("subjects", "")])
+                )
+            ]
+            if not negative_candidates:
+                continue
+
+            for query in queries:
+                if count >= max_total:
+                    break
+                if not _is_valid_text(query, min_tokens=3):
+                    continue
+
+                pos_rec = rng.choice(positive_candidates)
+                pos_id = pos_rec.get("id") or pos_rec.get("name", "")
+                pair_key = (
+                    hashlib.sha1(query.encode()).hexdigest(),
+                    hashlib.sha1(pos_id.encode()).hexdigest(),
+                )
+                if pair_key in seen_pairs:
+                    continue
+                seen_pairs.add(pair_key)
+
+                positive_text = _solr_doc_text(pos_rec)
+                negative_text = _solr_doc_text(rng.choice(negative_candidates))
+
+                if not _is_valid_text(positive_text) or not _is_valid_text(negative_text):
+                    continue
+
+                pos_subjects = pos_rec.get("subjects", [])
+                if isinstance(pos_subjects, str):
+                    pos_subjects = [pos_subjects]
+                shared_subject = next(
+                    (s for s in subjects if s in set(pos_subjects)), subjects[0]
+                )
+
+                triplet = {
+                    "anchor": query,
+                    "positive": positive_text[:4000],
+                    "negative": negative_text[:4000],
+                    "strategy": "solr_only",
+                    "subject": shared_subject,
+                    "metadata": {
+                        "anchor_db_id": rec_id,
+                        "positive_db_id": pos_id,
+                        "source": "solr_cache",
+                    },
+                }
+                out.write(json.dumps(triplet) + "\n")
+                count += 1
+
+    logger.info("Strategy 5 complete: %d triplets (zero API calls)", count)
     return count
 
 
@@ -777,23 +964,30 @@ def run_strategy4(
                 if count >= max_total:
                     break
 
+                # Anchor: always enriched; positives/negatives respect _ENRICH_DOC_SIDE
                 anchor_text = _make_text(work)
                 if not _is_valid_text(anchor_text):
                     continue
+
+                doc_ev = _ENRICH_VENUE and _ENRICH_DOC_SIDE
+                doc_et = _ENRICH_TOPICS and _ENRICH_DOC_SIDE
+                doc_ek = _ENRICH_KEYWORDS and _ENRICH_DOC_SIDE
 
                 # Positive: another paper from the SAME subject
                 same_subj_candidates = [w for w in works if w.get("id") != work.get("id")]
                 if not same_subj_candidates:
                     continue
                 pos_work = random.choice(same_subj_candidates)
-                positive_text = _make_text(pos_work)
+                positive_text = _make_text(pos_work, enrich_venue=doc_ev,
+                                           enrich_topics=doc_et, enrich_keywords=doc_ek)
                 if not _is_valid_text(positive_text):
                     continue
 
                 # Negative: paper from an ADJACENT subject (hard negative)
                 adj_subject = random.choice(available_adj)
                 neg_work = random.choice(subject_papers[adj_subject])
-                negative_text = _make_text(neg_work)
+                negative_text = _make_text(neg_work, enrich_venue=doc_ev,
+                                           enrich_topics=doc_et, enrich_keywords=doc_ek)
                 if not _is_valid_text(negative_text):
                     continue
 
@@ -866,8 +1060,11 @@ def run_quality_checks(input_file: Path, output_file: Path) -> dict:
                 stats["removed_anchor_eq_positive"] += 1
                 continue
 
-            # Deduplicate by (anchor, positive) pair only
-            pair_key = (anchor[:200], positive[:200])
+            # Deduplicate by full-text sha1 — avoids false collisions from truncation (J.1)
+            pair_key = (
+                hashlib.sha1(anchor.encode()).hexdigest(),
+                hashlib.sha1(positive.encode()).hexdigest(),
+            )
             if pair_key in seen_pairs:
                 stats["removed_duplicate_pair"] += 1
                 continue
@@ -998,8 +1195,8 @@ def main():
                         help="Directory to write train/val/test splits")
     parser.add_argument("--resume", action="store_true",
                         help="Resume from checkpoint, skipping completed strategies")
-    parser.add_argument("--strategy", type=int, nargs="+", choices=[1, 2, 3, 4],
-                        help="Run only specific strategies (e.g. --strategy 1 3)")
+    parser.add_argument("--strategy", type=int, nargs="+", choices=[1, 2, 3, 4, 5],
+                        help="Run only specific strategies (e.g. --strategy 1 3 5)")
     parser.add_argument("--citation-pairs", type=int, default=5000,
                         help="Target triplet count for strategy 1")
     parser.add_argument("--synthetic-pairs", type=int, default=3000,
@@ -1009,6 +1206,17 @@ def main():
     parser.add_argument("--cross-subject-pairs", type=int, default=3000,
                         help="Target triplet count for strategy 4")
     parser.add_argument("--seed", type=int, default=42)
+    parser.add_argument("--solr-only-pairs", type=int, default=6000,
+                        help="Target triplet count for strategy 5")
+    # Phase H.2 enrichment toggles for _make_text ablation
+    parser.add_argument("--no-enrich-venue", action="store_true",
+                        help="Disable venue enrichment in _make_text")
+    parser.add_argument("--no-enrich-topics", action="store_true",
+                        help="Disable topic/concept enrichment in _make_text")
+    parser.add_argument("--no-enrich-keywords", action="store_true",
+                        help="Disable keyword enrichment in _make_text")
+    parser.add_argument("--enrich-anchors-only", action="store_true",
+                        help="Enrich anchor texts only (v3b ablation)")
     parser.add_argument("--dry-run", action="store_true",
                         help="Print what would be done without making API calls")
     parser.add_argument("--skip-splits", action="store_true",
@@ -1018,6 +1226,20 @@ def main():
     parser.add_argument("--reclean-only", action="store_true",
                         help="Only re-run quality checks + splits on existing raw file")
     args = parser.parse_args()
+
+    # Apply enrichment flag overrides (Phase H.2)
+    global _ENRICH_VENUE, _ENRICH_TOPICS, _ENRICH_KEYWORDS, _ENRICH_DOC_SIDE
+    if args.no_enrich_venue:
+        _ENRICH_VENUE = False
+    if args.no_enrich_topics:
+        _ENRICH_TOPICS = False
+    if args.no_enrich_keywords:
+        _ENRICH_KEYWORDS = False
+    if args.enrich_anchors_only:
+        # Strip enrichment from doc (positive/negative) side only; anchors stay enriched.
+        # Strategy functions that use _make_text for positives/negatives should pass
+        # enrich_*=(_ENRICH_* and _ENRICH_DOC_SIDE). Strategy 4 re-enables for its anchor.
+        _ENRICH_DOC_SIDE = False
 
     random.seed(args.seed)
 
@@ -1147,6 +1369,23 @@ def main():
                 dry_run=args.dry_run,
             )
             state.mark_strategy_done("strategy4", count)
+            state.save(state_file)
+
+    # ── Strategy 5: Solr-only triplets (zero API) ──
+    if 5 in run_strategies:
+        if state.strategy_done("strategy5"):
+            logger.info("Strategy 5 already complete (%d triplets) — skipping",
+                        state.triplets_per_strategy.get("strategy5", 0))
+        else:
+            count = run_strategy5(
+                solr_docs=solr_docs,
+                max_total=args.solr_only_pairs,
+                output_file=output_file,
+                state=state,
+                state_file=state_file,
+                seed=args.seed,
+            )
+            state.mark_strategy_done("strategy5", count)
             state.save(state_file)
 
     # ── Quality checks ──
