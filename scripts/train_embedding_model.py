@@ -246,13 +246,30 @@ def build_evaluator(val_data: list[dict] | None, name: str = "sfu-eval"):
 
 
 def run_evaluation(model, evaluator, checkpoint_dir: Path, global_step: int) -> float:
-    """Run evaluator and return the score."""
+    """Run evaluator and return the score.
+
+    sentence-transformers >=5.0 returns a dict of metrics; older versions return a float.
+    Extract the primary Spearman cosine score when a dict is returned.
+    """
     if evaluator is None:
         return 0.0
     model.eval()
     score = evaluator(model, output_path=str(checkpoint_dir), epoch=0, steps=global_step)
     model.train()
-    return float(score) if score is not None else 0.0
+    if score is None:
+        return 0.0
+    if isinstance(score, dict):
+        # Pick spearman_cosine as primary metric, fall back to first numeric value
+        for key in score:
+            if "spearman_cosine" in key:
+                return float(score[key])
+        for val in score.values():
+            try:
+                return float(val)
+            except (TypeError, ValueError):
+                continue
+        return 0.0
+    return float(score)
 
 
 # ── Manual training loop ──────────────────────────────────────────────────────
