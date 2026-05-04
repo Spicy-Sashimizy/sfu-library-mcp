@@ -102,8 +102,18 @@ def ndcg_at_k(ranked_relevance: list[float], ideal_relevance: list[float], k: in
 
 
 def encode_texts(model, texts: list[str]) -> np.ndarray:
-    """Encode texts using a sentence-transformer model."""
-    return model.encode(texts, normalize_embeddings=True, show_progress_bar=False)
+    """Encode texts using a sentence-transformer model.
+
+    Force numpy output — sentence-transformers >=5.0 may return Tensor objects
+    or wrapper types if convert_to_numpy is not explicitly set.
+    """
+    result = model.encode(
+        texts,
+        normalize_embeddings=True,
+        show_progress_bar=False,
+        convert_to_numpy=True,
+    )
+    return np.array(result, dtype=np.float32)
 
 
 def rerank_with_embedding(query: str, papers: list[dict], model) -> list[dict]:
