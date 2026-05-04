@@ -1,7 +1,7 @@
-# Training management script for SFU embedding model (PowerShell)
-# Works from both Windows PowerShell (via WSL) and pwsh inside the Linux container.
+# Training management script for SFU embedding model
+# Runs commands inside the devcontainer via docker exec.
 #
-# Usage (from the scripts/ directory or project root):
+# Usage (from anywhere in the project):
 #   .\scripts\run_training.ps1 status
 #   .\scripts\run_training.ps1 start
 #   .\scripts\run_training.ps1 resume
@@ -15,14 +15,18 @@ param(
     [string]$Command = "status"
 )
 
-$ScriptDir  = $PSScriptRoot
-$BashScript = Join-Path $ScriptDir "run_training.sh"
+$CONTAINER = "claudebox-sfu-library-mcp-clone-app"
+$BASH_SCRIPT = "/workspaces/sfu-library-mcp-clone/scripts/run_training.sh"
 
-if ($env:OS -eq 'Windows_NT' -or [System.IO.Path]::DirectorySeparatorChar -eq '\') {
-    # Running on Windows — convert path and delegate into WSL
-    $WslScript = (wsl wslpath -u $BashScript.Replace('\', '/'))
-    wsl bash $WslScript $Command
-} else {
-    # Running inside Linux container — call bash directly
-    & /usr/bin/bash $BashScript $Command
+try { $null = docker version 2>&1 } catch {
+    Write-Error "Docker is not running. Please start Docker Desktop."
+    exit 1
 }
+
+$running = docker ps --format "{{.Names}}" 2>$null | Select-String -Pattern "^$CONTAINER$"
+if (-not $running) {
+    Write-Error "Container '$CONTAINER' is not running. Open the devcontainer in VS Code first."
+    exit 1
+}
+
+docker exec -it $CONTAINER bash $BASH_SCRIPT $Command
