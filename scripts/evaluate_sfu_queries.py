@@ -126,8 +126,9 @@ def rerank_with_embedding(query: str, papers: list[dict], model) -> list[dict]:
     paper_embs = embeddings[1:]
     scores = (paper_embs @ query_emb).tolist()
 
-    ranked = sorted(zip(scores, papers), reverse=True)
-    return [p for _, p in ranked]
+    # Sort by index to avoid dict comparison when scores are tied
+    ranked = sorted(range(len(scores)), key=lambda i: scores[i], reverse=True)
+    return [papers[i] for i in ranked]
 
 
 def evaluate_model(
