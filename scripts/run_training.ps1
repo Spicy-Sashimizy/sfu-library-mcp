@@ -18,7 +18,7 @@ param(
 $ScriptDir  = $PSScriptRoot
 $BashScript = Join-Path $ScriptDir "run_training.sh"
 
-if ($IsWindows) {
+if ($env:OS -eq 'Windows_NT' -or [System.IO.Path]::DirectorySeparatorChar -eq '\') {
     # Running on Windows — convert path and delegate into WSL
     $WslScript = (wsl wslpath -u $BashScript.Replace('\', '/'))
     wsl bash $WslScript $Command
