@@ -276,10 +276,9 @@ def fetch_works_citing(work_id: str, per_page: int = 15) -> list[dict]:
     """Fetch works that cite the given work (reverse citation lookup)."""
     openalex_id = work_id.replace("https://openalex.org/", "")
     data = _openalex_get("/works", {
-        "filter": f"cited_by:{openalex_id}",
+        "filter": f"cited_by:{openalex_id},has_abstract:true",
         "per_page": per_page,
         "select": "id,title,abstract_inverted_index",
-        "filter2": "has_abstract:true",
     })
     if not data:
         return []
