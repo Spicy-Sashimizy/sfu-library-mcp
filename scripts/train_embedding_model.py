@@ -42,9 +42,11 @@ Usage:
 """
 
 import argparse
+import atexit
 import json
 import logging
 import os
+import shutil
 import signal
 import sys
 import time
@@ -61,10 +63,14 @@ logger = logging.getLogger(__name__)
 
 CHECKPOINT_STATE_FILE = "training_state.json"
 CHECKPOINT_OPT_FILE = "optimizer_state.pt"
+STATUS_FILE = "training_status.json"
 
 
-def _checkpoint_path(checkpoint_dir: Path, label: str) -> Path:
-    return checkpoint_dir / label
+def _atomic_write_json(data: dict, path: Path) -> None:
+    """Write JSON atomically via temp-file + os.replace (safe on sudden kill)."""
+    tmp = path.with_suffix(".tmp")
+    tmp.write_text(json.dumps(data, indent=2))
+    os.replace(str(tmp), str(path))
 
 
 def save_checkpoint(
@@ -79,16 +85,25 @@ def save_checkpoint(
     checkpoint_dir: Path,
     label: str = "latest",
 ) -> Path:
-    """Save model + optimizer state + training state to checkpoint_dir/label."""
+    """Save model + optimizer state + training state to checkpoint_dir/label.
+
+    Uses write-to-new + atomic rename so the previous checkpoint stays valid
+    until the new one is fully written. Safe against SIGKILL and OOM-kill.
+    """
     import torch
 
+    ckpt_new = checkpoint_dir / f"{label}.new"
+    ckpt_old = checkpoint_dir / f"{label}.old"
     ckpt_path = checkpoint_dir / label
-    ckpt_path.mkdir(parents=True, exist_ok=True)
 
-    # Save model in sentence-transformers format (always loadable)
-    model.save(str(ckpt_path))
+    # Remove any leftover partial write from a previous crash
+    if ckpt_new.exists():
+        shutil.rmtree(ckpt_new)
+    ckpt_new.mkdir(parents=True)
 
-    # Save optimizer and scheduler states (for exact resume)
+    # Write all data to the .new directory first
+    model.save(str(ckpt_new))
+
     opt_data = {
         "optimizer_state_dict": optimizer.state_dict(),
         "scheduler_state_dict": scheduler.state_dict() if scheduler else None,
@@ -97,18 +112,25 @@ def save_checkpoint(
         "global_step": global_step,
         "best_score": best_score,
     }
-    torch.save(opt_data, ckpt_path / CHECKPOINT_OPT_FILE)
+    torch.save(opt_data, ckpt_new / CHECKPOINT_OPT_FILE)
 
-    # Human-readable state file (used by resume logic)
+    # Atomic swap: retire old → .old, promote .new → label
+    if ckpt_path.exists():
+        ckpt_path.rename(ckpt_old)
+    ckpt_new.rename(ckpt_path)
+    if ckpt_old.exists():
+        shutil.rmtree(ckpt_old)
+
+    # Only update the state file AFTER the checkpoint dir is in place
     state = {
         "epoch": epoch,
         "global_step": global_step,
         "best_score": best_score,
-        "loss_history": loss_history[-50:],  # Keep last 50 loss values
+        "loss_history": loss_history[-50:],
         "checkpoint_label": label,
         "timestamp": time.strftime("%Y-%m-%dT%H:%M:%S"),
     }
-    (checkpoint_dir / CHECKPOINT_STATE_FILE).write_text(json.dumps(state, indent=2))
+    _atomic_write_json(state, checkpoint_dir / CHECKPOINT_STATE_FILE)
 
     logger.info("Checkpoint saved: %s (epoch=%d, step=%d, score=%.4f)",
                 ckpt_path, epoch, global_step, best_score)
@@ -139,6 +161,35 @@ def load_checkpoint(checkpoint_dir: Path) -> dict | None:
     logger.info("Found checkpoint: epoch=%d, step=%d, best_score=%.4f",
                 state["epoch"], state["global_step"], state["best_score"])
     return state
+
+
+def write_status(
+    checkpoint_dir: Path,
+    phase: str,
+    epoch: int,
+    epochs: int,
+    global_step: int,
+    total_steps: int,
+    loss: float | None,
+    best_score: float,
+) -> None:
+    """Write a human-readable status JSON so external tools can poll progress."""
+    status = {
+        "phase": phase,
+        "epoch": epoch,
+        "total_epochs": epochs,
+        "global_step": global_step,
+        "total_steps": total_steps,
+        "progress_pct": round(100.0 * global_step / max(1, total_steps), 1),
+        "loss": round(loss, 6) if loss is not None else None,
+        "best_val_score": round(best_score, 6),
+        "timestamp": time.strftime("%Y-%m-%dT%H:%M:%S"),
+        "pid": os.getpid(),
+    }
+    try:
+        _atomic_write_json(status, checkpoint_dir / STATUS_FILE)
+    except Exception:
+        pass  # status file is best-effort
 
 
 # ── Data loading ──────────────────────────────────────────────────────────────
@@ -344,18 +395,45 @@ def train(
     else:
         logger.info("No validation data — save-best-model disabled")
 
-    # ── SIGINT/SIGTERM handler — save checkpoint before exit ──
+    # ── SIGINT/SIGTERM + atexit — save checkpoint before exit ──
     _interrupt_requested = {"flag": False}
+    _current_state: dict = {}  # mutable reference updated each step for atexit
 
     def _handle_signal(sig, frame):
         if _interrupt_requested["flag"]:
             logger.warning("Second interrupt — forcing exit")
             sys.exit(1)
         _interrupt_requested["flag"] = True
-        logger.warning("Interrupt received (signal %d). Will save checkpoint after current batch...", sig)
+        logger.warning(
+            "Interrupt received (signal %d). Will save checkpoint after current batch...", sig
+        )
+
+    def _atexit_save():
+        """Emergency save on any Python exit (exception, sys.exit, OOM, etc.)."""
+        if not _current_state or _interrupt_requested["flag"]:
+            return  # either nothing to save, or already saved via signal handler
+        try:
+            logger.warning("atexit: saving emergency checkpoint...")
+            save_checkpoint(
+                _current_state["model"],
+                _current_state["optimizer"],
+                _current_state["scheduler"],
+                _current_state["scaler"],
+                epoch=_current_state["epoch"],
+                global_step=_current_state["global_step"],
+                best_score=_current_state["best_score"],
+                loss_history=_current_state["loss_history"],
+                checkpoint_dir=ckpt_dir,
+                label="emergency",
+            )
+            logger.warning("atexit: emergency checkpoint saved at step %d",
+                           _current_state["global_step"])
+        except Exception as exc:
+            logger.error("atexit: could not save checkpoint: %s", exc)
 
     signal.signal(signal.SIGINT, _handle_signal)
     signal.signal(signal.SIGTERM, _handle_signal)
+    atexit.register(_atexit_save)
 
     # ── Training log file ──
     log_file = Path(log_dir) / "training_log.jsonl"
@@ -373,15 +451,30 @@ def train(
     if checkpoint_state:
         logger.info("Skipping epochs 0-%d (already completed)", start_epoch - 1)
 
+    # ── Populate _current_state so atexit handler can save if needed ──
+    _current_state.update({
+        "model": model,
+        "optimizer": optimizer,
+        "scheduler": scheduler,
+        "scaler": scaler,
+        "epoch": start_epoch,
+        "global_step": global_step,
+        "best_score": best_score,
+        "loss_history": loss_history,
+    })
+    write_status(ckpt_dir, "starting", start_epoch, epochs, global_step, total_steps, None, best_score)
+
     # ── Epoch loop ──────────────────────────────────────────────────────────
     for epoch in range(start_epoch, epochs):
         model.train()
+        _current_state["epoch"] = epoch
         epoch_loss = 0.0
         epoch_steps = 0
         accum_loss = 0.0
         accum_count = 0
 
         logger.info("\n── Epoch %d/%d ─────────────────────────────────────────", epoch + 1, epochs)
+        write_status(ckpt_dir, "training", epoch, epochs, global_step, total_steps, None, best_score)
 
         try:
             from tqdm import tqdm
@@ -392,7 +485,7 @@ def train(
         optimizer.zero_grad()
 
         for batch_idx, batch in enumerate(pbar):
-            # Check for interrupt
+            # Check for interrupt — save checkpoint then exit cleanly
             if _interrupt_requested["flag"]:
                 logger.info("Saving emergency checkpoint before exit...")
                 save_checkpoint(
@@ -401,7 +494,10 @@ def train(
                     best_score=best_score, loss_history=loss_history,
                     checkpoint_dir=ckpt_dir, label="emergency",
                 )
-                logger.info("Emergency checkpoint saved. Exiting.")
+                write_status(ckpt_dir, "interrupted", epoch, epochs, global_step, total_steps,
+                             None, best_score)
+                _interrupt_requested["flag"] = False  # prevent atexit from double-saving
+                logger.info("Emergency checkpoint saved. Exiting cleanly.")
                 sys.exit(0)
 
             # Unpack batch and move to device
@@ -455,6 +551,13 @@ def train(
 
                 current_lr = scheduler.get_last_lr()[0] if hasattr(scheduler, "get_last_lr") else learning_rate
 
+                # Keep _current_state fresh for atexit handler
+                _current_state.update({
+                    "global_step": global_step,
+                    "best_score": best_score,
+                    "loss_history": loss_history,
+                })
+
                 if hasattr(pbar, "set_postfix"):
                     pbar.set_postfix({
                         "loss": f"{avg_batch_loss:.4f}",
@@ -463,6 +566,8 @@ def train(
                     })
 
                 _log_step(epoch, global_step, avg_batch_loss, current_lr)
+                write_status(ckpt_dir, "training", epoch, epochs, global_step,
+                             total_steps, avg_batch_loss, best_score)
 
                 # Step-level checkpoint
                 if global_step > 0 and global_step % save_steps == 0:
@@ -488,6 +593,7 @@ def train(
                         _log_step(epoch, global_step, avg_batch_loss, current_lr, val_score)
                         if val_score > best_score:
                             best_score = val_score
+                            _current_state["best_score"] = best_score
                             model.save(str(output_path))
                             logger.info("New best model saved to %s", output_path)
 
@@ -500,6 +606,7 @@ def train(
             val_score = run_evaluation(model, evaluator, ckpt_dir, global_step)
             if val_score > best_score:
                 best_score = val_score
+                _current_state["best_score"] = best_score
                 model.save(str(output_path))
                 logger.info("New best model saved to %s (score=%.4f)", output_path, best_score)
 
@@ -522,8 +629,12 @@ def train(
         )
 
         _log_step(epoch, global_step, avg_epoch_loss, learning_rate, val_score)
+        write_status(ckpt_dir, "epoch_complete", epoch, epochs, global_step,
+                     total_steps, avg_epoch_loss, best_score)
 
     # ── Training complete ──
+    _current_state.clear()  # prevent atexit from saving a duplicate
+    write_status(ckpt_dir, "complete", epochs - 1, epochs, global_step, total_steps, None, best_score)
     logger.info("\n" + "=" * 60)
     logger.info("Training complete!")
     logger.info("  Epochs trained:      %d", epochs - start_epoch)
@@ -578,8 +689,8 @@ def main():
                         help="Use mixed-precision training (GPU only)")
     parser.add_argument("--gradient-accumulation", type=int, default=1,
                         help="Accumulate gradients over N batches (effective batch = batch_size * N)")
-    parser.add_argument("--save-steps", type=int, default=500,
-                        help="Save a checkpoint every N optimizer steps")
+    parser.add_argument("--save-steps", type=int, default=100,
+                        help="Save a checkpoint every N optimizer steps (default: 100)")
     parser.add_argument("--eval-steps", type=int, default=500,
                         help="Evaluate on validation set every N steps (0 to disable)")
     parser.add_argument("--max-samples", type=int, default=None,
