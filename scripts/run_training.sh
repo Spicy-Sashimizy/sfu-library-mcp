@@ -16,7 +16,7 @@ set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PROJECT_DIR="$(dirname "$SCRIPT_DIR")"
 PYTHON="${PROJECT_DIR}/.venv/bin/python3"
-PIP="${PROJECT_DIR}/.venv/bin/pip"
+PIP="$PYTHON -m pip"
 TMUX_SESSION="sfu-training"
 LOG_FILE="${PROJECT_DIR}/logs/training.log"
 PID_FILE="${PROJECT_DIR}/logs/training.pid"
@@ -67,13 +67,13 @@ cmd_setup() {
         echo "  torch already installed"
     else
         echo "  Installing PyTorch (CUDA 12.4 build)..."
-        "$PIP" install --quiet \
+        $PIP install --quiet \
             torch torchvision torchaudio \
             --index-url https://download.pytorch.org/whl/cu124
     fi
 
     echo "  Installing training dependencies..."
-    "$PIP" install --quiet \
+    $PIP install --quiet \
         sentence-transformers \
         transformers \
         accelerate \
