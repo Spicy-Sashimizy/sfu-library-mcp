@@ -20,21 +20,24 @@ PIP="$PYTHON -m pip"
 TMUX_SESSION="sfu-training"
 LOG_FILE="${PROJECT_DIR}/logs/training.log"
 PID_FILE="${PROJECT_DIR}/logs/training.pid"
-STATUS_FILE="${PROJECT_DIR}/models/sfu-academic-embed-v1/checkpoints/training_status.json"
 TRAIN_SCRIPT="${SCRIPT_DIR}/train_embedding_model.py"
 GEN_SCRIPT="${SCRIPT_DIR}/generate_sfu_training_data.py"
 
 # ── Default training hyperparameters ─────────────────────────────────────────
 DATA_TRAIN="${PROJECT_DIR}/data/splits/train.jsonl"
 DATA_VAL="${PROJECT_DIR}/data/splits/val.jsonl"
-OUTPUT_DIR="${PROJECT_DIR}/models/sfu-academic-embed-v1"
-EPOCHS=3
-BATCH_SIZE=64
+OUTPUT_DIR="${PROJECT_DIR}/models/sfu-academic-embed-v3"
+EPOCHS=6
+BATCH_SIZE=32
 GRAD_ACCUM=1
 LR=2e-5
+MAX_SEQ_LENGTH=512
 SAVE_STEPS=100
 EVAL_STEPS=500
 FP16_FLAG=""
+
+# STATUS_FILE is derived from OUTPUT_DIR so changing the model name updates both.
+STATUS_FILE="${OUTPUT_DIR}/checkpoints/training_status.json"
 
 # Detect GPU and enable fp16 automatically
 if command -v nvidia-smi &>/dev/null && nvidia-smi -L &>/dev/null 2>&1; then
@@ -165,6 +168,7 @@ _start_training() {
         --batch-size $BATCH_SIZE \
         --gradient-accumulation $GRAD_ACCUM \
         --learning-rate $LR \
+        --max-seq-length $MAX_SEQ_LENGTH \
         --save-steps $SAVE_STEPS \
         --eval-steps $EVAL_STEPS \
         $FP16_FLAG \

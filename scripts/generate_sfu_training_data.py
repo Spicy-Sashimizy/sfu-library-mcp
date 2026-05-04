@@ -43,6 +43,8 @@ from dataclasses import asdict, dataclass, field
 from datetime import datetime
 from pathlib import Path
 
+import os
+
 import requests
 
 # Add src/ to path to reuse the SFU Solr registry client
@@ -52,8 +54,30 @@ from lib.sfu_databases import SFUDatabaseRegistry
 logging.basicConfig(level=logging.INFO, format="%(levelname)s: %(message)s")
 logger = logging.getLogger(__name__)
 
+
+def _load_dotenv() -> None:
+    env_path = Path(__file__).parent.parent / ".env"
+    if not env_path.exists():
+        return
+    for line in env_path.read_text().splitlines():
+        line = line.strip()
+        if not line or line.startswith("#") or "=" not in line:
+            continue
+        k, v = line.split("=", 1)
+        k, v = k.strip(), v.strip().strip("'").strip('"')
+        if k:
+            os.environ[k] = v
+
+
+_load_dotenv()
+
 OPENALEX_BASE = "https://api.openalex.org"
 OPENALEX_HEADERS = {"User-Agent": "SFULibraryMCP-Training/1.0 (mailto:lib-systems@sfu.ca)"}
+OPENALEX_API_KEY = os.environ.get("OPENALEX_API_KEY", "").strip()
+if OPENALEX_API_KEY:
+    logger.info("OpenAlex API key loaded (premium quota)")
+else:
+    logger.info("No OPENALEX_API_KEY — using polite pool (10 req/s)")
 
 DEFAULT_OUTPUT = "data/sfu_training_triplets.jsonl"
 DEFAULT_CHECKPOINT_DIR = "data/generation_checkpoints"
@@ -220,6 +244,10 @@ class GenerationState:
 
 def _openalex_get(path: str, params: dict, retries: int = 3) -> dict | None:
     url = f"{OPENALEX_BASE}{path}"
+    if OPENALEX_API_KEY:
+        params = {**params, "api_key": OPENALEX_API_KEY}
+    else:
+        params = {**params, "mailto": "lib-systems@sfu.ca"}
     for attempt in range(retries):
         try:
             resp = requests.get(url, params=params, headers=OPENALEX_HEADERS, timeout=30)
@@ -258,7 +286,7 @@ def fetch_works_for_subject(subject: str, per_page: int = 50, sort: str = "cited
         "search": search_query,
         "per_page": per_page,
         "sort": sort,
-        "select": "id,title,publication_year,cited_by_count,abstract_inverted_index,referenced_works",
+        "select": "id,title,publication_year,cited_by_count,abstract_inverted_index,referenced_works,concepts,keywords,primary_topic,primary_location",
         "filter": "has_abstract:true",
     })
     if not data:
@@ -278,7 +306,7 @@ def fetch_works_citing(work_id: str, per_page: int = 15) -> list[dict]:
     data = _openalex_get("/works", {
         "filter": f"cited_by:{openalex_id},has_abstract:true",
         "per_page": per_page,
-        "select": "id,title,abstract_inverted_index",
+        "select": "id,title,abstract_inverted_index,concepts,keywords,primary_topic,primary_location",
     })
     if not data:
         return []
@@ -294,9 +322,27 @@ def fetch_works_citing(work_id: str, per_page: int = 15) -> list[dict]:
 def _make_text(work: dict) -> str:
     title = work.get("title", "").strip()
     abstract = work.get("abstract", "").strip()
-    if title and abstract:
-        return f"{title} {abstract}"
-    return title or abstract
+    base = f"{title}. {abstract}" if title and abstract else (title or abstract)
+
+    venue = (((work.get("primary_location") or {}).get("source") or {}).get("display_name") or "").strip()
+    concepts = work.get("concepts") or []
+    top_concepts = ", ".join(
+        c.get("display_name", "") for c in concepts[:3] if c.get("display_name")
+    )
+    keywords = work.get("keywords") or []
+    top_keywords = ", ".join(
+        k.get("keyword", "") for k in keywords[:5] if k.get("keyword")
+    )
+    primary_topic = ((work.get("primary_topic") or {}).get("display_name") or "").strip()
+
+    parts = [base]
+    if venue:
+        parts.append(f"Venue: {venue}")
+    if top_concepts or primary_topic:
+        parts.append(f"Topics: {top_concepts or primary_topic}")
+    if top_keywords:
+        parts.append(f"Keywords: {top_keywords}")
+    return " | ".join(parts)
 
 
 def _token_count_approx(text: str) -> int:
@@ -543,11 +589,18 @@ def run_strategy3(
     state: GenerationState,
     state_file: Path,
     dry_run: bool = False,
+    seed: int = 42,
 ) -> int:
     """Provider-aware pairs: SFU-subscribed subjects as positives, unrelated as negatives.
 
-    Groups Solr records by provider, fetches papers for subscribed subjects,
-    creates pairs that encode subscription-awareness.
+    For every (provider, subject) pair found in the Solr registry:
+      - Fetch top OpenAlex papers for the subject (cached per subject, one API call each).
+      - Sample a diverse subset using a stable per-(provider, subject) RNG.
+      - Generate SFU-style queries from the matching Solr record(s) via
+        ``_generate_queries_from_db_record`` so the database/provider signal lives
+        in the *anchor* itself rather than only in metadata.
+      - Pair each query with each sampled paper (positive) and a random unsubscribed
+        paper (negative).
     """
     logger.info("=== Strategy 3: Provider-aware pairs (target: %d) ===", max_total)
 
@@ -555,8 +608,11 @@ def run_strategy3(
         logger.info("[dry-run] Would generate ~%d provider-aware pairs", max_total)
         return 0
 
-    # Group subjects by provider
+    # provider -> set of subjects
     provider_subjects: dict[str, set[str]] = defaultdict(set)
+    # (provider, subject) -> list of Solr docs (for query generation)
+    provider_subject_docs: dict[tuple[str, str], list[dict]] = defaultdict(list)
+
     for doc in solr_docs:
         provider = doc.get("provider", "")
         if isinstance(provider, list):
@@ -567,25 +623,36 @@ def run_strategy3(
         if provider and subjects:
             for s in subjects:
                 provider_subjects[provider].add(s)
+                provider_subject_docs[(provider, s)].append(doc)
 
-    # Select top providers (by number of subjects covered)
-    top_providers = sorted(provider_subjects.items(), key=lambda x: len(x[1]), reverse=True)[:15]
+    # ALL providers, shuffled deterministically so a max_total cut is fair across the tail.
+    all_providers = sorted(provider_subjects.items(), key=lambda x: len(x[1]), reverse=True)
+    random.Random(seed).shuffle(all_providers)
+    logger.info("  %d providers, %d (provider, subject) pairs",
+                len(all_providers), len(provider_subject_docs))
 
-    # Fetch papers for subscribed subjects (positives)
-    subscribed_papers: dict[str, list[dict]] = {}
-    unsubscribed_subjects = [s for s in SFU_PRIORITY_SUBJECTS
-                             if not any(s in prov_subjects for _, prov_subjects in top_providers)]
+    # Heuristic negative pool: subjects covered by NO provider in the registry.
+    covered_subjects: set[str] = set()
+    for _, subj_set in all_providers:
+        covered_subjects |= subj_set
+    unsubscribed_subjects = [s for s in SFU_PRIORITY_SUBJECTS if s not in covered_subjects]
 
-    # Fetch papers for unsubscribed subjects (negatives)
     unsubscribed_papers: list[dict] = []
     for subj in unsubscribed_subjects[:5]:
         works = fetch_works_for_subject(subj, per_page=20)
         unsubscribed_papers.extend(works)
         time.sleep(0.2)
 
+    if not unsubscribed_papers:
+        logger.warning("  No unsubscribed-subject papers fetched — strategy 3 cannot emit negatives")
+        return 0
+
+    # Cache per subject: papers don't depend on provider; diversity is via the sampler below.
+    subject_papers: dict[str, list[dict]] = {}
+
     count = 0
     with output_file.open("a") as out:
-        for provider, subjects in top_providers:
+        for provider, subjects in all_providers:
             if count >= max_total:
                 break
 
@@ -593,53 +660,66 @@ def run_strategy3(
                 if count >= max_total:
                     break
 
-                if subject not in subscribed_papers:
+                if subject not in subject_papers:
                     works = fetch_works_for_subject(subject, per_page=30)
-                    subscribed_papers[subject] = works
+                    subject_papers[subject] = works
                     time.sleep(0.2)
 
-                works = subscribed_papers.get(subject, [])
+                works = subject_papers.get(subject, [])
                 if not works:
                     continue
 
-                for work in works[:6]:
+                # Per-(provider, subject) deterministic sample to diversify positives.
+                sample_rng = random.Random(hash((provider, subject)))
+                k = min(6, len(works))
+                sampled = sample_rng.sample(works, k=k)
+
+                docs_for_pair = provider_subject_docs.get((provider, subject), [])
+                if not docs_for_pair:
+                    continue
+
+                for doc in docs_for_pair[:2]:
                     if count >= max_total:
                         break
 
-                    positive_text = _make_text(work)
-                    if not _is_valid_text(positive_text):
+                    queries = _generate_queries_from_db_record(doc)
+                    if not queries:
                         continue
 
-                    # Anchor: a query derived from the paper
-                    title_words = work.get("title", "").split()
-                    if len(title_words) < 4:
-                        continue
-                    # Use first half of title as a query
-                    mid = max(3, len(title_words) // 2)
-                    anchor = " ".join(title_words[:mid])
+                    for query in queries:
+                        if count >= max_total:
+                            break
+                        if not _is_valid_text(query, min_tokens=3):
+                            continue
 
-                    # Negative: paper from an unsubscribed subject
-                    if not unsubscribed_papers:
-                        continue
-                    neg_work = random.choice(unsubscribed_papers)
-                    negative_text = _make_text(neg_work)
-                    if not _is_valid_text(negative_text):
-                        continue
+                        for work in sampled:
+                            if count >= max_total:
+                                break
 
-                    triplet = {
-                        "anchor": anchor,
-                        "positive": positive_text[:4000],
-                        "negative": negative_text[:4000],
-                        "strategy": "provider_aware",
-                        "subject": subject,
-                        "metadata": {
-                            "provider": provider,
-                            "subscribed": True,
-                            "positive_id": work.get("id"),
-                        },
-                    }
-                    out.write(json.dumps(triplet) + "\n")
-                    count += 1
+                            positive_text = _make_text(work)
+                            if not _is_valid_text(positive_text):
+                                continue
+
+                            neg_work = random.choice(unsubscribed_papers)
+                            negative_text = _make_text(neg_work)
+                            if not _is_valid_text(negative_text):
+                                continue
+
+                            triplet = {
+                                "anchor": query,
+                                "positive": positive_text[:4000],
+                                "negative": negative_text[:4000],
+                                "strategy": "provider_aware",
+                                "subject": subject,
+                                "metadata": {
+                                    "provider": provider,
+                                    "db_name": doc.get("name", ""),
+                                    "subscribed": True,
+                                    "positive_id": work.get("id"),
+                                },
+                            }
+                            out.write(json.dumps(triplet) + "\n")
+                            count += 1
 
     logger.info("Strategy 3 complete: %d triplets", count)
     return count
@@ -1048,6 +1128,7 @@ def main():
                 state=state,
                 state_file=state_file,
                 dry_run=args.dry_run,
+                seed=args.seed,
             )
             state.mark_strategy_done("strategy3", count)
             state.save(state_file)
