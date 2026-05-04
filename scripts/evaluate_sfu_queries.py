@@ -186,6 +186,33 @@ def ndcg_at_k(ranked_relevance: list[float], ideal_relevance: list[float], k: in
     return dcg_val / ideal_dcg if ideal_dcg > 0 else 0.0
 
 
+def mrr_at_k(ranked_relevance: list[float], ideal_relevance: list[float], k: int) -> float:
+    """Mean Reciprocal Rank @k.  A document is 'relevant' if its score exceeds
+    the median of the ideal list — same threshold used for the relevance proxy."""
+    if not ideal_relevance:
+        return 0.0
+    threshold = sorted(ideal_relevance, reverse=True)[min(k - 1, len(ideal_relevance) - 1)]
+    for rank, rel in enumerate(ranked_relevance[:k], start=1):
+        if rel >= threshold:
+            return 1.0 / rank
+    return 0.0
+
+
+def recall_at_k(ranked_relevance: list[float], ideal_relevance: list[float], k: int) -> float:
+    """Recall@k: fraction of the top-k ideal docs that appear in the top-k ranked list.
+
+    Uses the same relevance threshold as mrr_at_k.
+    """
+    if not ideal_relevance:
+        return 0.0
+    threshold = sorted(ideal_relevance, reverse=True)[min(k - 1, len(ideal_relevance) - 1)]
+    ideal_count = sum(1 for r in ideal_relevance[:k] if r >= threshold)
+    if ideal_count == 0:
+        return 0.0
+    ranked_count = sum(1 for r in ranked_relevance[:k] if r >= threshold)
+    return ranked_count / ideal_count
+
+
 def encode_texts(model, texts: list[str]) -> np.ndarray:
     """Encode texts using a sentence-transformer model.
 
@@ -258,6 +285,8 @@ def evaluate_model(
             "rrf"  → reciprocal rank fusion of BM25 + embedding ranks
     """
     all_ndcg: list[float] = []
+    all_mrr: list[float] = []
+    all_recall: list[float] = []
     subject_ndcg: dict[str, list[float]] = {}
     query_results: list[dict] = []
 
@@ -289,7 +318,11 @@ def evaluate_model(
             reranked_relevance = relevance_scores
 
         ndcg = ndcg_at_k(reranked_relevance, relevance_scores, k)
+        mrr = mrr_at_k(reranked_relevance, relevance_scores, k)
+        rec = recall_at_k(reranked_relevance, relevance_scores, k)
         all_ndcg.append(ndcg)
+        all_mrr.append(mrr)
+        all_recall.append(rec)
 
         if subject not in subject_ndcg:
             subject_ndcg[subject] = []
@@ -299,6 +332,8 @@ def evaluate_model(
             "query": query,
             "subject": subject,
             "ndcg_at_k": ndcg,
+            "mrr_at_k": mrr,
+            "recall_at_k": rec,
             "num_results": len(papers),
             "notes": q_item.get("notes", ""),
         })
@@ -311,6 +346,8 @@ def evaluate_model(
     mean_ndcg = float(np.mean(all_ndcg)) if all_ndcg else 0.0
     median_ndcg = float(np.median(all_ndcg)) if all_ndcg else 0.0
     std_ndcg = float(np.std(all_ndcg)) if all_ndcg else 0.0
+    mean_mrr = float(np.mean(all_mrr)) if all_mrr else 0.0
+    mean_recall = float(np.mean(all_recall)) if all_recall else 0.0
 
     # Subject-level breakdown
     subject_breakdown = {
@@ -326,6 +363,8 @@ def evaluate_model(
         "mean_ndcg_at_k": mean_ndcg,
         "median_ndcg_at_k": median_ndcg,
         "std_ndcg_at_k": std_ndcg,
+        "mean_mrr_at_k": mean_mrr,
+        "mean_recall_at_k": mean_recall,
         "num_queries": len(all_ndcg),
         "k": k,
         "subject_breakdown": subject_breakdown,
@@ -335,16 +374,19 @@ def evaluate_model(
 
 def print_results_table(all_results: list[dict], k: int) -> None:
     """Print a comparison table of all evaluated models."""
-    print(f"\n{'='*70}")
-    print(f"SFU-SPECIFIC EMBEDDING MODEL EVALUATION  (NDCG@{k})")
-    print(f"{'='*70}")
+    print(f"\n{'='*85}")
+    print(f"SFU-SPECIFIC EMBEDDING MODEL EVALUATION  (NDCG@{k} | MRR@{k} | Recall@{k})")
+    print(f"{'='*85}")
 
     # Summary table
-    print(f"\n{'Model':<35} {'Mean NDCG':>10} {'Median':>8} {'Std':>6} {'Queries':>8}")
-    print("-" * 70)
+    print(f"\n{'Model':<35} {'NDCG':>8} {'Median':>8} {'Std':>6} {'MRR':>8} {'Recall':>8} {'N':>5}")
+    print("-" * 85)
     for r in sorted(all_results, key=lambda x: x["mean_ndcg_at_k"], reverse=True):
-        print(f"{r['model']:<35} {r['mean_ndcg_at_k']:>10.4f} {r['median_ndcg_at_k']:>8.4f} "
-              f"{r['std_ndcg_at_k']:>6.4f} {r['num_queries']:>8}")
+        print(
+            f"{r['model']:<35} {r['mean_ndcg_at_k']:>8.4f} {r['median_ndcg_at_k']:>8.4f} "
+            f"{r['std_ndcg_at_k']:>6.4f} {r.get('mean_mrr_at_k', 0.0):>8.4f} "
+            f"{r.get('mean_recall_at_k', 0.0):>8.4f} {r['num_queries']:>5}"
+        )
 
     # Subject breakdown (if multiple models)
     if len(all_results) >= 2:
@@ -400,6 +442,9 @@ def main():
                         help="OpenAlex results to fetch per query")
     parser.add_argument("--output", type=str, default=None,
                         help="Save full results to JSON file")
+    parser.add_argument("--history", type=str,
+                        default=str(Path(__file__).parent.parent / "results/sfu_eval_history.jsonl"),
+                        help="Append-only history JSONL (M.4); one line per run")
     parser.add_argument("--delay", type=float, default=1.2,
                         help="Delay between OpenAlex API requests (seconds)")
     parser.add_argument("--fusion", choices=["none", "rrf", "both"], default="none",
@@ -484,6 +529,26 @@ def main():
         output_path.parent.mkdir(parents=True, exist_ok=True)
         output_path.write_text(json.dumps(all_results, indent=2))
         logger.info("Full results saved to %s", output_path)
+
+    # Append to history JSONL (M.4) — one compact line per model per run
+    import datetime
+    history_path = Path(args.history)
+    history_path.parent.mkdir(parents=True, exist_ok=True)
+    with history_path.open("a") as hf:
+        for r in all_results:
+            entry = {
+                "timestamp": datetime.datetime.utcnow().isoformat() + "Z",
+                "model": r["model"],
+                "fusion": r.get("fusion", "none"),
+                "ndcg10": r["mean_ndcg_at_k"],
+                "mrr10": r.get("mean_mrr_at_k", 0.0),
+                "recall10": r.get("mean_recall_at_k", 0.0),
+                "num_queries": r["num_queries"],
+                "k": r["k"],
+                "per_subject": {s: v["mean_ndcg"] for s, v in r["subject_breakdown"].items()},
+            }
+            hf.write(json.dumps(entry) + "\n")
+    logger.info("History appended to %s", history_path)
 
     # Print improvement summary if comparing custom vs baseline
     custom_results = [r for r in all_results if r["model"].startswith("sfu-custom")]
