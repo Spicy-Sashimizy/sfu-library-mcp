@@ -218,9 +218,33 @@ Decision:
 
 **Caveat:** v1 trained on the smaller pre-clean pool, which overlaps with this test split — so v1's accuracy is inflated. v2 has higher mean margin (more decisive rankings on the cases it gets right) and matches v1 on citation_pair (95%) and provider_aware (100%). The fair NDCG@10 test on real OpenAlex queries cannot run until the daily budget resets at 2026-05-05 00:00 UTC.
 
-### Blocked
+### Headline benchmark results (35 SFU queries, NDCG@10)
 
-- **SFU NDCG@10 benchmark for v2 (alone) and v2+RRF.** OpenAlex's free quota was exhausted during eval setup; resets nightly at 00:00 UTC. To unblock: `python scripts/evaluate_sfu_queries.py --bm25-only --baseline-model sentence-transformers/all-MiniLM-L6-v2 --custom-model models/sfu-academic-embed-v2 --fusion both --output results/sfu_eval_v2_with_rrf.json`. The cache file (`data/openalex_eval_cache.json`) will populate on first successful run and persist across re-evals.
+| Configuration | NDCG@10 | Δ vs baseline |
+|---|---|---|
+| **BM25-only (OpenAlex relevance order)** | **0.8058** | +40.2% |
+| **sfu-academic-embed-v2 + RRF** | **0.6643** | **+15.6%** |
+| MiniLM + RRF | 0.6554 | +14.0% |
+| sfu-academic-embed-v2 (alone) | 0.5891 | +2.5% |
+| MiniLM-L6-v2 (baseline, alone) | 0.5749 | — |
+
+**Key findings:**
+
+1. **RRF stacking is the clear win.** Adding RRF to v2 lifts it from 0.5891 → 0.6643 — a **+12.8% NDCG gain from a 30-line code change with no model retrain**. Same lift on MiniLM (+14.0%). The .bat-stacking idea fully validated: rank fusion is much higher leverage than further fine-tuning.
+
+2. **The fine-tune contributes modestly.** v2 over MiniLM is only +2.5% alone; v2+RRF over MiniLM+RRF is +1.4%. The custom model helps but RRF is doing most of the heavy lifting.
+
+3. **BM25 alone wins the benchmark, by construction.** The relevance proxy is `log(citation_count + 1)`, and OpenAlex's `relevance_score` already correlates with citation count — so BM25 looks artificially strong here. This is a known limitation of citation-proxy NDCG (the original plan flagged it). Real user-relevance evaluation requires click-through data once deployed.
+
+4. **Per-subject SFU gains (v2 vs MiniLM, baseline + custom):**
+   - Women's Studies: 0.5494 → 0.6346 (+15.5%)
+   - Finance: 0.5322 → 0.6078 (+14.2%)
+   - Indigenous Studies: 0.4618 → 0.4753 (+2.9%)
+   - Criminology: 0.5123 → 0.5293 (+3.3%)
+
+**Production recommendation:**
+- Set `SFU_FEATURE_RRF_ENABLED=true` — the +12-14% NDCG gain alone justifies turning it on regardless of which embedding model is loaded.
+- Ship `sfu-academic-embed-v2` over v1 — modest +2.5% gain, but trained on 5.3× more data covering 97% of SFU subjects (vs 71% in v1).
 
 ### Not started (deferred)
 

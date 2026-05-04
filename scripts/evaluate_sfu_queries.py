@@ -24,6 +24,7 @@ import argparse
 import json
 import logging
 import math
+import os
 import time
 from pathlib import Path
 
@@ -36,6 +37,37 @@ logger = logging.getLogger(__name__)
 OPENALEX_BASE = "https://api.openalex.org"
 HEADERS = {"User-Agent": "SFULibraryMCP-Eval/1.0 (mailto:lib-systems@sfu.ca)"}
 DEFAULT_EVAL_QUERIES = str(Path(__file__).parent.parent / "data/sfu_eval_queries.json")
+
+
+def _load_dotenv() -> None:
+    """Load .env so OPENALEX_API_KEY is available without exporting manually.
+
+    .env is treated as the canonical source — values here override any
+    pre-existing process env. Without this, a stale key baked into the
+    container session at startup would silently win over a freshly-rotated
+    key in the file (and worse, the stale key would be sent on every API
+    request and end up in error logs).
+    """
+    env_path = Path(__file__).parent.parent / ".env"
+    if not env_path.exists():
+        return
+    for line in env_path.read_text().splitlines():
+        line = line.strip()
+        if not line or line.startswith("#") or "=" not in line:
+            continue
+        k, v = line.split("=", 1)
+        k = k.strip()
+        v = v.strip().strip("'").strip('"')
+        if k:
+            os.environ[k] = v
+
+
+_load_dotenv()
+OPENALEX_API_KEY = os.environ.get("OPENALEX_API_KEY", "").strip()
+if OPENALEX_API_KEY:
+    logger.info("OpenAlex API key loaded from environment (premium quota)")
+else:
+    logger.info("No OPENALEX_API_KEY set; using anonymous polite pool (10 req/s shared)")
 QUERY_CACHE_FILE = Path(__file__).parent.parent / "data/openalex_eval_cache.json"
 
 
@@ -77,18 +109,23 @@ def fetch_openalex_results(query: str, k: int = 50, use_cache: bool = True) -> l
     if use_cache and cache_key in _QUERY_CACHE:
         return _QUERY_CACHE[cache_key]
 
+    params = {
+        "search": query,
+        "per_page": k,
+        "sort": "relevance_score:desc",
+        "select": "id,title,publication_year,cited_by_count,abstract_inverted_index,type",
+    }
+    if OPENALEX_API_KEY:
+        params["api_key"] = OPENALEX_API_KEY
+    else:
+        params["mailto"] = "lib-systems@sfu.ca"  # polite-pool fallback
+
     backoff = 5.0
     for attempt in range(5):
         try:
             resp = requests.get(
                 f"{OPENALEX_BASE}/works",
-                params={
-                    "search": query,
-                    "per_page": k,
-                    "sort": "relevance_score:desc",
-                    "select": "id,title,publication_year,cited_by_count,abstract_inverted_index,type",
-                    "mailto": "lib-systems@sfu.ca",  # OpenAlex polite-pool routing
-                },
+                params=params,
                 headers=HEADERS,
                 timeout=30,
             )
@@ -101,8 +138,12 @@ def fetch_openalex_results(query: str, k: int = 50, use_cache: bool = True) -> l
             data = resp.json()
             break
         except Exception as e:
-            if attempt == 3:
-                logger.warning("OpenAlex fetch failed for '%s': %s", query, e)
+            # Strip api_key from any error string so it never lands in logs.
+            err_str = str(e)
+            if OPENALEX_API_KEY:
+                err_str = err_str.replace(OPENALEX_API_KEY, "<api-key-redacted>")
+            if attempt == 4:
+                logger.warning("OpenAlex fetch failed for '%s': %s", query, err_str)
                 return []
             time.sleep(backoff)
             backoff *= 2
