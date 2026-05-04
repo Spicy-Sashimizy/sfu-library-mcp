@@ -1,7 +1,7 @@
-# Training management script for SFU embedding model (PowerShell / Windows)
-# Delegates to run_training.sh inside WSL.
+# Training management script for SFU embedding model (PowerShell)
+# Works from both Windows PowerShell (via WSL) and pwsh inside the Linux container.
 #
-# Usage (from anywhere in the project):
+# Usage (from the scripts/ directory or project root):
 #   .\scripts\run_training.ps1 status
 #   .\scripts\run_training.ps1 start
 #   .\scripts\run_training.ps1 resume
@@ -15,9 +15,14 @@ param(
     [string]$Command = "status"
 )
 
-# Resolve the WSL path to this script's project root
-$ProjectRoot = Split-Path -Parent $PSScriptRoot
-$WslProjectRoot = wsl wslpath -u "$($ProjectRoot.Replace('\','/'))"
+$ScriptDir  = $PSScriptRoot
+$BashScript = Join-Path $ScriptDir "run_training.sh"
 
-# Run the bash script inside WSL
-wsl bash "$WslProjectRoot/scripts/run_training.sh" $Command
+if ($IsWindows) {
+    # Running on Windows — convert path and delegate into WSL
+    $WslScript = (wsl wslpath -u $BashScript.Replace('\', '/'))
+    wsl bash $WslScript $Command
+} else {
+    # Running inside Linux container — call bash directly
+    & /usr/bin/bash $BashScript $Command
+}
