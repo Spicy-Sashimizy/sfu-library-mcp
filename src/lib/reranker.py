@@ -2,6 +2,7 @@
 
 Scores documents on multiple signals and re-orders them to surface
 the most useful results. Designed to run after the initial API ranking.
+Handles both PNX (Primo) and OpenAlex flat doc shapes via _normalize_for_rerank.
 """
 
 import re
@@ -37,55 +38,106 @@ def _tokenize(text: str) -> set[str]:
     return set(re.findall(r"[a-z0-9]+", text.lower()))
 
 
-def _score_title_relevance(doc: dict, query_tokens: set[str]) -> float:
+def _normalize_for_rerank(doc: dict) -> dict:
+    """Return a shape-stable view of a doc for scoring.
+
+    Detects PNX (Primo) vs OpenAlex flat shape and extracts:
+      title, abstract, year (int|None), type, doi, authors (list), has_fulltext (bool)
+    """
+    if doc.get("pnx"):
+        pnx = doc["pnx"]
+        display = pnx.get("display", {})
+        addata = pnx.get("addata", {})
+        links = pnx.get("links", {})
+        delivery = pnx.get("delivery", {})
+
+        titles = display.get("title", [])
+        title = titles[0] if titles else ""
+
+        descriptions = display.get("description", [])
+        abstract = descriptions[0] if descriptions else ""
+
+        dates = display.get("creationdate", [])
+        date_str = dates[0] if dates else ""
+        year: int | None = None
+        if date_str:
+            try:
+                year = int(date_str[:4])
+            except (ValueError, IndexError):
+                pass
+
+        types = display.get("type", [])
+        doc_type = types[0].lower() if types else ""
+
+        dois = addata.get("doi", [])
+        doi = dois[0] if dois else ""
+
+        authors = display.get("creator", [])
+
+        availability = delivery.get("availability", [""])[0] if delivery.get("availability") else ""
+        has_fulltext = (
+            "available" in availability.lower()
+            or bool(links.get("linktorsrc"))
+            or bool(links.get("linktohtml"))
+            or bool(links.get("linktopdf"))
+        )
+    else:
+        # OpenAlex flat shape
+        title = doc.get("title") or ""
+        abstract = doc.get("abstract") or ""
+        year = doc.get("publication_year")
+        doc_type = (doc.get("type") or "").lower()
+        doi = doc.get("doi") or ""
+        authors = [
+            a["author"]["display_name"]
+            for a in doc.get("authorships", [])
+            if (a.get("author") or {}).get("display_name")
+        ]
+        oa = doc.get("open_access") or {}
+        primary_loc = doc.get("primary_location") or {}
+        has_fulltext = (
+            bool(oa.get("is_oa"))
+            or bool(primary_loc.get("pdf_url"))
+            or bool(primary_loc.get("landing_page_url"))
+        )
+
+    return {
+        "title": title,
+        "abstract": abstract,
+        "year": year,
+        "type": doc_type,
+        "doi": doi,
+        "authors": authors,
+        "has_fulltext": has_fulltext,
+    }
+
+
+def _score_title_relevance(norm: dict, query_tokens: set[str]) -> float:
     """Score 0-1 based on query term overlap with title."""
-    pnx = doc.get("pnx", {})
-    titles = pnx.get("display", {}).get("title", [])
-    title = titles[0] if titles else ""
-    title_tokens = _tokenize(title)
+    title_tokens = _tokenize(norm["title"])
     if not query_tokens or not title_tokens:
         return 0.0
     overlap = query_tokens & title_tokens
     return len(overlap) / len(query_tokens)
 
 
-def _score_recency(doc: dict) -> float:
+def _score_recency(norm: dict) -> float:
     """Score 0-1 based on publication year. Current year = 1.0, decays 0.05/yr."""
-    pnx = doc.get("pnx", {})
-    dates = pnx.get("display", {}).get("creationdate", [])
-    date_str = dates[0] if dates else ""
-    if not date_str:
-        return 0.0
-    try:
-        year = int(date_str[:4])
-    except (ValueError, IndexError):
+    year = norm["year"]
+    if year is None:
         return 0.0
     age = _CURRENT_YEAR - year
     return max(0.0, 1.0 - age * 0.05)
 
 
-def _score_fulltext(doc: dict) -> float:
+def _score_fulltext(norm: dict) -> float:
     """Score 1.0 if full text available, 0.0 otherwise."""
-    pnx = doc.get("pnx", {})
-    delivery = pnx.get("delivery", {})
-    links = pnx.get("links", {})
-
-    availability = delivery.get("availability", [""])[0] if delivery.get("availability") else ""
-    if "available" in availability.lower():
-        return 1.0
-
-    if links.get("linktorsrc") or links.get("linktohtml") or links.get("linktopdf"):
-        return 1.0
-
-    return 0.0
+    return 1.0 if norm["has_fulltext"] else 0.0
 
 
-def _score_type_match(doc: dict) -> float:
+def _score_type_match(norm: dict) -> float:
     """Score based on resource type. Peer-reviewed articles score highest."""
-    pnx = doc.get("pnx", {})
-    types = pnx.get("display", {}).get("type", [])
-    doc_type = types[0].lower() if types else ""
-
+    doc_type = norm["type"]
     if doc_type in ("article", "journal_article", "review"):
         return 1.0
     elif doc_type in ("book", "book_chapter"):
@@ -95,32 +147,21 @@ def _score_type_match(doc: dict) -> float:
     return 0.5
 
 
-def _score_completeness(doc: dict) -> float:
+def _score_completeness(norm: dict) -> float:
     """Score 0-1 based on metadata completeness (DOI, authors, date)."""
-    pnx = doc.get("pnx", {})
-    addata = pnx.get("addata", {})
-    display = pnx.get("display", {})
-
     score = 0.0
-    if addata.get("doi") and addata["doi"][0]:
+    if norm["doi"]:
         score += 0.34
-    if display.get("creator") and display["creator"][0]:
+    if norm["authors"]:
         score += 0.33
-    if display.get("creationdate") and display["creationdate"][0]:
+    if norm["year"] is not None:
         score += 0.33
-
     return min(score, 1.0)
 
 
-def _extract_doc_text(doc: dict) -> str:
-    """Extract title + description text from a document for embedding."""
-    pnx = doc.get("pnx", {})
-    display = pnx.get("display", {})
-    titles = display.get("title", [])
-    descriptions = display.get("description", [])
-    title = titles[0] if titles else ""
-    desc = descriptions[0] if descriptions else ""
-    return f"{title} {desc}".strip()
+def _extract_doc_text(norm: dict) -> str:
+    """Extract title + abstract text from a normalized doc for embedding."""
+    return f"{norm['title']} {norm['abstract']}".strip()
 
 
 def _compute_semantic_scores(query: str, docs: list[dict], model_path: str | None = None) -> list[float] | None:
@@ -134,7 +175,8 @@ def _compute_semantic_scores(query: str, docs: list[dict], model_path: str | Non
         logger.debug("Embedding module not available, skipping semantic scoring")
         return None
 
-    doc_texts = [_extract_doc_text(doc) for doc in docs]
+    norms = [_normalize_for_rerank(doc) for doc in docs]
+    doc_texts = [_extract_doc_text(n) for n in norms]
     if not any(doc_texts):
         return None
 
@@ -222,11 +264,12 @@ def rerank_results(
 
     scored: list[tuple[float, int, dict]] = []
     for idx, doc in enumerate(docs):
-        title_score = _score_title_relevance(doc, query_tokens)
-        recency_score = _score_recency(doc)
-        fulltext_score = _score_fulltext(doc)
-        type_score = _score_type_match(doc)
-        completeness_score = _score_completeness(doc)
+        norm = _normalize_for_rerank(doc)
+        title_score = _score_title_relevance(norm, query_tokens)
+        recency_score = _score_recency(norm)
+        fulltext_score = _score_fulltext(norm)
+        type_score = _score_type_match(norm)
+        completeness_score = _score_completeness(norm)
 
         composite = (
             weights["title_relevance"] * title_score
@@ -242,5 +285,6 @@ def rerank_results(
         scored.append((composite, -idx, doc))
 
     scored.sort(key=lambda x: (x[0], x[1]), reverse=True)
-
-    return [doc for _, _, doc in scored[:limit]]
+    result = [doc for _, _, doc in scored[:limit]]
+    logger.info("rerank: rrf=%s embed=%s docs=%d -> %d", use_rrf, bool(semantic_scores), len(docs), limit)
+    return result

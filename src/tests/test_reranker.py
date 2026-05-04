@@ -4,7 +4,7 @@ from unittest.mock import patch
 
 import pytest
 
-from lib.reranker import _compute_rrf_scores, _RRF_K, rerank_results
+from lib.reranker import _compute_rrf_scores, _normalize_for_rerank, _RRF_K, rerank_results
 
 
 def _make_doc(title="Test", creator="Author", date="2024", doc_type="article",
@@ -168,3 +168,114 @@ class TestRRFScoring:
             result = rerank_results([doc_a, doc_b], "anything", limit=2,
                                     use_embedding=True, use_rrf=True)
         assert len(result) == 2  # No crash, returns ranked docs
+
+
+def _make_openalex_doc(
+    title="Test Paper",
+    abstract="",
+    year=2024,
+    doc_type="article",
+    doi="https://doi.org/10.1234/test",
+    authors=None,
+    is_oa=False,
+):
+    """Build a minimal OpenAlex flat doc for reranker tests."""
+    return {
+        "title": title,
+        "abstract": abstract,
+        "publication_year": year,
+        "type": doc_type,
+        "doi": doi,
+        "authorships": [
+            {"author": {"display_name": a}} for a in (authors or ["Test Author"])
+        ],
+        "open_access": {"is_oa": is_oa},
+        "primary_location": {},
+    }
+
+
+class TestNormalizeForRerank:
+    def test_pnx_shape_extracted_correctly(self):
+        doc = _make_doc(title="PNX Title", date="2023", doc_type="article",
+                        doi="10.1/pnx", availability="available", creator="Alice")
+        norm = _normalize_for_rerank(doc)
+        assert norm["title"] == "PNX Title"
+        assert norm["year"] == 2023
+        assert norm["type"] == "article"
+        assert norm["doi"] == "10.1/pnx"
+        assert norm["has_fulltext"] is True
+        assert "Alice" in norm["authors"]
+
+    def test_openalex_shape_extracted_correctly(self):
+        doc = _make_openalex_doc(
+            title="OA Title", year=2022, doc_type="article",
+            doi="https://doi.org/10.99/oa", is_oa=True,
+            authors=["Bob Smith"],
+        )
+        norm = _normalize_for_rerank(doc)
+        assert norm["title"] == "OA Title"
+        assert norm["year"] == 2022
+        assert norm["type"] == "article"
+        assert norm["doi"] == "https://doi.org/10.99/oa"
+        assert norm["has_fulltext"] is True
+        assert "Bob Smith" in norm["authors"]
+
+    def test_openalex_no_fulltext(self):
+        doc = _make_openalex_doc(is_oa=False)
+        doc["primary_location"] = {}
+        norm = _normalize_for_rerank(doc)
+        assert norm["has_fulltext"] is False
+
+    def test_openalex_missing_year_is_none(self):
+        doc = _make_openalex_doc()
+        doc["publication_year"] = None
+        norm = _normalize_for_rerank(doc)
+        assert norm["year"] is None
+
+    def test_openalex_empty_authorships(self):
+        doc = _make_openalex_doc()
+        doc["authorships"] = []
+        norm = _normalize_for_rerank(doc)
+        assert norm["authors"] == []
+
+
+class TestRerankerOpenAlexShape:
+    def test_recent_oa_article_ranks_above_old_non_oa(self):
+        recent = _make_openalex_doc(
+            title="Deep Learning Survey", year=2025,
+            doc_type="article", is_oa=True,
+        )
+        old = _make_openalex_doc(
+            title="History of Computing", year=1990,
+            doc_type="book", is_oa=False,
+        )
+        result = rerank_results([old, recent], "deep learning", limit=2,
+                                use_embedding=False)
+        assert result[0]["title"] == "Deep Learning Survey"
+
+    def test_openalex_docs_ranked_by_title_match(self):
+        relevant = _make_openalex_doc(title="Machine Learning Methods", year=2023)
+        irrelevant = _make_openalex_doc(title="Medieval History", year=2023)
+        result = rerank_results([irrelevant, relevant], "machine learning", limit=2,
+                                use_embedding=False)
+        assert result[0]["title"] == "Machine Learning Methods"
+
+    def test_openalex_limit_respected(self):
+        docs = [_make_openalex_doc(title=f"Paper {i}") for i in range(8)]
+        result = rerank_results(docs, "test", limit=3, use_embedding=False)
+        assert len(result) == 3
+
+    def test_openalex_empty_input(self):
+        assert rerank_results([], "test", limit=5, use_embedding=False) == []
+
+    def test_openalex_missing_fields_no_crash(self):
+        sparse = {"title": None, "publication_year": None, "type": None}
+        result = rerank_results([sparse], "test", limit=1, use_embedding=False)
+        assert len(result) == 1
+
+    def test_pnx_and_openalex_mixed_no_crash(self):
+        pnx_doc = _make_doc(title="PNX Paper", date="2023")
+        oa_doc = _make_openalex_doc(title="OpenAlex Paper", year=2023)
+        result = rerank_results([pnx_doc, oa_doc], "paper", limit=2,
+                                use_embedding=False)
+        assert len(result) == 2

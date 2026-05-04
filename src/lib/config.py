@@ -6,6 +6,8 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
+SERVER_VERSION = "1.1.0-phase-g"
+
 logger = logging.getLogger("sfu_library_mcp")
 
 

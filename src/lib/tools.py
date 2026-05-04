@@ -48,6 +48,24 @@ def _get_features() -> dict[str, bool]:
     return _get_config().features
 
 
+def _maybe_rerank(docs: list[dict], query: str, limit: int) -> list[dict]:
+    """Apply reranking if enabled; always returns at most `limit` docs."""
+    features = _get_features()
+    if not features.get("rerank_enabled"):
+        return docs[:limit]
+    try:
+        return rerank_results(
+            docs,
+            query,
+            limit,
+            use_embedding=True,
+            use_rrf=features.get("rrf_enabled", False),
+        )
+    except Exception:
+        logger.exception("Reranker failed, falling back to original order")
+        return docs[:limit]
+
+
 # ── Lazy-loaded API clients ───────────────────────────────────────────────────
 
 _zotero_client: ZoteroClient | None = None
@@ -747,6 +765,7 @@ async def _handle_search_academic(args: dict) -> list[TextContent]:
 
     if data.get("results"):
         _cache_works(data["results"])
+        data["results"] = _maybe_rerank(data["results"], query, limit)
     return [TextContent(type="text", text=format_openalex_results(data, query))]
 
 
@@ -824,6 +843,7 @@ async def _handle_search_by_topic(args: dict) -> list[TextContent]:
 
     if data.get("results"):
         _cache_works(data["results"])
+        data["results"] = _maybe_rerank(data["results"], topic, limit)
     return [TextContent(type="text", text=format_openalex_results(data, topic))]
 
 
