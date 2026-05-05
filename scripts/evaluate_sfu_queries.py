@@ -176,6 +176,78 @@ def compute_relevance_proxy(papers: list[dict]) -> list[float]:
     return scores
 
 
+def fetch_seed_paper_text(doi: str) -> str:
+    """Fetch title + abstract for a seed paper by DOI from OpenAlex.
+
+    Returns an empty string on failure so the caller can fall back to the
+    citation-only proxy rather than crashing.  Results are cached in the same
+    on-disk cache as query results to avoid redundant API calls.
+    """
+    cache_key = f"doi::{doi}"
+    if cache_key in _QUERY_CACHE:
+        return _QUERY_CACHE[cache_key]
+
+    params = {
+        "filter": f"doi:{doi}",
+        "select": "title,abstract_inverted_index",
+    }
+    if OPENALEX_API_KEY:
+        params["api_key"] = OPENALEX_API_KEY
+    else:
+        params["mailto"] = "lib-systems@sfu.ca"
+
+    try:
+        resp = requests.get(
+            f"{OPENALEX_BASE}/works",
+            params=params,
+            headers=HEADERS,
+            timeout=20,
+        )
+        resp.raise_for_status()
+        results = resp.json().get("results", [])
+        if not results:
+            logger.warning("Seed paper not found for DOI: %s", doi)
+            return ""
+        w = results[0]
+        abstract = _reconstruct_abstract(w.get("abstract_inverted_index"))
+        text = f"{w.get('title', '')} {abstract}".strip()
+    except Exception as e:
+        err = str(e)
+        if OPENALEX_API_KEY:
+            err = err.replace(OPENALEX_API_KEY, "<api-key-redacted>")
+        logger.warning("Failed to fetch seed paper %s: %s", doi, err)
+        text = ""
+
+    _QUERY_CACHE[cache_key] = text
+    _save_query_cache(_QUERY_CACHE)
+    return text
+
+
+def compute_mixed_relevance_proxy(
+    papers: list[dict],
+    seed_embedding: np.ndarray,
+    paper_embeddings: np.ndarray,
+) -> list[float]:
+    """Mixed relevance proxy: 0.5 * log(cite+1) + 0.5 * cosine(paper, seed).
+
+    The cosine term anchors relevance to a human-chosen seed paper rather than
+    trusting citation count alone.  Citation count correlates with OpenAlex BM25
+    score, creating a circular evaluation; the seed-paper cosine breaks that
+    correlation for queries where a canonical paper is known.
+
+    Both terms contribute equally.  Cosine ranges [-1, 1]; log1p(cite) ranges
+    [0, ~15].  Equal weights therefore still skew toward citation for
+    well-cited results — this is intentional.  When all candidates have low
+    cosine similarity to the seed (subject mismatch), the proxy degrades
+    gracefully to near-citation-only.
+    """
+    cosines = (paper_embeddings @ seed_embedding).tolist()
+    scores = []
+    for p, cos in zip(papers, cosines):
+        scores.append(0.5 * math.log1p(p.get("cited_by_count", 0)) + 0.5 * cos)
+    return scores
+
+
 def ndcg_at_k(ranked_relevance: list[float], ideal_relevance: list[float], k: int) -> float:
     """Compute NDCG@k given ranked and ideal relevance lists."""
     def dcg(rels: list[float], k: int) -> float:
@@ -278,11 +350,16 @@ def evaluate_model(
     results_per_query: int = 50,
     delay: float = 0.5,
     fusion: str = "none",
+    use_mixed_proxy: bool = False,
 ) -> dict:
     """Evaluate a model on the SFU eval query set. Returns per-query and aggregate metrics.
 
     fusion: "none" → embedding cosine alone (current behaviour)
             "rrf"  → reciprocal rank fusion of BM25 + embedding ranks
+
+    use_mixed_proxy: when True and the query has a ``seed_doi`` field, relevance
+        grades use the mixed citation+cosine proxy (M.3).  Falls back to
+        citation-only when seed_doi is absent or the seed paper can't be fetched.
     """
     all_ndcg: list[float] = []
     all_mrr: list[float] = []
@@ -293,6 +370,7 @@ def evaluate_model(
     for qi, q_item in enumerate(eval_queries):
         query = q_item["query"]
         subject = q_item.get("subject", "Unknown")
+        seed_doi = q_item.get("seed_doi", "").strip() if use_mixed_proxy else ""
 
         logger.info("  [%d/%d] '%s'", qi + 1, len(eval_queries), query[:60])
 
@@ -304,15 +382,34 @@ def evaluate_model(
             logger.warning("  No results for query: %s", query)
             continue
 
-        # Get relevance scores at BM25 rank (ideal = by citation count)
-        relevance_scores = compute_relevance_proxy(papers)
+        # Compute relevance grades — mixed proxy when seed_doi present, else citation-only
+        use_seed = bool(seed_doi and model is not None)
+        if use_seed:
+            seed_text = fetch_seed_paper_text(seed_doi)
+            use_seed = bool(seed_text)
+
+        if use_seed:
+            paper_texts = [f"{p.get('title', '')} {p.get('abstract', '')}" for p in papers]
+            all_texts = [seed_text] + paper_texts
+            embs = encode_texts(model, all_texts)
+            seed_emb = embs[0]
+            paper_embs = embs[1:]
+            relevance_scores = compute_mixed_relevance_proxy(papers, seed_emb, paper_embs)
+        else:
+            relevance_scores = compute_relevance_proxy(papers)
 
         if model is not None:
             if fusion == "rrf":
                 reranked = rerank_with_rrf(query, papers, model)
             else:
                 reranked = rerank_with_embedding(query, papers, model)
-            reranked_relevance = compute_relevance_proxy(reranked)
+            if use_seed:
+                # Re-embed in the reranked order (papers are the same objects — just reordered)
+                reranked_texts = [f"{p.get('title', '')} {p.get('abstract', '')}" for p in reranked]
+                reranked_embs = encode_texts(model, reranked_texts)
+                reranked_relevance = compute_mixed_relevance_proxy(reranked, seed_emb, reranked_embs)
+            else:
+                reranked_relevance = compute_relevance_proxy(reranked)
         else:
             # BM25 only — use OpenAlex rank order as-is
             reranked_relevance = relevance_scores
@@ -451,6 +548,10 @@ def main():
                         help="Reranking strategy: 'none' = embedding only, "
                              "'rrf' = reciprocal rank fusion of BM25 + embedding, "
                              "'both' = run each custom model twice (with and without RRF)")
+    parser.add_argument("--mixed-proxy", action="store_true",
+                        help="Use mixed citation+cosine relevance proxy for queries that have "
+                             "a seed_doi field (Phase M.3). Falls back to citation-only when "
+                             "seed_doi is absent.")
     args = parser.parse_args()
 
     # Load eval queries
@@ -501,6 +602,11 @@ def main():
 
     fusion_modes = ["none", "rrf"] if args.fusion == "both" else [args.fusion]
 
+    mixed_proxy = getattr(args, "mixed_proxy", False)
+    seed_doi_count = sum(1 for q in eval_queries if q.get("seed_doi"))
+    if mixed_proxy:
+        logger.info("Mixed proxy enabled: %d/%d queries have seed_doi", seed_doi_count, len(eval_queries))
+
     for model_name, model in models_to_eval:
         for fusion in fusion_modes:
             label = model_name if fusion == "none" else f"{model_name} + RRF"
@@ -513,6 +619,7 @@ def main():
                 results_per_query=args.results_per_query,
                 delay=args.delay,
                 fusion=fusion,
+                use_mixed_proxy=mixed_proxy,
             )
             all_results.append(result)
 
