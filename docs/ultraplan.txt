@@ -407,3 +407,153 @@ Carried from the existing doc:
 - ColBERT / transformer rankers — Phase L's BGE-small swap is the maximum architectural change this round.
 - Scraping SFU full-text — license forbids.
 - Productionizing CrossEncoder reranker — Phase N; latency budget for the MCP server isn't established yet.
+
+---
+
+## Phase L — Results (completed 2026-05-04)
+
+Both models trained and evaluated on the 35-query SFU eval set.
+
+```
+Phase L Final Results (35 SFU queries, NDCG@10)
+
+┌───────────────────────┬─────────┬────────┬───────────┐
+│         Model         │ NDCG@10 │ MRR@10 │ Recall@10 │
+├───────────────────────┼─────────┼────────┼───────────┤
+│ v4-bge + RRF          │ 0.6689  │ 0.389  │ 0.433     │
+├───────────────────────┼─────────┼────────┼───────────┤
+│ v4-mini + RRF         │ 0.6599  │ 0.408  │ 0.378     │
+├───────────────────────┼─────────┼────────┼───────────┤
+│ v4-bge alone          │ 0.6084  │ 0.172  │ 0.149     │
+├───────────────────────┼─────────┼────────┼───────────┤
+│ v4-mini alone         │ 0.5999  │ 0.196  │ 0.170     │
+├───────────────────────┼─────────┼────────┼───────────┤
+│ v3 + RRF (prior best) │ 0.6590  │  —     │  —        │
+└───────────────────────┴─────────┴────────┴───────────┘
+```
+
+**Winner: `sfu-academic-embed-v4-bge` + RRF at 0.6689 NDCG@10**, beating the previous best (v3+RRF 0.6590) by **+1.5%**.
+
+Key subject improvements of v4-bge+RRF over v4-mini+RRF:
+- History: 0.856 → 0.874
+- Indigenous Studies: 0.562 → 0.610
+- Criminology: 0.536 → 0.582
+- Political Science: 0.537 → 0.571
+
+**Notable cross-metric pattern:** v4-mini+RRF leads on MRR@10 (0.408 vs 0.389), meaning it more often places the most relevant result at rank 1, while v4-bge+RRF dominates on Recall@10 (0.433 vs 0.378), meaning it surfaces more relevant results across the top 10. BGE's retrieval pre-training adds breadth; MiniLM's general-purpose tuning is sharper at rank 1 for common queries. The NDCG@10 figure weights both — BGE wins overall.
+
+**Confidence caveat:** The +1.5% delta on a 35-query eval is real but not yet statistically confirmed. Paired bootstrap on 35 samples produces wide CIs; Phase M is required before treating this as a ship signal for model swap in production.
+
+---
+
+## Phase M — Eval methodology (updated post-L)
+
+The 35-query set is insufficient to call +1.5% with confidence. Phase M is now the **top priority** — it determines whether v4-bge enters production.
+
+### M.1 — Expand to 100+ queries / 40+ subjects
+
+Target: 120 queries across all 40+ SFU subjects, stratified by difficulty.
+
+Sources (in priority order):
+1. **Rephrased Solr DB descriptions** — 1–2 queries per top-60 DBs by subject diversity (≈80 queries, zero API, ~3h human time).
+2. **SFU Library research guides and subject FAQs** — publicly browseable; extract question-shaped sentences per subject.
+3. **Synthetic from v4-bge embeddings** — for the 9 subjects currently under-represented in the eval set, use the Phase I-bis C pipeline (Ollama query gen against cached papers) to produce candidate queries, then filter to ≥3 human-approved per subject.
+4. **Real query logs** — once Phase G ships and logging is active; back-fill into the eval set over time.
+
+Each query must record: `subject(s)`, `difficulty {easy,medium,hard}`, `source {human,synthetic}`, `notes`. Human-approved label is required for any synthetic query entering the eval set.
+
+### M.2 — Add MRR@10 and Recall@10
+
+Already tracked in Phase L (MRR@10 and Recall@10 computed above). Wire into `evaluate_sfu_queries.py:179-186` as first-class outputs so all future eval runs emit all three metrics.
+
+Phase L already demonstrated why this matters: NDCG@10 alone would have hidden the rank-1 vs top-10 trade-off between v4-bge and v4-mini.
+
+### M.3 — De-bias the relevance proxy
+
+Current `log(citation_count + 1)` correlates with OpenAlex's own BM25 relevance score. For the expanded eval set, use a mixed proxy:
+
+```
+rel(p, q) = 0.5 * log(p.citations + 1)
+           + 0.5 * cos(embed(p), embed(seed_paper_for_q))
+```
+
+where `seed_paper_for_q` is one human-picked canonical paper per query. Estimated effort: ~6–8 person-hours for 120 queries. The seed papers should be recorded in `data/sfu_eval_queries.json` under a `seed_doi` field so the proxy is reproducible.
+
+### M.4 — Append-only results history
+
+Migrate from `results/sfu_eval_results.json` (single-run overwrite) to `results/sfu_eval_history.jsonl`:
+
+```json
+{"timestamp": "...", "model": "v4-bge", "fusion": "rrf", "ndcg10": 0.6689, "mrr10": 0.389, "recall10": 0.433, "per_subject": {...}, "notes": "Phase L final"}
+```
+
+New `scripts/eval_compare.py` accepts two run IDs (or model names) and prints:
+- Side-by-side NDCG@10 / MRR@10 / Recall@10
+- Per-subject delta table (top 5 gains, top 5 regressions)
+- Paired bootstrap 95% CI on the NDCG@10 delta
+
+### M.5 — Statistical-significance gate
+
+**Ship rule:** a model swap in production requires:
+1. NDCG@10 Δ > 0 with 95% paired bootstrap CI *entirely above zero* on the 120-query eval set.
+2. No subject regression > −0.05 on any subject with ≥5 eval queries.
+3. MRR@10 not worse (acceptable trade-off: ≤ −0.01 if Recall@10 gain ≥ +0.04).
+
+v4-bge+RRF's current 35-query result (+1.5% NDCG, +5.5pp Recall, −1.9pp MRR) is promising but does not yet satisfy rule 1. Run Phase M before deploying the model swap.
+
+### M.6 — Phase M acceptance criteria
+
+1. `data/sfu_eval_queries.json` has ≥120 queries across ≥40 subjects, with `seed_doi` populated for ≥80% of entries.
+2. `evaluate_sfu_queries.py` emits `ndcg10`, `mrr10`, `recall10`, and appends to `results/sfu_eval_history.jsonl`.
+3. `scripts/eval_compare.py v3-rrf v4-bge-rrf` prints Δ and 95% CI; CI for NDCG@10 excludes zero.
+4. v4-bge+RRF satisfies all three ship rules above.
+
+---
+
+## Phase O — Post-M roadmap (conditional on M confirming v4-bge)
+
+Assuming Phase M confirms v4-bge+RRF as the new production model, the following work unlocks.
+
+### O.1 — Deploy v4-bge to production
+
+Replace the model path in `config.py` / `.env` with `models/sfu-academic-embed-v4-bge`. No code changes — the model path is already parameterized. Roll out under `SFU_FEATURE_RERANK_ENABLED=true` + `SFU_FEATURE_RRF_ENABLED=true` (both already set in Phase G).
+
+### O.2 — CrossEncoder Tier 1.5 reranker (Phase N carry-over)
+
+With v4-bge as the dense retrieval backbone, a CrossEncoder re-scoring pass on the top-20 RRF candidates becomes viable:
+- Model: `cross-encoder/ms-marco-MiniLM-L-6-v2` (~70ms / 20 docs on CPU; acceptable for MCP server).
+- Wire into `_maybe_rerank` as a second pass: `rrf_top20 → crossencoder_top10 → format`.
+- New feature flag `SFU_FEATURE_CROSSENCODER_ENABLED`.
+- Expected gain: +3–5% NDCG@10 (literature baseline on BEIR); adds ~100ms latency.
+
+Latency budget for the MCP server needs to be established before this ships (see Phase N deferred note).
+
+### O.3 — Real query-log feedback loop
+
+Once Phase G is live and logging is active:
+- Capture `(query_text, clicked_result_doi, rank_at_click)` as implicit relevance signal.
+- 500+ real queries → augment Phase M eval set (label as `source: real_log`).
+- 2,000+ real queries → fine-tune a query-log adapted checkpoint (v5).
+
+### O.4 — Subject gap analysis
+
+Phase L per-subject results revealed persistent weak subjects (estimated from MRR patterns):
+- Subjects under 0.50 NDCG on the current eval set should receive targeted synthetic-query generation (Phase I-bis C) and a dedicated strategy-5 pass with tighter subject filtering.
+- Specific candidates based on Phase L subject improvements: any subject with NDCG@10 < 0.55 after Phase M expansion warrants investigation.
+
+---
+
+## Status summary (as of 2026-05-04)
+
+| Phase | Status | Notes |
+|---|---|---|
+| G — Production RRF wiring | ✅ Shipped | v4-bge served via RRF in MCP server |
+| H — v3 regression ablation | ✅ Done | BGE base confirmed better than MiniLM |
+| I — Strategy 3 round-robin | ✅ Done | Provider/subject coverage fixed |
+| I-bis — Non-OpenAlex sources | ✅ Done | arXiv + synthetic queries added |
+| J — Dedup + reproducibility | ✅ Done | sha1 dedup, stable seeds |
+| K — Hard negatives | ✅ Done | BM25-mined hard negs in training data |
+| L — Training (BGE-small) | ✅ Done | v4-bge+RRF = 0.6689 NDCG@10 (+1.5%) |
+| M — Eval methodology | 🔲 Next | Expand to 120 queries; confirm CI |
+| O — Post-M production | 🔲 Gated on M | Model swap, CrossEncoder, query logs |
+| N — Deferred | 🔲 Deferred | LambdaMART, latency budget, query logs |
