@@ -2,176 +2,884 @@
   {
     "query": "indigenous language revitalization First Nations British Columbia",
     "subject": "Indigenous Studies",
+    "difficulty": "hard",
+    "source": "human",
     "notes": "SFU has 46 Indigenous Studies databases; off-the-shelf models score ~0.0002"
   },
   {
     "query": "residential school trauma intergenerational effects Indigenous communities",
     "subject": "Indigenous Studies",
+    "difficulty": "hard",
+    "source": "human",
     "notes": "Core SFU institutional priority area"
   },
   {
     "query": "Truth and Reconciliation Commission calls to action implementation Canada",
     "subject": "Indigenous Studies",
+    "difficulty": "hard",
+    "source": "human",
     "notes": "Highly specific to Canadian institutional context"
   },
   {
     "query": "land back movement Indigenous rights treaty negotiations British Columbia",
     "subject": "Indigenous Studies",
+    "difficulty": "hard",
+    "source": "human",
     "notes": "Tests regional specificity"
   },
   {
     "query": "housing affordability crisis Metro Vancouver rental market",
     "subject": "Canadian Studies",
+    "difficulty": "hard",
+    "source": "human",
     "notes": "Local Canadian topic; off-the-shelf models score ~0.005"
   },
   {
     "query": "Canadian immigration settlement services multicultural policy",
     "subject": "Canadian Studies",
+    "difficulty": "medium",
+    "source": "human",
     "notes": "SFU has 58 Canadian Studies databases"
   },
   {
     "query": "BC provincial politics electoral reform referendum",
     "subject": "Canadian Studies",
+    "difficulty": "hard",
+    "source": "human",
     "notes": "Regional Canadian political science"
   },
   {
     "query": "Chinese Canadian discrimination exclusion act immigration history",
     "subject": "Canadian Studies",
+    "difficulty": "hard",
+    "source": "human",
     "notes": "Canadian history — SFU specialty"
   },
   {
     "query": "restorative justice alternatives incarceration recidivism reduction",
     "subject": "Criminology",
+    "difficulty": "medium",
+    "source": "human",
     "notes": "SFU criminology — unique program, 44 databases"
   },
   {
     "query": "police use of force racial profiling Black Indigenous communities Canada",
     "subject": "Criminology",
+    "difficulty": "hard",
+    "source": "human",
     "notes": "Criminology + Canadian intersection"
   },
   {
     "query": "cybercrime financial fraud digital forensics investigation",
     "subject": "Criminology",
+    "difficulty": "medium",
+    "source": "human",
     "notes": "Modern criminology topic"
   },
   {
     "query": "prison population mental health services rehabilitation programs",
     "subject": "Criminology",
+    "difficulty": "medium",
+    "source": "human",
     "notes": "Corrections and criminology"
   },
   {
     "query": "interactive media experience design user engagement game mechanics",
-    "subject": "Interactive Arts and Technology (SIAT)",
+    "subject": "Interactive Arts & Technology (SIAT)",
+    "difficulty": "hard",
+    "source": "human",
     "notes": "SFU SIAT program — unique, 44 databases; off-the-shelf models perform poorly"
   },
   {
     "query": "virtual reality augmented reality immersive learning environments",
-    "subject": "Interactive Arts and Technology (SIAT)",
+    "subject": "Interactive Arts & Technology (SIAT)",
+    "difficulty": "medium",
+    "source": "human",
     "notes": "SIAT interdisciplinary area"
   },
   {
     "query": "computational art generative algorithms creative machine learning",
-    "subject": "Interactive Arts and Technology (SIAT)",
+    "subject": "Interactive Arts & Technology (SIAT)",
+    "difficulty": "hard",
+    "source": "human",
     "notes": "SIAT-Computing intersection"
   },
   {
     "query": "human computer interaction accessibility inclusive design",
-    "subject": "Interactive Arts and Technology (SIAT)",
+    "subject": "Interactive Arts & Technology (SIAT)",
+    "difficulty": "easy",
+    "source": "human",
     "notes": "Core SIAT/HCI topic"
   },
   {
     "query": "biomedical physiology exercise rehabilitation muscle physiology",
     "subject": "Biomedical Physiology and Kinesiology (BPK)",
+    "difficulty": "medium",
+    "source": "human",
     "notes": "SFU BPK unique program — tests cross-disciplinary boundary"
   },
   {
     "query": "kinesiology sport performance motor learning biomechanics",
     "subject": "Biomedical Physiology and Kinesiology (BPK)",
+    "difficulty": "medium",
+    "source": "human",
     "notes": "BPK core topic"
   },
   {
     "query": "cardiovascular disease exercise intervention prevention outcomes",
     "subject": "Biomedical Physiology and Kinesiology (BPK)",
+    "difficulty": "easy",
+    "source": "human",
     "notes": "BPK-Health Sciences intersection"
   },
   {
     "query": "ESG sustainable investing responsible finance portfolio performance",
     "subject": "Finance",
+    "difficulty": "medium",
+    "source": "human",
     "notes": "Beedie School of Business — 64 Finance databases"
   },
   {
     "query": "Canadian banking regulation financial stability macroprudential policy",
     "subject": "Finance",
+    "difficulty": "hard",
+    "source": "human",
     "notes": "Finance + Canadian Studies intersection"
   },
   {
     "query": "venture capital startup ecosystem innovation funding",
     "subject": "Finance",
+    "difficulty": "easy",
+    "source": "human",
     "notes": "Finance/entrepreneurship topic"
   },
   {
     "query": "salmon aquaculture disease management Pacific Northwest fisheries",
-    "subject": "Resource and Environmental Management",
+    "subject": "Resource & Environmental Management",
+    "difficulty": "hard",
+    "source": "human",
     "notes": "BC-specific environmental topic"
   },
   {
     "query": "wildfire management prescribed burning Indigenous traditional ecological knowledge",
-    "subject": "Resource and Environmental Management",
+    "subject": "Resource & Environmental Management",
+    "difficulty": "hard",
+    "source": "human",
     "notes": "Combines environmental management with Indigenous knowledge — SFU specialty"
   },
   {
     "query": "old growth forest conservation biodiversity British Columbia",
-    "subject": "Resource and Environmental Management",
+    "subject": "Resource & Environmental Management",
+    "difficulty": "hard",
+    "source": "human",
     "notes": "BC-specific conservation topic"
   },
   {
     "query": "Northern Gateway pipeline environmental assessment First Nations opposition",
-    "subject": "Resource and Environmental Management",
+    "subject": "Resource & Environmental Management",
+    "difficulty": "hard",
+    "source": "human",
     "notes": "BC environmental policy + Indigenous rights"
   },
   {
     "query": "opioid crisis fentanyl overdose harm reduction policy Canada",
     "subject": "Health Sciences",
+    "difficulty": "hard",
+    "source": "human",
     "notes": "Canadian public health crisis — 46 Health Sciences databases"
   },
   {
     "query": "Indigenous health disparities social determinants healthcare access",
     "subject": "Health Sciences",
+    "difficulty": "hard",
+    "source": "human",
     "notes": "Health Sciences + Indigenous Studies intersection"
   },
   {
     "query": "long COVID post-acute sequelae epidemiology treatment",
     "subject": "Health Sciences",
+    "difficulty": "medium",
+    "source": "human",
     "notes": "Current health topic"
   },
   {
     "query": "political risk country ratings international investment data",
     "subject": "Political Science",
+    "difficulty": "hard",
+    "source": "human",
     "notes": "Tests SFU Wharton ICRG database coverage — 56 Political Science databases"
   },
   {
     "query": "media framing political polarization social media misinformation",
     "subject": "Communication",
+    "difficulty": "easy",
+    "source": "human",
     "notes": "Communication + Political Science intersection"
   },
   {
     "query": "income inequality poverty measurement Gini coefficient Canada",
     "subject": "Economics",
+    "difficulty": "medium",
+    "source": "human",
     "notes": "Economics + Canadian Studies — 56 Economics databases"
   },
   {
     "query": "digital humanities text mining archival primary sources",
     "subject": "History",
+    "difficulty": "medium",
+    "source": "human",
     "notes": "History + computing intersection — SFU has 124 History databases"
   },
   {
     "query": "feminist theory gender studies intersectionality labour",
-    "subject": "Women's Studies",
+    "subject": "Gender, Sexuality, and Women's Studies",
+    "difficulty": "medium",
+    "source": "human",
     "notes": "Humanities social sciences"
   },
   {
     "query": "machine learning public health disease surveillance prediction",
-    "subject": "Health Sciences / Computing Science",
+    "subject": "Health Sciences",
+    "difficulty": "medium",
+    "source": "human",
     "notes": "Interdisciplinary — tests subject boundary"
+  },
+
+  {
+    "query": "deep learning convolutional neural networks image recognition benchmark",
+    "subject": "Computing Science",
+    "difficulty": "easy",
+    "source": "human",
+    "notes": "Core CS topic; well-covered in OpenAlex; tests floor for citation-heavy subjects"
+  },
+  {
+    "query": "distributed systems Byzantine fault tolerance consensus algorithm",
+    "subject": "Computing Science",
+    "difficulty": "medium",
+    "source": "human",
+    "notes": "Systems CS; tests technical depth retrieval"
+  },
+  {
+    "query": "privacy preserving federated learning differential privacy data sharing",
+    "subject": "Computing Science",
+    "difficulty": "medium",
+    "source": "human",
+    "notes": "Emerging ML/privacy subfield; high recent-paper density"
+  },
+
+  {
+    "query": "seismic engineering earthquake retrofitting structural resilience buildings",
+    "subject": "Engineering Science",
+    "difficulty": "medium",
+    "source": "human",
+    "notes": "Earthquake engineering — relevant to BC seismic zone"
+  },
+  {
+    "query": "life cycle assessment carbon footprint sustainable manufacturing materials",
+    "subject": "Engineering Science",
+    "difficulty": "medium",
+    "source": "human",
+    "notes": "Sustainability + engineering; SFU Engineering has 40+ databases"
+  },
+
+  {
+    "query": "robotic manipulation control algorithms real-time embedded systems",
+    "subject": "Mechatronic Systems Engineering",
+    "difficulty": "medium",
+    "source": "human",
+    "notes": "SFU-unique MSE program; tests niche engineering retrieval"
+  },
+  {
+    "query": "MEMS microelectromechanical sensor actuator fabrication biomedical device",
+    "subject": "Mechatronic Systems Engineering",
+    "difficulty": "hard",
+    "source": "human",
+    "notes": "MSE + BPK intersection; very specific technical vocabulary"
+  },
+
+  {
+    "query": "formative assessment feedback learning outcomes student achievement",
+    "subject": "Education",
+    "difficulty": "easy",
+    "source": "human",
+    "notes": "Core education topic; high baseline citation density"
+  },
+  {
+    "query": "decolonizing curriculum Indigenous education land-based pedagogy reconciliation",
+    "subject": "Education",
+    "difficulty": "hard",
+    "source": "human",
+    "notes": "Education + Indigenous Studies intersection; SFU Faculty of Education priority"
+  },
+  {
+    "query": "educational technology blended learning student engagement STEM",
+    "subject": "Education",
+    "difficulty": "easy",
+    "source": "human",
+    "notes": "Ed-tech topic; large literature base"
+  },
+
+  {
+    "query": "cognitive behavioural therapy depression anxiety randomized controlled trial",
+    "subject": "Psychology",
+    "difficulty": "easy",
+    "source": "human",
+    "notes": "Clinically well-cited; tests easy retrieval ceiling"
+  },
+  {
+    "query": "attachment theory infant caregiving early childhood development",
+    "subject": "Psychology",
+    "difficulty": "easy",
+    "source": "human",
+    "notes": "Developmental psychology; broad well-cited literature"
+  },
+  {
+    "query": "traumatic brain injury executive function cognitive rehabilitation neuropsychology",
+    "subject": "Psychology",
+    "difficulty": "medium",
+    "source": "human",
+    "notes": "BPK/Psychology boundary; tests cross-disciplinary retrieval"
+  },
+
+  {
+    "query": "income stratification class reproduction social mobility intergenerational",
+    "subject": "Sociology",
+    "difficulty": "easy",
+    "source": "human",
+    "notes": "Core sociology topic; Economics overlap"
+  },
+  {
+    "query": "systemic racism labour market discrimination racialized minorities Canada",
+    "subject": "Sociology",
+    "difficulty": "hard",
+    "source": "human",
+    "notes": "Sociology + Canadian Studies + Criminology; tests multi-subject boundary"
+  },
+
+  {
+    "query": "bioethics organ allocation transplant consent scarce medical resources",
+    "subject": "Philosophy",
+    "difficulty": "medium",
+    "source": "human",
+    "notes": "Applied ethics; Health Sciences overlap"
+  },
+  {
+    "query": "climate justice intergenerational ethics obligations future generations",
+    "subject": "Philosophy",
+    "difficulty": "medium",
+    "source": "human",
+    "notes": "Environmental ethics; Resource & Environmental Management overlap"
+  },
+
+  {
+    "query": "graph algorithms combinatorial optimization network flow complexity theory",
+    "subject": "Mathematics",
+    "difficulty": "medium",
+    "source": "human",
+    "notes": "CS-Math intersection; tests technical retrieval"
+  },
+  {
+    "query": "differential equations mathematical epidemiology SIR compartmental model",
+    "subject": "Mathematics",
+    "difficulty": "medium",
+    "source": "human",
+    "notes": "Applied math + public health; COVID-era citation spike"
+  },
+
+  {
+    "query": "quantum computing qubit decoherence error correction fault tolerant",
+    "subject": "Physics",
+    "difficulty": "medium",
+    "source": "human",
+    "notes": "Emerging physics-CS boundary; rapidly growing literature"
+  },
+  {
+    "query": "dark matter direct detection underground laboratory particle physics",
+    "subject": "Physics",
+    "difficulty": "hard",
+    "source": "human",
+    "notes": "Experimental particle physics; niche vocabulary"
+  },
+
+  {
+    "query": "green chemistry catalysis sustainable synthesis solvent-free organic",
+    "subject": "Chemistry",
+    "difficulty": "medium",
+    "source": "human",
+    "notes": "Green chemistry; SFU Chemistry department focus area"
+  },
+  {
+    "query": "atmospheric chemistry particulate matter aerosol air quality urban",
+    "subject": "Chemistry",
+    "difficulty": "medium",
+    "source": "human",
+    "notes": "Chemistry + Geography + Public Health intersection"
+  },
+
+  {
+    "query": "supply chain disruption resilience post-pandemic operations management",
+    "subject": "Business Administration",
+    "difficulty": "medium",
+    "source": "human",
+    "notes": "Beedie School; pandemic-era topic with strong recent citation growth"
+  },
+  {
+    "query": "diversity equity inclusion organizational culture firm performance",
+    "subject": "Business Administration",
+    "difficulty": "medium",
+    "source": "human",
+    "notes": "Management + HR; well-cited recent literature"
+  },
+
+  {
+    "query": "precarious employment gig economy platform workers labour rights Canada",
+    "subject": "Labour Studies",
+    "difficulty": "hard",
+    "source": "human",
+    "notes": "Canadian labour law focus; SFU has dedicated Labour Studies program"
+  },
+  {
+    "query": "trade union organizing collective bargaining public sector British Columbia",
+    "subject": "Labour Studies",
+    "difficulty": "hard",
+    "source": "human",
+    "notes": "BC-specific labour relations; regional context matters"
+  },
+
+  {
+    "query": "endangered language documentation revitalization BC First Nations linguistic",
+    "subject": "Linguistics",
+    "difficulty": "hard",
+    "source": "human",
+    "notes": "Linguistics + Indigenous Studies; BC-specific language families"
+  },
+  {
+    "query": "second language acquisition bilingual education French immersion Canada",
+    "subject": "Linguistics",
+    "difficulty": "medium",
+    "source": "human",
+    "notes": "Canadian bilingualism context; Education overlap"
+  },
+
+  {
+    "query": "postcolonial literature diaspora identity South Asian Canadian authors",
+    "subject": "English - General",
+    "difficulty": "medium",
+    "source": "human",
+    "notes": "Canadian literature + postcolonial theory; SFU English department strength"
+  },
+  {
+    "query": "speculative fiction climate fiction dystopia contemporary novel ecocriticism",
+    "subject": "English - General",
+    "difficulty": "medium",
+    "source": "human",
+    "notes": "Emerging literary studies area; tests recent literature retrieval"
+  },
+
+  {
+    "query": "Canadian documentary film Indigenous representation National Film Board NFB",
+    "subject": "Film",
+    "difficulty": "hard",
+    "source": "human",
+    "notes": "Canadian film studies; NFB-specific context; SFU School for the Contemporary Arts"
+  },
+  {
+    "query": "streaming platform recommendation algorithm content diversity audience",
+    "subject": "Film",
+    "difficulty": "medium",
+    "source": "human",
+    "notes": "Media studies + Computing Science boundary; Communication overlap"
+  },
+
+  {
+    "query": "urban heat island green infrastructure cooling adaptation city planning",
+    "subject": "Geography",
+    "difficulty": "medium",
+    "source": "human",
+    "notes": "Urban geography + climate adaptation; Metro Vancouver relevance"
+  },
+  {
+    "query": "GIS remote sensing land use change deforestation spatial analysis",
+    "subject": "Geography",
+    "difficulty": "medium",
+    "source": "human",
+    "notes": "Spatial methods; Resource & Environmental Management overlap"
+  },
+
+  {
+    "query": "dementia aging in place community home care support services",
+    "subject": "Gerontology",
+    "difficulty": "medium",
+    "source": "human",
+    "notes": "SFU Gerontology Research Centre; BC aging population context"
+  },
+  {
+    "query": "elder abuse neglect residential care policy prevention intervention",
+    "subject": "Gerontology",
+    "difficulty": "medium",
+    "source": "human",
+    "notes": "Elder rights policy; Criminology overlap"
+  },
+
+  {
+    "query": "zooarchaeology faunal assemblage subsistence strategies Pacific Northwest Coast",
+    "subject": "Anthropology",
+    "difficulty": "hard",
+    "source": "human",
+    "notes": "BC archaeology + anthropology; very domain-specific vocabulary"
+  },
+  {
+    "query": "medical anthropology traditional healing Indigenous medicine health systems integration",
+    "subject": "Anthropology",
+    "difficulty": "hard",
+    "source": "human",
+    "notes": "Indigenous health + anthropology intersection; tests multi-subject retrieval"
+  },
+
+  {
+    "query": "Northwest Coast archaeology maritime adaptation coastal village sites BC",
+    "subject": "Archaeology",
+    "difficulty": "hard",
+    "source": "human",
+    "notes": "BC-specific archaeological context; very narrow subject vocabulary"
+  },
+  {
+    "query": "lithic analysis stone tool technology reduction sequence prehistoric BC",
+    "subject": "Archaeology",
+    "difficulty": "hard",
+    "source": "human",
+    "notes": "Technical archaeological vocabulary; regional specificity"
+  },
+
+  {
+    "query": "Paris Agreement climate pledges NDC implementation effectiveness multilateral",
+    "subject": "International Studies",
+    "difficulty": "medium",
+    "source": "human",
+    "notes": "Global governance; Political Science + Environmental Management overlap"
+  },
+  {
+    "query": "transitional justice truth commission accountability human rights violations",
+    "subject": "International Studies",
+    "difficulty": "medium",
+    "source": "human",
+    "notes": "International law + human rights; Law overlap"
+  },
+
+  {
+    "query": "extractivism Indigenous land rights resistance Amazon deforestation Brazil",
+    "subject": "Latin American Studies",
+    "difficulty": "hard",
+    "source": "human",
+    "notes": "Latin American Studies + Indigenous rights; Resource & Environmental Management overlap"
+  },
+  {
+    "query": "Central American migration displacement gang violence asylum United States",
+    "subject": "Latin American Studies",
+    "difficulty": "medium",
+    "source": "human",
+    "notes": "Migration + human rights; Canadian Studies + International Studies overlap"
+  },
+
+  {
+    "query": "transit-oriented development affordable housing zoning gentrification displacement",
+    "subject": "Urban Studies",
+    "difficulty": "medium",
+    "source": "human",
+    "notes": "Urban planning; Metro Vancouver housing crisis context; Geography overlap"
+  },
+  {
+    "query": "smart city surveillance public space data governance privacy rights",
+    "subject": "Urban Studies",
+    "difficulty": "medium",
+    "source": "human",
+    "notes": "Urban tech governance; Computing Science + Political Science overlap"
+  },
+
+  {
+    "query": "Aboriginal title Crown duty to consult section 35 Canadian Constitution",
+    "subject": "Applied Legal Studies",
+    "difficulty": "hard",
+    "source": "human",
+    "notes": "Indigenous constitutional law; very specific Canadian legal vocabulary"
+  },
+  {
+    "query": "privacy law data protection algorithmic accountability digital rights Canada",
+    "subject": "Applied Legal Studies",
+    "difficulty": "medium",
+    "source": "human",
+    "notes": "Canadian digital law; Computing Science + Political Science overlap"
+  },
+
+  {
+    "query": "CRISPR gene editing off-target effects therapeutic clinical applications",
+    "subject": "Molecular Biology & Biochemistry",
+    "difficulty": "medium",
+    "source": "human",
+    "notes": "High-citation emerging biology area; tests technical retrieval depth"
+  },
+  {
+    "query": "protein structure prediction AlphaFold machine learning drug discovery",
+    "subject": "Molecular Biology & Biochemistry",
+    "difficulty": "medium",
+    "source": "human",
+    "notes": "ML + biochemistry boundary; recent high-impact literature"
+  },
+
+  {
+    "query": "music therapy neurological rehabilitation stroke dementia cognitive outcomes",
+    "subject": "Music",
+    "difficulty": "medium",
+    "source": "human",
+    "notes": "Music + health sciences; tests interdisciplinary retrieval"
+  },
+  {
+    "query": "ethnomusicology Indigenous music ceremony oral tradition cultural preservation",
+    "subject": "Music",
+    "difficulty": "hard",
+    "source": "human",
+    "notes": "Indigenous cultural preservation + musicology; very niche overlap"
+  },
+
+  {
+    "query": "BC carbon tax revenue recycling emissions reduction policy effectiveness",
+    "subject": "Public Policy",
+    "difficulty": "hard",
+    "source": "human",
+    "notes": "BC-specific climate policy; tests regional policy retrieval"
+  },
+  {
+    "query": "guaranteed basic income pilot program poverty reduction social policy Canada",
+    "subject": "Public Policy",
+    "difficulty": "medium",
+    "source": "human",
+    "notes": "Canadian income security policy; Economics + Sociology overlap"
+  },
+
+  {
+    "query": "pandemic preparedness One Health zoonotic disease surveillance early warning",
+    "subject": "Global Health",
+    "difficulty": "medium",
+    "source": "human",
+    "notes": "Global health security; post-COVID citation surge; Health Sciences overlap"
+  },
+  {
+    "query": "antimicrobial resistance stewardship programs low-income countries global",
+    "subject": "Global Health",
+    "difficulty": "medium",
+    "source": "human",
+    "notes": "Global health + pharmacology; well-cited policy literature"
+  },
+
+  {
+    "query": "offshore wind energy tidal current turbine resource assessment British Columbia",
+    "subject": "Sustainable Energy Engineering (SEE)",
+    "difficulty": "hard",
+    "source": "human",
+    "notes": "BC-specific renewable energy; very niche SFU SEE program vocabulary"
+  },
+  {
+    "query": "green hydrogen electrolysis storage infrastructure decarbonization fuel cell",
+    "subject": "Sustainable Energy Engineering (SEE)",
+    "difficulty": "medium",
+    "source": "human",
+    "notes": "Emerging energy systems topic; Engineering + Chemistry overlap"
+  },
+
+  {
+    "query": "authoritarian populism democratic backsliding electoral manipulation institutions",
+    "subject": "Political Science",
+    "difficulty": "medium",
+    "source": "human",
+    "notes": "Comparative politics; well-cited recent literature on democratic erosion"
+  },
+  {
+    "query": "Indigenous sovereignty self-determination governance First Nations Canada constitution",
+    "subject": "Political Science",
+    "difficulty": "hard",
+    "source": "human",
+    "notes": "Indigenous politics + Canadian constitutional law; Applied Legal Studies overlap"
+  },
+
+  {
+    "query": "disinformation coordinated inauthentic behaviour platform governance content moderation",
+    "subject": "Communication",
+    "difficulty": "medium",
+    "source": "human",
+    "notes": "Platform studies; Political Science + Computing Science overlap"
+  },
+  {
+    "query": "COVID-19 vaccine hesitancy health communication risk perception public trust",
+    "subject": "Communication",
+    "difficulty": "medium",
+    "source": "human",
+    "notes": "Health communication; Health Sciences overlap; high pandemic-era citation density"
+  },
+
+  {
+    "query": "behavioural economics nudge theory choice architecture policy welfare",
+    "subject": "Economics",
+    "difficulty": "medium",
+    "source": "human",
+    "notes": "Behavioural econ; Public Policy + Psychology overlap"
+  },
+  {
+    "query": "natural resource economy Dutch disease commodity prices fiscal policy BC",
+    "subject": "Economics",
+    "difficulty": "hard",
+    "source": "human",
+    "notes": "BC-specific resource economics; very narrow regional policy focus"
+  },
+
+  {
+    "query": "Cold War Canada NATO nuclear deterrence foreign policy diplomacy",
+    "subject": "History",
+    "difficulty": "medium",
+    "source": "human",
+    "notes": "Canadian Cold War history; tests country-specific historical retrieval"
+  },
+  {
+    "query": "Japanese Canadian internment wartime evacuation redress compensation 1942",
+    "subject": "History",
+    "difficulty": "hard",
+    "source": "human",
+    "notes": "BC-specific Canadian history event; very narrow topic"
+  },
+
+  {
+    "query": "reproductive rights abortion access policy provinces Canada legal",
+    "subject": "Gender, Sexuality, and Women's Studies",
+    "difficulty": "medium",
+    "source": "human",
+    "notes": "Canadian reproductive policy; Applied Legal Studies + Political Science overlap"
+  },
+
+  {
+    "query": "mental health primary care integration collaborative care stepped model",
+    "subject": "Health Sciences",
+    "difficulty": "medium",
+    "source": "human",
+    "notes": "Health systems; Psychology overlap; well-cited clinical literature"
+  },
+
+  {
+    "query": "corporate tax avoidance profit shifting transfer pricing international regulation",
+    "subject": "Accounting",
+    "difficulty": "medium",
+    "source": "human",
+    "notes": "Tax policy + accounting; Finance + International Studies overlap"
+  },
+  {
+    "query": "ESG sustainability reporting corporate disclosure accountability audit",
+    "subject": "Accounting",
+    "difficulty": "medium",
+    "source": "human",
+    "notes": "Sustainability reporting; Finance + Business Administration overlap"
+  },
+
+  {
+    "query": "Bayesian methods clinical trial design adaptive randomization inference",
+    "subject": "Statistics & Actuarial Science",
+    "difficulty": "medium",
+    "source": "human",
+    "notes": "Biostatistics; Health Sciences + Mathematics overlap"
+  },
+  {
+    "query": "longevity risk mortality modelling actuarial pension insurance annuity",
+    "subject": "Statistics & Actuarial Science",
+    "difficulty": "medium",
+    "source": "human",
+    "notes": "Actuarial science; Finance overlap; niche vocabulary"
+  },
+
+  {
+    "query": "contemporary Indigenous art land sovereignty installation decolonial gallery",
+    "subject": "Visual Arts",
+    "difficulty": "hard",
+    "source": "human",
+    "notes": "Indigenous arts + decolonial theory; SFU School for the Contemporary Arts"
+  },
+  {
+    "query": "digital art interactive installation immersive media generative algorithm",
+    "subject": "Visual Arts",
+    "difficulty": "medium",
+    "source": "human",
+    "notes": "SIAT + Visual Arts boundary; tests interdisciplinary arts retrieval"
+  },
+
+  {
+    "query": "applied theatre community-based performance social change participatory",
+    "subject": "Theatre",
+    "difficulty": "medium",
+    "source": "human",
+    "notes": "Drama therapy and applied theatre; SFU School for the Contemporary Arts"
+  },
+  {
+    "query": "Indigenous Canadian theatre playwrights performance First Nations Metis",
+    "subject": "Theatre",
+    "difficulty": "hard",
+    "source": "human",
+    "notes": "Indigenous performing arts; Canadian cultural studies overlap"
+  },
+
+  {
+    "query": "open access scholarly publishing academic journals business models APC",
+    "subject": "Publishing",
+    "difficulty": "medium",
+    "source": "human",
+    "notes": "Scholarly communication; SFU has a publishing program; Library science overlap"
+  },
+  {
+    "query": "Canadian book publishing diversity representation equity literature industry",
+    "subject": "Publishing",
+    "difficulty": "hard",
+    "source": "human",
+    "notes": "Canadian publishing industry context; English + Canadian Studies overlap"
+  },
+
+  {
+    "query": "community energy planning local renewable transition decarbonization neighbourhood",
+    "subject": "Sustainable Community Development",
+    "difficulty": "medium",
+    "source": "human",
+    "notes": "SFU-unique program; Sustainable Energy + Urban Studies + Resource Management overlap"
+  },
+  {
+    "query": "urban food security community garden land access food sovereignty",
+    "subject": "Sustainable Community Development",
+    "difficulty": "medium",
+    "source": "human",
+    "notes": "Food systems + urban planning; Geography + Resource Management overlap"
+  },
+
+  {
+    "query": "management innovation entrepreneurship ecosystem startup incubator university",
+    "subject": "Management & Organizational Studies",
+    "difficulty": "easy",
+    "source": "human",
+    "notes": "Beedie School MOS; Business Administration overlap; high citation density"
+  },
+
+  {
+    "query": "forensic DNA evidence wrongful conviction innocence project criminal justice",
+    "subject": "Forensics",
+    "difficulty": "medium",
+    "source": "human",
+    "notes": "SFU has forensic science programs; Criminology + Applied Legal Studies overlap"
+  },
+
+  {
+    "query": "aging sarcopenia muscle loss resistance exercise intervention older adults",
+    "subject": "Biomedical Physiology and Kinesiology (BPK)",
+    "difficulty": "medium",
+    "source": "human",
+    "notes": "BPK + Gerontology intersection; healthy aging topic"
+  },
+  {
+    "query": "knowledge management organizational learning communities of practice firm",
+    "subject": "Management & Organizational Studies",
+    "difficulty": "medium",
+    "source": "human",
+    "notes": "Beedie School MOS core area; Business Administration overlap"
   }
 ]
