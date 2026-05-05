@@ -61,12 +61,17 @@ def _maybe_rerank(docs: list[dict], query: str, limit: int) -> list[dict]:
     if not features.get("rerank_enabled"):
         return docs[:limit]
     try:
+        cfg = _get_config()
+        # SFU_EMBEDDING_MODEL_PATH selects the fine-tuned checkpoint (e.g. v4-bge);
+        # empty falls through to the reranker's default (all-MiniLM-L6-v2).
+        model_path = cfg.embedding_model_path or None
         reranked = rerank_results(
             docs,
             query,
             limit,
             use_embedding=True,
             use_rrf=features.get("rrf_enabled", False),
+            embedding_model_path=model_path,
         )
         if features.get("crossencoder_enabled"):
             reranked = rerank_with_crossencoder(reranked, query, limit)

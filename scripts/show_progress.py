@@ -20,7 +20,7 @@ REPO_ROOT = Path(__file__).parent.parent
 # ── Phase definitions ─────────────────────────────────────────────────────────
 
 PHASES = [
-    # (label, description, completion_check: callable → bool | "manual")
+    # (label, description, completion_check: callable → bool | "manual" | "partial")
     ("G",    "Production RRF wiring (MCP server)",           lambda: _file("src/lib/tools.py") and _grep("src/lib/tools.py", "_maybe_rerank")),
     ("H",    "v3 regression ablation (BGE vs MiniLM)",       "manual"),
     ("I",    "Strategy 3 round-robin + persistent cache",    lambda: _file("scripts/openalex_cache.py") or _grep("scripts/generate_sfu_training_data.py", "target_per_provider")),
@@ -28,8 +28,10 @@ PHASES = [
     ("J",    "Dedup + reproducibility fixes",                lambda: _grep("scripts/generate_sfu_training_data.py", "sha1")),
     ("K",    "BM25-mined hard negatives",                    lambda: _file("scripts/mine_hard_negatives.py")),
     ("L",    "Training: v4-bge + v4-mini (BGE-small base)",  lambda: _file("models/sfu-academic-embed-v4-bge")),
-    ("M",    "Eval methodology (120 queries, bootstrap CI)", lambda: _eval_query_count() >= 120),
-    ("O.1",  "Model path swap to v4-bge (production)",       lambda: _check_model_path()),
+    # M is partial when seed_doi coverage falls short of M.6's ≥80% acceptance bar
+    # OR when the latest history entry isn't from a mixed-proxy run (de-biased).
+    ("M",    "Eval methodology (120 queries, mixed proxy)",  lambda: _phase_m_status()),
+    ("O.1",  "v4-bge wired through reranker + .env",         lambda: _check_model_path()),
     ("O.2",  "CrossEncoder Tier 1.5 reranker",               lambda: _grep("src/lib/reranker.py", "rerank_with_crossencoder")),
     ("O.3",  "Query log capture (LambdaMART prerequisite)",  lambda: _grep("src/lib/tools.py", "_log_query")),
     ("O.3b", "LambdaMART learned reranker",                  lambda: _lambdamart_trained()),
@@ -73,12 +75,43 @@ def _eval_query_count() -> int:
 
 
 def _check_model_path() -> bool:
-    """True if the embedding config points to v4-bge (not the default MiniLM)."""
-    p = REPO_ROOT / "src/lib/config.py"
-    if not p.exists():
+    """O.1 acceptance: _maybe_rerank forwards embedding_model_path to rerank_results.
+
+    The structural fix is the code wiring — flipping SFU_EMBEDDING_MODEL_PATH
+    is a no-op unless tools._maybe_rerank actually reads it from config and
+    passes it through. (.env is gitignored, so we can't check that here; the
+    deploy step is responsible for setting it on the target host.)
+    """
+    return (
+        _grep("src/lib/tools.py", "embedding_model_path=model_path")
+        or _grep("src/lib/tools.py", "embedding_model_path=cfg.embedding_model_path")
+    )
+
+
+def _phase_m_status() -> bool:
+    """M.6 acceptance: ≥120 queries, ≥80% seed_doi populated, mixed-proxy run logged."""
+    if _eval_query_count() < 120:
         return False
-    txt = p.read_text()
-    return "v4-bge" in txt or "sfu-academic-embed" in txt
+    p = REPO_ROOT / "data/sfu_eval_queries.json"
+    try:
+        qs = json.loads(p.read_text())
+    except Exception:
+        return False
+    with_seed = sum(1 for q in qs if q.get("seed_doi"))
+    if with_seed / max(len(qs), 1) < 0.8:
+        return False
+    # At least one history entry must reference the mixed proxy (M.3 de-biasing)
+    hist = REPO_ROOT / "results/sfu_eval_history.jsonl"
+    if not hist.exists():
+        return False
+    try:
+        for line in hist.open():
+            entry = json.loads(line) if line.strip() else {}
+            if entry.get("proxy") in ("query", "seed") or entry.get("mixed_proxy"):
+                return True
+    except Exception:
+        return False
+    return False
 
 
 def _lambdamart_trained() -> bool:

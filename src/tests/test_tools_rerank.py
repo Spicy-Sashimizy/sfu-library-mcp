@@ -45,6 +45,26 @@ class TestMaybeRerank:
                 _maybe_rerank(docs, "query", 3)
         assert mock_rerank.call_args[1]["use_rrf"] is True
 
+    def test_embedding_model_path_propagates(self):
+        docs = [_make_oa_doc(f"Paper {i}") for i in range(3)]
+        from types import SimpleNamespace
+        fake_cfg = SimpleNamespace(embedding_model_path="models/sfu-academic-embed-v4-bge")
+        with patch("lib.tools._get_features", return_value={"rerank_enabled": True, "rrf_enabled": True}):
+            with patch("lib.tools._get_config", return_value=fake_cfg):
+                with patch("lib.tools.rerank_results", return_value=docs) as mock_rerank:
+                    _maybe_rerank(docs, "query", 3)
+        assert mock_rerank.call_args[1]["embedding_model_path"] == "models/sfu-academic-embed-v4-bge"
+
+    def test_empty_embedding_model_path_passes_none(self):
+        docs = [_make_oa_doc(f"Paper {i}") for i in range(3)]
+        from types import SimpleNamespace
+        fake_cfg = SimpleNamespace(embedding_model_path="")
+        with patch("lib.tools._get_features", return_value={"rerank_enabled": True, "rrf_enabled": False}):
+            with patch("lib.tools._get_config", return_value=fake_cfg):
+                with patch("lib.tools.rerank_results", return_value=docs) as mock_rerank:
+                    _maybe_rerank(docs, "query", 3)
+        assert mock_rerank.call_args[1]["embedding_model_path"] is None
+
     def test_reranker_exception_falls_back(self):
         docs = [_make_oa_doc(f"Paper {i}") for i in range(5)]
         with patch("lib.tools._get_features", return_value={"rerank_enabled": True, "rrf_enabled": False}):

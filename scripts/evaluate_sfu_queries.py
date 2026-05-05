@@ -176,21 +176,43 @@ def compute_relevance_proxy(papers: list[dict]) -> list[float]:
     return scores
 
 
-def fetch_seed_paper_text(doi: str) -> str:
-    """Fetch title + abstract for a seed paper by DOI from OpenAlex.
+def fetch_seed_paper_text(seed_id: str) -> str:
+    """Fetch title + abstract for a seed paper from OpenAlex.
+
+    Accepts either a DOI (``10.xxx/yyy`` or ``https://doi.org/10.xxx``) or an
+    OpenAlex work ID (``W123...`` or ``https://openalex.org/W123...``).  The
+    eval queries populated by Phase M.6 use OpenAlex IDs because the cached
+    eval results don't carry DOIs for every paper.
 
     Returns an empty string on failure so the caller can fall back to the
     citation-only proxy rather than crashing.  Results are cached in the same
     on-disk cache as query results to avoid redundant API calls.
     """
-    cache_key = f"doi::{doi}"
+    s = seed_id.strip()
+    # Detect identifier shape: OpenAlex IDs are W-prefixed; DOIs aren't
+    is_openalex = s.startswith("W") or "openalex.org/W" in s
+    if is_openalex:
+        # Normalize to bare W-id for the API path
+        wid = s.split("/")[-1] if "/" in s else s
+        cache_key = f"openalex::{wid}"
+    else:
+        # Strip any DOI URL prefix
+        for prefix in ("https://doi.org/", "http://doi.org/", "doi:"):
+            if s.startswith(prefix):
+                s = s[len(prefix):]
+        cache_key = f"doi::{s}"
     if cache_key in _QUERY_CACHE:
         return _QUERY_CACHE[cache_key]
 
-    params = {
-        "filter": f"doi:{doi}",
-        "select": "title,abstract_inverted_index",
-    }
+    if is_openalex:
+        params = {"select": "title,abstract_inverted_index"}
+        url = f"{OPENALEX_BASE}/works/{wid}"
+    else:
+        params = {
+            "filter": f"doi:{s}",
+            "select": "title,abstract_inverted_index",
+        }
+        url = f"{OPENALEX_BASE}/works"
     if OPENALEX_API_KEY:
         params["api_key"] = OPENALEX_API_KEY
     else:
@@ -198,29 +220,53 @@ def fetch_seed_paper_text(doi: str) -> str:
 
     try:
         resp = requests.get(
-            f"{OPENALEX_BASE}/works",
+            url,
             params=params,
             headers=HEADERS,
             timeout=20,
         )
         resp.raise_for_status()
-        results = resp.json().get("results", [])
-        if not results:
-            logger.warning("Seed paper not found for DOI: %s", doi)
-            return ""
-        w = results[0]
+        body = resp.json()
+        if is_openalex:
+            w = body
+        else:
+            results = body.get("results", [])
+            if not results:
+                logger.warning("Seed paper not found for DOI: %s", seed_id)
+                return ""
+            w = results[0]
         abstract = _reconstruct_abstract(w.get("abstract_inverted_index"))
         text = f"{w.get('title', '')} {abstract}".strip()
     except Exception as e:
         err = str(e)
         if OPENALEX_API_KEY:
             err = err.replace(OPENALEX_API_KEY, "<api-key-redacted>")
-        logger.warning("Failed to fetch seed paper %s: %s", doi, err)
+        logger.warning("Failed to fetch seed paper %s: %s", seed_id, err)
         text = ""
 
     _QUERY_CACHE[cache_key] = text
     _save_query_cache(_QUERY_CACHE)
     return text
+
+
+def compute_query_cosine_proxy(
+    papers: list[dict],
+    query_embedding: np.ndarray,
+    paper_embeddings: np.ndarray,
+) -> list[float]:
+    """Query-cosine proxy: 0.5 * log(cite+1) + 0.5 * cosine(paper, query).
+
+    Stronger debiasing than the seed-paper variant: the cosine reference is the
+    query itself (computed by an independent proxy model), so it doesn't bias
+    toward whatever paper OpenAlex BM25 happened to rank first.  Use this when
+    canonical seed papers aren't available or are likely auto-picked from the
+    same BM25 results we're trying to evaluate.
+    """
+    cosines = (paper_embeddings @ query_embedding).tolist()
+    scores = []
+    for p, cos in zip(papers, cosines):
+        scores.append(0.5 * math.log1p(p.get("cited_by_count", 0)) + 0.5 * cos)
+    return scores
 
 
 def compute_mixed_relevance_proxy(
@@ -351,6 +397,8 @@ def evaluate_model(
     delay: float = 0.5,
     fusion: str = "none",
     use_mixed_proxy: bool = False,
+    proxy_model=None,
+    proxy_mode: str = "seed",
 ) -> dict:
     """Evaluate a model on the SFU eval query set. Returns per-query and aggregate metrics.
 
@@ -360,6 +408,10 @@ def evaluate_model(
     use_mixed_proxy: when True and the query has a ``seed_doi`` field, relevance
         grades use the mixed citation+cosine proxy (M.3).  Falls back to
         citation-only when seed_doi is absent or the seed paper can't be fetched.
+    proxy_model: separate sentence-transformer used only to compute the seed-cosine
+        term of the mixed relevance proxy.  Lets BM25-only / no-model evaluations
+        be scored against the same de-biased proxy as the embedding models.
+        If None, the evaluated `model` is used (legacy behaviour).
     """
     all_ndcg: list[float] = []
     all_mrr: list[float] = []
@@ -382,21 +434,35 @@ def evaluate_model(
             logger.warning("  No results for query: %s", query)
             continue
 
-        # Compute relevance grades — mixed proxy when seed_doi present, else citation-only
-        use_seed = bool(seed_doi and model is not None)
-        if use_seed:
-            seed_text = fetch_seed_paper_text(seed_doi)
-            use_seed = bool(seed_text)
+        # Compute relevance grades — mixed proxy when enabled, else citation-only.
+        # Use proxy_model (a fixed off-the-shelf model) if provided so all
+        # configurations (including BM25-only) score against the same proxy.
+        relevance_model = proxy_model or model
+        seed_emb = None
+        ref_emb = None  # what the cosine term anchors on (seed paper OR query)
+        ref_text = ""
 
-        if use_seed:
+        if use_mixed_proxy and relevance_model is not None:
+            if proxy_mode == "query":
+                ref_text = query
+            elif proxy_mode == "seed" and seed_doi:
+                ref_text = fetch_seed_paper_text(seed_doi)
+
+        if ref_text:
             paper_texts = [f"{p.get('title', '')} {p.get('abstract', '')}" for p in papers]
-            all_texts = [seed_text] + paper_texts
-            embs = encode_texts(model, all_texts)
-            seed_emb = embs[0]
+            all_texts = [ref_text] + paper_texts
+            embs = encode_texts(relevance_model, all_texts)
+            ref_emb = embs[0]
             paper_embs = embs[1:]
-            relevance_scores = compute_mixed_relevance_proxy(papers, seed_emb, paper_embs)
+            if proxy_mode == "query":
+                relevance_scores = compute_query_cosine_proxy(papers, ref_emb, paper_embs)
+            else:
+                seed_emb = ref_emb
+                relevance_scores = compute_mixed_relevance_proxy(papers, ref_emb, paper_embs)
+            use_seed = True
         else:
             relevance_scores = compute_relevance_proxy(papers)
+            use_seed = False
 
         if model is not None:
             if fusion == "rrf":
@@ -404,14 +470,18 @@ def evaluate_model(
             else:
                 reranked = rerank_with_embedding(query, papers, model)
             if use_seed:
-                # Re-embed in the reranked order (papers are the same objects — just reordered)
+                # Re-embed in the reranked order using the proxy model (so the
+                # relevance score is consistent with the ideal ordering above).
                 reranked_texts = [f"{p.get('title', '')} {p.get('abstract', '')}" for p in reranked]
-                reranked_embs = encode_texts(model, reranked_texts)
-                reranked_relevance = compute_mixed_relevance_proxy(reranked, seed_emb, reranked_embs)
+                reranked_embs = encode_texts(relevance_model, reranked_texts)
+                if proxy_mode == "query":
+                    reranked_relevance = compute_query_cosine_proxy(reranked, ref_emb, reranked_embs)
+                else:
+                    reranked_relevance = compute_mixed_relevance_proxy(reranked, ref_emb, reranked_embs)
             else:
                 reranked_relevance = compute_relevance_proxy(reranked)
         else:
-            # BM25 only — use OpenAlex rank order as-is
+            # BM25 only — keep OpenAlex order, score against the same proxy
             reranked_relevance = relevance_scores
 
         ndcg = ndcg_at_k(reranked_relevance, relevance_scores, k)
@@ -552,6 +622,17 @@ def main():
                         help="Use mixed citation+cosine relevance proxy for queries that have "
                              "a seed_doi field (Phase M.3). Falls back to citation-only when "
                              "seed_doi is absent.")
+    parser.add_argument("--proxy-mode", choices=["seed", "query"], default="query",
+                        help="Mixed proxy reference: 'seed' uses the seed_doi paper "
+                             "(can be biased if auto-picked from BM25 results); "
+                             "'query' uses the query embedding directly (stronger debiasing).")
+    parser.add_argument("--proxy-model", type=str,
+                        default="sentence-transformers/all-mpnet-base-v2",
+                        help="Fixed model used to compute the seed-cosine term of the mixed "
+                             "proxy. Stays constant across all eval configurations so BM25-only "
+                             "and embedding models are scored against the same reference. "
+                             "mpnet is the default because it's structurally distinct from both "
+                             "the MiniLM baseline and the BGE-based custom model.")
     args = parser.parse_args()
 
     # Load eval queries
@@ -566,6 +647,16 @@ def main():
 
     all_results = []
 
+    from sentence_transformers import SentenceTransformer
+
+    # Proxy model — fixed reference for the seed-cosine term of the mixed proxy.
+    # Loaded eagerly so BM25-only is scored against the same proxy as the embedding models.
+    proxy_model_obj = None
+    mixed_proxy_arg = getattr(args, "mixed_proxy", False)
+    if mixed_proxy_arg:
+        logger.info("Loading proxy model (fixed seed-cosine reference): %s", args.proxy_model)
+        proxy_model_obj = SentenceTransformer(args.proxy_model)
+
     # BM25-only baseline
     if args.bm25_only:
         logger.info("\nEvaluating: BM25-only (no embedding reranking)")
@@ -576,12 +667,13 @@ def main():
             k=args.k,
             results_per_query=args.results_per_query,
             delay=args.delay,
+            use_mixed_proxy=mixed_proxy_arg,
+            proxy_model=proxy_model_obj,
+            proxy_mode=args.proxy_mode,
         )
         all_results.append(result)
 
     # Load models
-    from sentence_transformers import SentenceTransformer
-
     models_to_eval: list[tuple[str, object]] = []
 
     # Baseline embedding model
@@ -620,6 +712,8 @@ def main():
                 delay=args.delay,
                 fusion=fusion,
                 use_mixed_proxy=mixed_proxy,
+                proxy_model=proxy_model_obj,
+                proxy_mode=args.proxy_mode,
             )
             all_results.append(result)
 
@@ -641,12 +735,15 @@ def main():
     import datetime
     history_path = Path(args.history)
     history_path.parent.mkdir(parents=True, exist_ok=True)
+    proxy_label = args.proxy_mode if mixed_proxy else "citation_only"
     with history_path.open("a") as hf:
         for r in all_results:
             entry = {
                 "timestamp": datetime.datetime.utcnow().isoformat() + "Z",
                 "model": r["model"],
                 "fusion": r.get("fusion", "none"),
+                "proxy": proxy_label,
+                "mixed_proxy": mixed_proxy,
                 "ndcg10": r["mean_ndcg_at_k"],
                 "mrr10": r.get("mean_mrr_at_k", 0.0),
                 "recall10": r.get("mean_recall_at_k", 0.0),
