@@ -24,7 +24,8 @@ from lib.formatters import (
     format_sfu_database,
     format_semantic_scholar_papers,
 )
-from lib.reranker import rerank_results
+from lib.reranker import rerank_results, rerank_with_crossencoder
+from lib.config import SERVER_VERSION
 from lib.validators import sanitize_search_query
 from lib.zotero import ZoteroClient, ZoteroError, fetch_zotero_item_types
 
@@ -49,21 +50,80 @@ def _get_features() -> dict[str, bool]:
 
 
 def _maybe_rerank(docs: list[dict], query: str, limit: int) -> list[dict]:
-    """Apply reranking if enabled; always returns at most `limit` docs."""
+    """Apply reranking pipeline if enabled; always returns at most `limit` docs.
+
+    Stage 1 (rerank_enabled):  embedding cosine ± RRF fusion.
+    Stage 2 (crossencoder_enabled): cross-encoder second pass on top-20 Stage 1 results.
+    Either stage can be toggled independently via SFU_FEATURE_* env vars.
+    Falls back to original order if any stage errors.
+    """
     features = _get_features()
     if not features.get("rerank_enabled"):
         return docs[:limit]
     try:
-        return rerank_results(
+        reranked = rerank_results(
             docs,
             query,
             limit,
             use_embedding=True,
             use_rrf=features.get("rrf_enabled", False),
         )
+        if features.get("crossencoder_enabled"):
+            reranked = rerank_with_crossencoder(reranked, query, limit)
+        return reranked
     except Exception:
         logger.exception("Reranker failed, falling back to original order")
         return docs[:limit]
+
+
+def _log_query(query: str, results: list[dict], latency_ms: float, handler: str) -> None:
+    """Append a structured query log entry to the JSONL query log.
+
+    Captures (query, ranked results, latency, feature flags) for downstream
+    LambdaMART training.  Writes are synchronous but bounded to a single line
+    append; failures are silently swallowed so search is never interrupted.
+
+    Enable via:  SFU_FEATURE_QUERY_LOG_ENABLED=true  SFU_QUERY_LOG_PATH=/path/to/query_log.jsonl
+    """
+    config = _get_config()
+    if not _get_features().get("query_log_enabled"):
+        return
+    log_path = config.query_log_path
+    if not log_path:
+        return
+    try:
+        import datetime
+        from pathlib import Path
+        features = _get_features()
+        entry = {
+            "ts": datetime.datetime.utcnow().isoformat() + "Z",
+            "query": query,
+            "handler": handler,
+            "latency_ms": round(latency_ms, 1),
+            "flags": {
+                "rrf": features.get("rrf_enabled", False),
+                "crossencoder": features.get("crossencoder_enabled", False),
+            },
+            "model_version": SERVER_VERSION,
+            "results": [
+                {
+                    "rank": i + 1,
+                    "doi": r.get("doi", ""),
+                    "title": (r.get("title") or "")[:120],
+                    "cited_by_count": r.get("cited_by_count", 0),
+                    "year": r.get("publication_year"),
+                    "type": r.get("type", ""),
+                    "abstract_len": len(r.get("abstract") or ""),
+                }
+                for i, r in enumerate(results[:10])
+            ],
+        }
+        p = Path(log_path)
+        p.parent.mkdir(parents=True, exist_ok=True)
+        with p.open("a") as f:
+            f.write(json.dumps(entry) + "\n")
+    except Exception:
+        logger.debug("Query log write failed (non-fatal)")
 
 
 # ── Lazy-loaded API clients ───────────────────────────────────────────────────
@@ -763,9 +823,11 @@ async def _handle_search_academic(args: dict) -> list[TextContent]:
             lambda: _get_openalex().search_works(query, filters=filters, per_page=limit, page=page),
         )
 
+    t0 = time.monotonic()
     if data.get("results"):
         _cache_works(data["results"])
         data["results"] = _maybe_rerank(data["results"], query, limit)
+    _log_query(query, data.get("results", []), (time.monotonic() - t0) * 1000, "search_academic")
     return [TextContent(type="text", text=format_openalex_results(data, query))]
 
 
@@ -841,9 +903,11 @@ async def _handle_search_by_topic(args: dict) -> list[TextContent]:
             ),
         )
 
+    t0 = time.monotonic()
     if data.get("results"):
         _cache_works(data["results"])
         data["results"] = _maybe_rerank(data["results"], topic, limit)
+    _log_query(topic, data.get("results", []), (time.monotonic() - t0) * 1000, "search_by_topic")
     return [TextContent(type="text", text=format_openalex_results(data, topic))]
 
 

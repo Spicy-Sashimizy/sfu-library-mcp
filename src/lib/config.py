@@ -54,6 +54,12 @@ class ServerConfig:
         # with embedding cosine ranks via Reciprocal Rank Fusion. Off by default
         # until the SFU NDCG benchmark confirms it beats single-ranker scoring.
         "rrf_enabled": False,
+        # CrossEncoder second-pass reranker on top-20 RRF candidates (~50-100ms).
+        # Ship after confirming latency budget is acceptable (Phase O.2).
+        "crossencoder_enabled": False,
+        # Structured query log for LambdaMART training data collection (Phase O.3).
+        # Writes (query, ranked docs, latency) to query_log_path as JSONL.
+        "query_log_enabled": False,
     })
 
     # Local embedding model
@@ -77,6 +83,9 @@ class ServerConfig:
     # SFU Database Registry (Solr)
     sfu_db_registry_cache_ttl: int = 86400   # 24 h
     sfu_db_registry_cache_file: str = "/tmp/sfu_databases_cache.json"
+
+    # Query log for LambdaMART training data (O.3); empty = disabled
+    query_log_path: str = ""
 
     # EZProxy
     sfu_ezproxy_base: str = "https://proxy.lib.sfu.ca/login?url="
@@ -160,6 +169,8 @@ def load_config() -> ServerConfig:
         "europe_pmc_enabled": False,
         "local_embedding_enabled": True,
         "rrf_enabled": False,
+        "crossencoder_enabled": False,
+        "query_log_enabled": False,
     }
     for key in default_features:
         env_key = f"SFU_FEATURE_{key.upper()}"
@@ -205,6 +216,7 @@ def load_config() -> ServerConfig:
             "SFU_EMBEDDING_DEFAULT_MODEL",
             "sentence-transformers/all-MiniLM-L6-v2",
         ),
+        query_log_path=os.environ.get("SFU_QUERY_LOG_PATH", ""),
     )
 
 

@@ -217,6 +217,49 @@ def _compute_rrf_scores(semantic_scores: list[float], n_docs: int) -> list[float
     return [s / max_possible for s in scores]
 
 
+_CROSS_ENCODER_MODEL = "cross-encoder/ms-marco-MiniLM-L-6-v2"
+_cross_encoder = None  # None = not yet tried; False = unavailable
+
+
+def _get_cross_encoder():
+    global _cross_encoder
+    if _cross_encoder is None:
+        try:
+            from sentence_transformers import CrossEncoder
+            _cross_encoder = CrossEncoder(_CROSS_ENCODER_MODEL)
+            logger.info("CrossEncoder loaded: %s", _CROSS_ENCODER_MODEL)
+        except Exception as e:
+            logger.warning("CrossEncoder unavailable (%s), skipping second-pass rerank", e)
+            _cross_encoder = False
+    return _cross_encoder if _cross_encoder is not False else None
+
+
+def rerank_with_crossencoder(docs: list[dict], query: str, limit: int) -> list[dict]:
+    """Second-pass reranker: score top candidates with a cross-encoder.
+
+    Runs only on the top-20 inputs to bound latency (~50-100ms on CPU).
+    Falls back silently to `docs[:limit]` if the model is unavailable or errors.
+    """
+    ce = _get_cross_encoder()
+    if ce is None:
+        return docs[:limit]
+
+    candidates = docs[:20]
+    norms = [_normalize_for_rerank(d) for d in candidates]
+    texts = [f"{n['title']} {n['abstract']}".strip() or n["title"] for n in norms]
+    pairs = [(query, t) for t in texts]
+
+    try:
+        scores = ce.predict(pairs, show_progress_bar=False).tolist()
+        ranked = sorted(zip(scores, candidates), key=lambda x: x[0], reverse=True)
+        result = [d for _, d in ranked[:limit]]
+        logger.info("crossencoder: scored %d candidates -> %d results", len(candidates), len(result))
+        return result
+    except Exception as e:
+        logger.warning("CrossEncoder scoring failed (%s), using pre-CE order", e)
+        return docs[:limit]
+
+
 def rerank_results(
     docs: list[dict],
     query: str,
