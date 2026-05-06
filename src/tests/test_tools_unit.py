@@ -278,6 +278,121 @@ class TestExportSearch:
         assert "JSON Export" in result[0].text
 
 
+SAMPLE_S2_PAPER = {
+    "s2_id": "abc123",
+    "title": "Semantic Scholar Paper",
+    "authors": ["Author A"],
+    "year": 2024,
+    "publication_date": "2024-01-01",
+    "abstract": "A fallback result from S2.",
+    "doi": "10.1234/s2paper",
+    "citation_count": 10,
+    "influential_citation_count": 1,
+    "open_access_pdf": "",
+    "tldr": "",
+}
+
+
+class TestOpenAlexFallback:
+    """Tests for S2 fallback when OpenAlex is exhausted or circuit-broken."""
+
+    @pytest.mark.asyncio
+    async def test_search_academic_falls_back_when_budget_exhausted(self):
+        with patch("lib.tools._get_openalex") as mock_oa, \
+             patch("lib.tools._get_s2") as mock_s2:
+            # Budget exhausted
+            mock_oa.return_value.budget_status.return_value = {
+                "exhausted": True, "calls_today": 900, "daily_limit": 900,
+                "remaining": 0, "pct_used": 100.0,
+            }
+            mock_oa.return_value.circuit_open = False
+            mock_s2.return_value.search_papers.return_value = [SAMPLE_S2_PAPER]
+
+            result = await handle_tool_call("search_academic", {"query": "machine learning"})
+
+        text = result[0].text
+        assert "budget exhausted" in text.lower() or "exhausted" in text.lower()
+        assert "Semantic Scholar" in text
+
+    @pytest.mark.asyncio
+    async def test_search_academic_falls_back_when_circuit_open(self):
+        with patch("lib.tools._get_openalex") as mock_oa, \
+             patch("lib.tools._get_s2") as mock_s2:
+            mock_oa.return_value.budget_status.return_value = {
+                "exhausted": False, "calls_today": 0, "daily_limit": 900,
+                "remaining": 900, "pct_used": 0.0,
+            }
+            mock_oa.return_value.circuit_open = True
+            mock_s2.return_value.search_papers.return_value = [SAMPLE_S2_PAPER]
+
+            result = await handle_tool_call("search_academic", {"query": "deep learning"})
+
+        text = result[0].text
+        assert "circuit breaker" in text.lower() or "unavailable" in text.lower()
+        assert "Semantic Scholar" in text
+
+    @pytest.mark.asyncio
+    async def test_search_academic_uses_openalex_when_available(self):
+        with patch("lib.tools._get_openalex") as mock_oa, \
+             patch("lib.tools._get_s2") as mock_s2:
+            mock_oa.return_value.budget_status.return_value = {
+                "exhausted": False, "calls_today": 10, "daily_limit": 900,
+                "remaining": 890, "pct_used": 1.1,
+            }
+            mock_oa.return_value.circuit_open = False
+            mock_oa.return_value.search_works.return_value = SAMPLE_OPENALEX_RESPONSE
+
+            result = await handle_tool_call("search_academic", {"query": "test"})
+
+        text = result[0].text
+        mock_s2.return_value.search_papers.assert_not_called()
+        assert "Machine Learning in Practice" in text
+
+    @pytest.mark.asyncio
+    async def test_search_by_topic_falls_back_when_budget_exhausted(self):
+        with patch("lib.tools._get_openalex") as mock_oa, \
+             patch("lib.tools._get_s2") as mock_s2:
+            mock_oa.return_value.budget_status.return_value = {
+                "exhausted": True, "calls_today": 900, "daily_limit": 900,
+                "remaining": 0, "pct_used": 100.0,
+            }
+            mock_oa.return_value.circuit_open = False
+            mock_s2.return_value.search_papers.return_value = [SAMPLE_S2_PAPER]
+
+            result = await handle_tool_call("search_by_topic", {"topic": "climate change"})
+
+        text = result[0].text
+        assert "Semantic Scholar" in text
+
+    @pytest.mark.asyncio
+    async def test_fallback_with_no_s2_results(self):
+        with patch("lib.tools._get_openalex") as mock_oa, \
+             patch("lib.tools._get_s2") as mock_s2:
+            mock_oa.return_value.budget_status.return_value = {
+                "exhausted": True, "calls_today": 900, "daily_limit": 900,
+                "remaining": 0, "pct_used": 100.0,
+            }
+            mock_oa.return_value.circuit_open = False
+            mock_s2.return_value.search_papers.return_value = []
+
+            result = await handle_tool_call("search_academic", {"query": "very obscure query"})
+
+        text = result[0].text
+        assert "No results found" in text
+
+    @pytest.mark.asyncio
+    async def test_openalex_budget_status_shown_in_get_openalex_budget(self):
+        with patch("lib.tools._get_openalex") as mock_oa:
+            mock_oa.return_value.budget_status.return_value = {
+                "exhausted": True, "calls_today": 900, "daily_limit": 900,
+                "remaining": 0, "pct_used": 100.0,
+            }
+            result = await handle_tool_call("get_openalex_budget", {})
+
+        text = result[0].text
+        assert "EXHAUSTED" in text
+
+
 class TestUnknownTool:
     @pytest.mark.asyncio
     async def test_unknown(self):

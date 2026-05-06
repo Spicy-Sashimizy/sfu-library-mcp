@@ -798,6 +798,39 @@ async def _dispatch_tool(name: str, arguments: dict[str, Any]) -> list[TextConte
     return await handler(arguments)
 
 
+# ── Search helpers ────────────────────────────────────────────────────────────
+
+def _openalex_unavailable_reason() -> str | None:
+    """Return a human-readable reason string if OpenAlex cannot serve requests, else None."""
+    oa = _get_openalex()
+    budget = oa.budget_status()
+    if budget["exhausted"]:
+        return (
+            f"OpenAlex daily budget exhausted ({budget['calls_today']:,}/{budget['daily_limit']:,} calls). "
+            "Budget resets at local midnight."
+        )
+    if oa.circuit_open:
+        return "OpenAlex is temporarily unavailable (circuit breaker open after repeated failures)."
+    return None
+
+
+async def _s2_fallback(query: str, limit: int, reason: str) -> list[TextContent]:
+    """Search Semantic Scholar and return results with a degradation notice."""
+    logger.warning("OpenAlex fallback to S2: %s", reason)
+    async with _request_semaphore:
+        papers = await asyncio.get_event_loop().run_in_executor(
+            None,
+            lambda: _get_s2().search_papers(query, limit=limit),
+        )
+    notice = f"[Note: {reason} Showing results from Semantic Scholar (reduced coverage).]\n\n"
+    if not papers:
+        return [TextContent(type="text", text=notice + "No results found.")]
+    return [TextContent(
+        type="text",
+        text=notice + format_semantic_scholar_papers(papers, query),
+    )]
+
+
 # ── Search handlers ───────────────────────────────────────────────────────────
 
 async def _handle_search_academic(args: dict) -> list[TextContent]:
@@ -806,6 +839,11 @@ async def _handle_search_academic(args: dict) -> list[TextContent]:
         return [TextContent(type="text", text="Empty search query.")]
     limit = min(args.get("limit", 10), 50)
     page = max(args.get("page", 1), 1)
+
+    # Pre-flight check: route to S2 immediately if OpenAlex is unavailable
+    unavailable = _openalex_unavailable_reason()
+    if unavailable:
+        return await _s2_fallback(query, limit, unavailable)
 
     filters: dict[str, str] = {}
     year_from = args.get("year_from")
@@ -827,6 +865,13 @@ async def _handle_search_academic(args: dict) -> list[TextContent]:
             None,
             lambda: _get_openalex().search_works(query, filters=filters, per_page=limit, page=page),
         )
+
+    # If OpenAlex returned nothing (e.g. circuit just opened mid-call), try S2
+    if not data.get("results"):
+        fallback_reason = _openalex_unavailable_reason()
+        if fallback_reason or _get_openalex().circuit_open:
+            reason = fallback_reason or "OpenAlex returned no results (possible outage)."
+            return await _s2_fallback(query, limit, reason)
 
     t0 = time.monotonic()
     if data.get("results"):
@@ -893,6 +938,11 @@ async def _handle_search_by_topic(args: dict) -> list[TextContent]:
         return [TextContent(type="text", text="No topic provided.")]
     limit = min(args.get("limit", 10), 50)
 
+    # Pre-flight check: route to S2 immediately if OpenAlex is unavailable
+    unavailable = _openalex_unavailable_reason()
+    if unavailable:
+        return await _s2_fallback(topic, limit, unavailable)
+
     filters: dict[str, str] = {}
     if args.get("open_access_only"):
         filters["open_access.is_oa"] = "true"
@@ -907,6 +957,13 @@ async def _handle_search_by_topic(args: dict) -> list[TextContent]:
                 per_page=limit,
             ),
         )
+
+    # If OpenAlex returned nothing due to outage, try S2
+    if not data.get("results"):
+        fallback_reason = _openalex_unavailable_reason()
+        if fallback_reason or _get_openalex().circuit_open:
+            reason = fallback_reason or "OpenAlex returned no results (possible outage)."
+            return await _s2_fallback(topic, limit, reason)
 
     t0 = time.monotonic()
     if data.get("results"):
