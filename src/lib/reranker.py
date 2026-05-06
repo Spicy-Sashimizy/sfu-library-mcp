@@ -81,8 +81,8 @@ def _normalize_for_rerank(doc: dict) -> dict:
             or bool(links.get("linktohtml"))
             or bool(links.get("linktopdf"))
         )
-    else:
-        # OpenAlex flat shape
+    elif "authorships" in doc:
+        # Raw OpenAlex API shape (used in scripts/mining, not in production search path)
         title = doc.get("title") or ""
         abstract = doc.get("abstract") or ""
         year = doc.get("publication_year")
@@ -100,6 +100,24 @@ def _normalize_for_rerank(doc: dict) -> dict:
             or bool(primary_loc.get("pdf_url"))
             or bool(primary_loc.get("landing_page_url"))
         )
+    else:
+        # Normalized OpenAlex shape — output of normalize_work() in openalex.py.
+        # This is the production path: tools.py passes normalize_work() output to reranker.
+        # Keys differ from raw API: "date" not "publication_year", "authors" flat strings,
+        # "is_oa" and "oa_url" not nested under "open_access"/"primary_location".
+        title = doc.get("title") or ""
+        abstract = doc.get("abstract") or ""
+        date_str = doc.get("date") or ""
+        year: int | None = None
+        if date_str:
+            try:
+                year = int(str(date_str)[:4])
+            except (ValueError, IndexError):
+                pass
+        doc_type = (doc.get("type") or "").lower()
+        doi = doc.get("doi") or ""
+        authors = doc.get("authors") or []
+        has_fulltext = bool(doc.get("is_oa")) or bool(doc.get("oa_url"))
 
     return {
         "title": title,

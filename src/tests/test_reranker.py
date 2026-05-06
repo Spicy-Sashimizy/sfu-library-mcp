@@ -239,6 +239,149 @@ class TestNormalizeForRerank:
         assert norm["authors"] == []
 
 
+def _make_normalized_doc(
+    title="Test Paper",
+    abstract="",
+    date="2024",
+    doc_type="article",
+    doi="10.1234/test",
+    authors=None,
+    is_oa=False,
+    oa_url="",
+) -> dict:
+    """Build a normalized OpenAlex doc (output of normalize_work()) for reranker tests.
+
+    This is the shape that tools.py actually passes to _maybe_rerank in production.
+    Keys differ from raw OpenAlex: 'date' not 'publication_year', 'authors' flat strings,
+    'is_oa'/'oa_url' top-level not nested.
+    """
+    return {
+        "title": title,
+        "abstract": abstract,
+        "date": date,
+        "type": doc_type,
+        "doi": doi,
+        "authors": authors if authors is not None else ["Test Author"],
+        "creators": authors if authors is not None else ["Test Author"],
+        "is_oa": is_oa,
+        "oa_url": oa_url,
+        "publisher": "",
+        "source": "",
+        "cited_by_count": 0,
+        "topics": [],
+    }
+
+
+class TestNormalizeForRerankNormalized:
+    """Tests for the normalized OpenAlex shape (the production path from tools.py)."""
+
+    def test_year_extracted_from_date_string(self):
+        doc = _make_normalized_doc(date="2022-08-15")
+        norm = _normalize_for_rerank(doc)
+        assert norm["year"] == 2022
+
+    def test_year_extracted_from_year_only_string(self):
+        doc = _make_normalized_doc(date="2019")
+        norm = _normalize_for_rerank(doc)
+        assert norm["year"] == 2019
+
+    def test_empty_date_gives_none_year(self):
+        doc = _make_normalized_doc(date="")
+        norm = _normalize_for_rerank(doc)
+        assert norm["year"] is None
+
+    def test_authors_flat_list_preserved(self):
+        doc = _make_normalized_doc(authors=["Smith, Jane", "Doe, John"])
+        norm = _normalize_for_rerank(doc)
+        assert norm["authors"] == ["Smith, Jane", "Doe, John"]
+
+    def test_is_oa_true_gives_fulltext(self):
+        doc = _make_normalized_doc(is_oa=True, oa_url="")
+        norm = _normalize_for_rerank(doc)
+        assert norm["has_fulltext"] is True
+
+    def test_oa_url_nonempty_gives_fulltext(self):
+        doc = _make_normalized_doc(is_oa=False, oa_url="https://example.org/paper.pdf")
+        norm = _normalize_for_rerank(doc)
+        assert norm["has_fulltext"] is True
+
+    def test_no_oa_no_url_gives_no_fulltext(self):
+        doc = _make_normalized_doc(is_oa=False, oa_url="")
+        norm = _normalize_for_rerank(doc)
+        assert norm["has_fulltext"] is False
+
+    def test_normalized_doc_does_not_use_raw_oa_keys(self):
+        """Confirm normalized shape is routed to the correct branch (no authorships key)."""
+        doc = _make_normalized_doc()
+        assert "authorships" not in doc
+        assert "publication_year" not in doc
+        assert "open_access" not in doc
+        norm = _normalize_for_rerank(doc)
+        assert norm["year"] is not None or doc["date"] == ""
+
+
+class TestRerankerNormalizedShape:
+    """End-to-end reranker tests using normalized docs — the production path."""
+
+    def test_recent_oa_ranks_above_old_non_oa(self):
+        recent = _make_normalized_doc(
+            title="Deep Learning Survey", date="2025",
+            doc_type="article", is_oa=True,
+        )
+        old = _make_normalized_doc(
+            title="History of Computing", date="1990",
+            doc_type="book", is_oa=False,
+        )
+        result = rerank_results([old, recent], "deep learning", limit=2, use_embedding=False)
+        assert result[0]["title"] == "Deep Learning Survey"
+
+    def test_recency_signal_works_with_normalized_date(self):
+        """Recency scoring must use 'date' key, not 'publication_year'."""
+        new_doc = _make_normalized_doc(title="New Paper", date="2025")
+        old_doc = _make_normalized_doc(title="Old Paper", date="1980")
+        result = rerank_results([old_doc, new_doc], "research", limit=2, use_embedding=False)
+        assert result[0]["title"] == "New Paper"
+
+    def test_fulltext_signal_works_with_is_oa(self):
+        """Fulltext scoring must use 'is_oa' key, not 'open_access.is_oa'."""
+        oa_doc = _make_normalized_doc(title="OA Paper", date="2020", is_oa=True)
+        closed_doc = _make_normalized_doc(title="Closed Paper", date="2020", is_oa=False)
+        result = rerank_results([closed_doc, oa_doc], "study", limit=2, use_embedding=False)
+        assert result[0]["title"] == "OA Paper"
+
+    def test_author_completeness_signal_works_with_flat_authors(self):
+        """Completeness scoring must use 'authors' flat list, not 'authorships'."""
+        with_authors = _make_normalized_doc(
+            title="Authored Paper", date="2023",
+            authors=["Smith, Jane"], doi="10.1/a",
+        )
+        no_authors = _make_normalized_doc(
+            title="No Author Paper", date="2023",
+            authors=[], doi="10.1/b",
+        )
+        result = rerank_results([no_authors, with_authors], "paper", limit=2, use_embedding=False)
+        assert result[0]["title"] == "Authored Paper"
+
+    def test_title_relevance_works_with_normalized_docs(self):
+        relevant = _make_normalized_doc(title="Machine Learning Methods", date="2023")
+        irrelevant = _make_normalized_doc(title="Medieval History", date="2023")
+        result = rerank_results([irrelevant, relevant], "machine learning", limit=2,
+                                use_embedding=False)
+        assert result[0]["title"] == "Machine Learning Methods"
+
+    def test_limit_respected(self):
+        docs = [_make_normalized_doc(title=f"Paper {i}", date="2023") for i in range(8)]
+        assert len(rerank_results(docs, "test", limit=3, use_embedding=False)) == 3
+
+    def test_empty_input_returns_empty(self):
+        assert rerank_results([], "test", limit=5, use_embedding=False) == []
+
+    def test_missing_fields_no_crash(self):
+        sparse = {"title": None, "date": None, "type": None, "doi": ""}
+        result = rerank_results([sparse], "test", limit=1, use_embedding=False)
+        assert len(result) == 1
+
+
 class TestRerankerOpenAlexShape:
     def test_recent_oa_article_ranks_above_old_non_oa(self):
         recent = _make_openalex_doc(
