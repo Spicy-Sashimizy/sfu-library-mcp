@@ -837,12 +837,13 @@ def _openalex_unavailable_reason() -> str | None:
     """Return a human-readable reason string if OpenAlex cannot serve requests, else None."""
     oa = _get_openalex()
     budget = oa.budget_status()
-    if budget["exhausted"]:
+    # Guard against non-dict returns (e.g. mocks in tests that don't configure budget_status)
+    if isinstance(budget, dict) and budget.get("exhausted") is True:
         return (
             f"OpenAlex daily budget exhausted ({budget['calls_today']:,}/{budget['daily_limit']:,} calls). "
             "Budget resets at local midnight."
         )
-    if oa.circuit_open:
+    if getattr(oa, "circuit_open", False) is True:
         return "OpenAlex is temporarily unavailable (circuit breaker open after repeated failures)."
     return None
 

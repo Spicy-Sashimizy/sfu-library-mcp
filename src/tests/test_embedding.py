@@ -162,15 +162,17 @@ class TestRerankerWithEmbedding:
         assert len(result) == 3
 
     def test_extract_doc_text(self):
-        """_extract_doc_text combines title and description."""
-        from lib.reranker import _extract_doc_text
-        doc = self._make_doc(title="Test Title", description="Test Description")
-        text = _extract_doc_text(doc)
+        """_extract_doc_text takes a normalized dict (output of _normalize_for_rerank)."""
+        from lib.reranker import _extract_doc_text, _normalize_for_rerank
+        raw = self._make_doc(title="Test Title", description="Test Description")
+        norm = _normalize_for_rerank(raw)
+        text = _extract_doc_text(norm)
         assert "Test Title" in text
         assert "Test Description" in text
 
     def test_extract_doc_text_no_description(self):
-        from lib.reranker import _extract_doc_text
-        doc = self._make_doc(title="Only Title")
-        text = _extract_doc_text(doc)
+        from lib.reranker import _extract_doc_text, _normalize_for_rerank
+        raw = self._make_doc(title="Only Title")
+        norm = _normalize_for_rerank(raw)
+        text = _extract_doc_text(norm)
         assert "Only Title" in text

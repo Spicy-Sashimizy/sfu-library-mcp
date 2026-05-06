@@ -92,9 +92,10 @@ class TestToolDefinitions:
             assert tool.inputSchema.get("type") == "object"
 
     def test_doi_based_tools_require_doi(self):
+        # generate_citation and save_to_zotero accept either a DOI OR raw title fields
+        # so they have no required fields — only the strictly-DOI-only tools are tested here
         doi_tools = {"search_by_doi", "get_citations", "get_references",
-                     "get_paper_summary", "find_open_access", "get_full_text_link",
-                     "generate_citation", "save_to_zotero"}
+                     "get_paper_summary", "find_open_access", "get_full_text_link"}
         for tool in TOOL_DEFINITIONS:
             if tool.name in doi_tools:
                 required = tool.inputSchema.get("required", [])
@@ -220,7 +221,7 @@ class TestGenerateCitation:
     @pytest.mark.asyncio
     async def test_no_doi(self):
         result = await handle_tool_call("generate_citation", {"doi": ""})
-        assert "No DOI" in result[0].text
+        assert "Provide a DOI" in result[0].text or "title" in result[0].text.lower()
 
     @pytest.mark.asyncio
     async def test_not_found(self):
