@@ -3,6 +3,7 @@
 import json
 import logging
 import threading
+import time
 from datetime import date
 from pathlib import Path
 from typing import Any
@@ -10,6 +11,7 @@ from typing import Any
 import requests
 
 from lib.cache import ResponseCache
+from lib.retry import CircuitBreaker, CircuitBreakerOpenError
 
 logger = logging.getLogger("sfu_library_mcp")
 
@@ -236,13 +238,23 @@ class OpenAlexClient:
         timeout: int = 30,
         daily_call_limit: int = 900,
         tracker_path: str = "/tmp/openalex_calls.json",
+        max_retries: int = 3,
+        retry_base_delay: float = 2.0,
+        circuit_breaker_threshold: int = 5,
+        circuit_breaker_timeout: float = 120.0,
     ):
         self.mailto = mailto
         self.api_key = api_key
         self.timeout = timeout
+        self._max_retries = max_retries
+        self._retry_base_delay = retry_base_delay
         self._tracker = DailyCallTracker(limit=daily_call_limit, path=tracker_path)
         # 5-minute response cache — prevents duplicate API calls for the same query
         self._cache = ResponseCache(ttl=300, max_size=200, max_memory_mb=20)
+        self._breaker = CircuitBreaker(
+            threshold=circuit_breaker_threshold,
+            timeout=circuit_breaker_timeout,
+        )
 
     def _params(self, extra: dict) -> dict:
         p = dict(extra)
@@ -252,14 +264,24 @@ class OpenAlexClient:
             p.setdefault("mailto", self.mailto)
         return p
 
+    @property
+    def circuit_open(self) -> bool:
+        """True when the circuit breaker is open (OpenAlex considered down)."""
+        return not self._breaker.can_proceed()
+
     def _get(self, path: str, params: dict) -> dict | None:
-        # Hard block when daily limit is exhausted
+        # Hard block when daily budget is exhausted
         status = self._tracker.status()
         if status["exhausted"]:
             logger.warning(
                 "OpenAlex daily limit reached (%d/%d calls) — request blocked to protect budget",
                 status["calls_today"], status["daily_limit"],
             )
+            return None
+
+        # Circuit breaker — fail fast when service is considered down
+        if not self._breaker.can_proceed():
+            logger.warning("OpenAlex circuit breaker OPEN — skipping request")
             return None
 
         # Response cache — zero cost for repeated identical queries
@@ -278,33 +300,63 @@ class OpenAlexClient:
                 status["pct_used"], status["calls_today"], status["daily_limit"],
             )
 
-        try:
-            resp = requests.get(
-                f"{OPENALEX_BASE}{path}",
-                params=self._params(params),
-                headers={"User-Agent": _USER_AGENT},
-                timeout=self.timeout,
-            )
-            if resp.status_code == 429:
-                logger.warning("OpenAlex rate limited (429)")
+        last_exc: Exception | None = None
+        for attempt in range(self._max_retries + 1):
+            try:
+                resp = requests.get(
+                    f"{OPENALEX_BASE}{path}",
+                    params=self._params(params),
+                    headers={"User-Agent": _USER_AGENT},
+                    timeout=self.timeout,
+                )
+                if resp.status_code == 429:
+                    delay = min(self._retry_base_delay * (4 ** attempt), 60.0)
+                    logger.warning(
+                        "OpenAlex rate limited (429), retry %d/%d after %.1fs",
+                        attempt + 1, self._max_retries, delay,
+                    )
+                    if attempt < self._max_retries:
+                        time.sleep(delay)
+                        continue
+                    self._breaker.record_failure()
+                    return None
+                resp.raise_for_status()
+                data = resp.json()
+                self._breaker.record_success()
+                new_status = self._tracker.increment()
+                self._cache.put(cache_key, data)
+                logger.debug(
+                    "OpenAlex call #%d today (%.0f%% of %d daily limit)",
+                    new_status["calls_today"], new_status["pct_used"], new_status["daily_limit"],
+                )
+                return data
+            except requests.Timeout as e:
+                last_exc = e
+                delay = min(self._retry_base_delay * (2 ** attempt), 60.0)
+                logger.warning(
+                    "OpenAlex request timed out, retry %d/%d after %.1fs",
+                    attempt + 1, self._max_retries, delay,
+                )
+                self._breaker.record_failure()
+                if attempt < self._max_retries:
+                    time.sleep(delay)
+            except requests.HTTPError as e:
+                last_exc = e
+                delay = min(self._retry_base_delay * (2 ** attempt), 60.0)
+                logger.warning(
+                    "OpenAlex HTTP error %s, retry %d/%d after %.1fs",
+                    e, attempt + 1, self._max_retries, delay,
+                )
+                self._breaker.record_failure()
+                if attempt < self._max_retries:
+                    time.sleep(delay)
+            except Exception as e:
+                logger.error("OpenAlex request failed: %s", e)
+                self._breaker.record_failure()
                 return None
-            resp.raise_for_status()
-            data = resp.json()
-        except requests.Timeout:
-            logger.error("OpenAlex request timed out")
-            return None
-        except Exception as e:
-            logger.error("OpenAlex request failed: %s", e)
-            return None
 
-        # Record the call and cache the result
-        new_status = self._tracker.increment()
-        self._cache.put(cache_key, data)
-        logger.debug(
-            "OpenAlex call #%d today (%.0f%% of %d daily limit)",
-            new_status["calls_today"], new_status["pct_used"], new_status["daily_limit"],
-        )
-        return data
+        logger.error("OpenAlex request failed after %d retries: %s", self._max_retries, last_exc)
+        return None
 
     def budget_status(self) -> dict:
         """Return current daily call budget status."""
