@@ -87,6 +87,9 @@ class ServerConfig:
     # Query log for LambdaMART training data (O.3); empty = disabled
     query_log_path: str = ""
 
+    # Tool metrics log; empty = disabled (in-memory only, resets on restart)
+    metrics_log_path: str = ""
+
     # EZProxy
     sfu_ezproxy_base: str = "https://proxy.lib.sfu.ca/login?url="
 
@@ -217,6 +220,7 @@ def load_config() -> ServerConfig:
             "sentence-transformers/all-MiniLM-L6-v2",
         ),
         query_log_path=os.environ.get("SFU_QUERY_LOG_PATH", ""),
+        metrics_log_path=os.environ.get("SFU_METRICS_LOG_PATH", ""),
     )
 
 

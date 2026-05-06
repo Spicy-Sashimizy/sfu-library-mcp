@@ -217,6 +217,9 @@ def _lookup_work(doi_or_id: str) -> dict | None:
 
 
 # ── Metrics ───────────────────────────────────────────────────────────────────
+# In-memory aggregates (resets on restart — useful for live introspection).
+# If SFU_METRICS_LOG_PATH is set, each call is also appended to a JSONL file
+# for trend analysis and error pattern detection across restarts.
 
 _metrics: dict[str, dict[str, Any]] = {}
 
@@ -228,6 +231,36 @@ def _record_metric(tool_name: str, latency: float, success: bool) -> None:
     _metrics[tool_name]["total_latency"] += latency
     if not success:
         _metrics[tool_name]["errors"] += 1
+    _persist_metric(tool_name, latency, success)
+
+
+def _persist_metric(tool_name: str, latency: float, success: bool) -> None:
+    """Append one metric entry to the JSONL metrics log if configured.
+
+    Enable via: SFU_METRICS_LOG_PATH=/path/to/metrics.jsonl
+    Each line: {ts, tool, latency_ms, success, server_version}
+    Failures are silently swallowed so a bad log path never breaks a tool call.
+    """
+    config = _get_config()
+    log_path = config.metrics_log_path
+    if not log_path:
+        return
+    try:
+        import datetime
+        from pathlib import Path
+        entry = {
+            "ts": datetime.datetime.utcnow().isoformat() + "Z",
+            "tool": tool_name,
+            "latency_ms": round(latency * 1000, 1),
+            "success": success,
+            "server_version": SERVER_VERSION,
+        }
+        p = Path(log_path)
+        p.parent.mkdir(parents=True, exist_ok=True)
+        with p.open("a") as f:
+            f.write(json.dumps(entry) + "\n")
+    except Exception:
+        logger.debug("Metrics log write failed (non-fatal)")
 
 
 def get_metrics() -> dict:
