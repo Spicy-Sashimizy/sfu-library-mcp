@@ -1,8 +1,11 @@
 """Semantic Scholar Graph API client — citations, references, TLDRs."""
 
 import logging
+import time
 
 import requests
+
+from lib.retry import CircuitBreaker
 
 logger = logging.getLogger("sfu_library_mcp")
 
@@ -46,9 +49,23 @@ class SemanticScholarClient:
     With API key: ~1 req/s sustained.
     """
 
-    def __init__(self, api_key: str = "", timeout: int = 30):
+    def __init__(
+        self,
+        api_key: str = "",
+        timeout: int = 30,
+        max_retries: int = 3,
+        retry_base_delay: float = 2.0,
+        circuit_breaker_threshold: int = 5,
+        circuit_breaker_timeout: float = 120.0,
+    ):
         self.api_key = api_key
         self.timeout = timeout
+        self._max_retries = max_retries
+        self._retry_base_delay = retry_base_delay
+        self._breaker = CircuitBreaker(
+            threshold=circuit_breaker_threshold,
+            timeout=circuit_breaker_timeout,
+        )
 
     def _headers(self) -> dict:
         h = {"User-Agent": "SFULibraryMCP/1.0"}
@@ -57,24 +74,61 @@ class SemanticScholarClient:
         return h
 
     def _get(self, path: str, params: dict) -> dict | None:
-        try:
-            resp = requests.get(
-                f"{S2_BASE}{path}",
-                params=params,
-                headers=self._headers(),
-                timeout=self.timeout,
-            )
-            if resp.status_code == 429:
-                logger.warning("Semantic Scholar rate limited (429)")
+        if not self._breaker.can_proceed():
+            logger.warning("Semantic Scholar circuit breaker OPEN — skipping request")
+            return None
+
+        last_exc: Exception | None = None
+        for attempt in range(self._max_retries + 1):
+            try:
+                resp = requests.get(
+                    f"{S2_BASE}{path}",
+                    params=params,
+                    headers=self._headers(),
+                    timeout=self.timeout,
+                )
+                if resp.status_code == 429:
+                    # S2 free tier: 100 req / 5 min — use a longer base delay on 429
+                    delay = min(self._retry_base_delay * (4 ** attempt), 120.0)
+                    logger.warning(
+                        "Semantic Scholar rate limited (429), retry %d/%d after %.1fs",
+                        attempt + 1, self._max_retries, delay,
+                    )
+                    if attempt < self._max_retries:
+                        time.sleep(delay)
+                        continue
+                    self._breaker.record_failure()
+                    return None
+                resp.raise_for_status()
+                self._breaker.record_success()
+                return resp.json()
+            except requests.Timeout as e:
+                last_exc = e
+                delay = min(self._retry_base_delay * (2 ** attempt), 60.0)
+                logger.warning(
+                    "Semantic Scholar request timed out, retry %d/%d after %.1fs",
+                    attempt + 1, self._max_retries, delay,
+                )
+                self._breaker.record_failure()
+                if attempt < self._max_retries:
+                    time.sleep(delay)
+            except requests.HTTPError as e:
+                last_exc = e
+                delay = min(self._retry_base_delay * (2 ** attempt), 60.0)
+                logger.warning(
+                    "Semantic Scholar HTTP error %s, retry %d/%d after %.1fs",
+                    e, attempt + 1, self._max_retries, delay,
+                )
+                self._breaker.record_failure()
+                if attempt < self._max_retries:
+                    time.sleep(delay)
+            except Exception as e:
+                logger.error("Semantic Scholar request failed: %s", e)
+                self._breaker.record_failure()
                 return None
-            resp.raise_for_status()
-            return resp.json()
-        except requests.Timeout:
-            logger.error("Semantic Scholar request timed out")
-            return None
-        except Exception as e:
-            logger.error("Semantic Scholar request failed: %s", e)
-            return None
+
+        logger.error("Semantic Scholar request failed after %d retries: %s", self._max_retries, last_exc)
+        return None
 
     def search_papers(
         self,
