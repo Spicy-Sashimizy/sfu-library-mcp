@@ -42,23 +42,40 @@ class DailyCallTracker:
         return date.today().isoformat()
 
     def _load(self) -> None:
+        today = self._today()
+        if not self._path.is_file():
+            # Normal on first run or after a container restart that wiped /tmp.
+            logger.warning(
+                "OpenAlex tracker file not found at %s — call counter reset to 0 "
+                "(first use today, or /tmp was cleared on restart). "
+                "Set OPENALEX_TRACKER_PATH to a persistent volume to survive restarts.",
+                self._path,
+            )
+            self._count = 0
+            self._date = today
+            return
         try:
-            if self._path.is_file():
-                data = json.loads(self._path.read_text())
-                if data.get("date") == self._today():
-                    self._count = int(data.get("count", 0))
-                    self._date = data["date"]
-                    return
-        except Exception:
-            pass
-        self._count = 0
-        self._date = self._today()
+            data = json.loads(self._path.read_text())
+            if data.get("date") == today:
+                self._count = int(data.get("count", 0))
+                self._date = data["date"]
+                return
+            # File exists but is from a previous day — normal daily reset
+            self._count = 0
+            self._date = today
+        except Exception as exc:
+            logger.warning(
+                "OpenAlex tracker file at %s is corrupt (%s) — call counter reset to 0.",
+                self._path, exc,
+            )
+            self._count = 0
+            self._date = today
 
     def _save(self) -> None:
         try:
             self._path.write_text(json.dumps({"date": self._date, "count": self._count}))
-        except Exception:
-            pass
+        except Exception as exc:
+            logger.warning("Failed to persist OpenAlex call tracker to %s: %s", self._path, exc)
 
     def status(self) -> dict:
         """Return current usage without incrementing."""

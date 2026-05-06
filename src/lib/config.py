@@ -241,6 +241,13 @@ def validate_config(config: ServerConfig) -> list[str]:
     if not config.openalex_api_key and not config.openalex_mailto:
         warnings.append("Neither OPENALEX_API_KEY nor OPENALEX_MAILTO set — OpenAlex limited to 1 req/s")
 
+    # OpenAlex tracker path — /tmp is cleared on container/host restart
+    if config.openalex_tracker_path.startswith("/tmp"):
+        warnings.append(
+            "OPENALEX_TRACKER_PATH is in /tmp — the daily call counter will reset on container restart. "
+            "Set OPENALEX_TRACKER_PATH to a persistent volume path to preserve budget across restarts."
+        )
+
     # Unpaywall (required for OA fallback step)
     if not config.unpaywall_email:
         warnings.append("UNPAYWALL_EMAIL is unset — Unpaywall OA resolution disabled")
