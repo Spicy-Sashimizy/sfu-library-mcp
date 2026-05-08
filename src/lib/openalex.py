@@ -400,10 +400,13 @@ class OpenAlexClient:
         data = self._get("/works", params)
         if not data:
             return {"results": [], "meta": {"count": 0}}
-        return {
+        result = {
             "results": [normalize_work(w) for w in data.get("results", [])],
             "meta": data.get("meta", {}),
         }
+        # TODO(Phase P.7): call self._push_to_opensearch(result["results"]) here when
+        # local_opensearch_enabled — docs/SPLADE_OPENSEARCH_INTEGRATION_PLAN.md §P.7
+        return result
 
     def get_work_by_doi(self, doi: str) -> dict | None:
         """Fetch a single work by DOI."""

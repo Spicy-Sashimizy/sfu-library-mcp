@@ -60,6 +60,9 @@ class ServerConfig:
         # Structured query log for LambdaMART training data collection (Phase O.3).
         # Writes (query, ranked docs, latency) to query_log_path as JSONL.
         "query_log_enabled": False,
+        # TODO(Phase P): Add local_opensearch_enabled, splade_enabled,
+        # federated_search_enabled, opensearch_url, opensearch_index,
+        # splade_model_path, federated_recency_days — see docs/SPLADE_OPENSEARCH_INTEGRATION_PLAN.md §P.8
     })
 
     # Local embedding model

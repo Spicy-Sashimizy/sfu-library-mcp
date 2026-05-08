@@ -25,6 +25,8 @@ _WEIGHTS_NO_EMBEDDING = {
 
 _WEIGHTS_WITH_EMBEDDING = {
     "semantic_similarity": 0.35,
+    # TODO(Phase P.9): title_relevance is a patch for lacking query ownership; remove once
+    # SPLADE ships and redistribute 0.15 to semantic_similarity — docs/SPLADE_OPENSEARCH_INTEGRATION_PLAN.md §P.9
     "title_relevance": 0.15,
     "recency": 0.15,
     "fulltext_available": 0.15,

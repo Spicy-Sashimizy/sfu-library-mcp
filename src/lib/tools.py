@@ -867,6 +867,9 @@ async def _s2_fallback(query: str, limit: int, reason: str) -> list[TextContent]
 
 # ── Search handlers ───────────────────────────────────────────────────────────
 
+# TODO(Phase P.6): when federated_search_enabled, replace direct OpenAlex calls below with
+# FederatedSearchRouter.search() — routes fresh queries to live API, historical to local
+# OpenSearch SPLADE index — docs/SPLADE_OPENSEARCH_INTEGRATION_PLAN.md §P.6
 async def _handle_search_academic(args: dict) -> list[TextContent]:
     query = sanitize_search_query(args.get("query", ""))
     if not query:
