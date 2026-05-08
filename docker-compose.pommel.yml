@@ -1,11 +1,11 @@
-# Pommel service for ClaudeBox sfu-library-mcp
+# Pommel service for ClaudeBox sfu-library-mcp-training
 # Provides semantic code search with Ollama proxy for batch splitting
 
-name: claudebox-sfu-library-mcp-pommel
+name: claudebox-sfu-library-mcp-training-pommel
 
 services:
   pommel:
-    container_name: claudebox-sfu-library-mcp-pommel
+    container_name: claudebox-sfu-library-mcp-training-pommel
     image: debian:bookworm-slim
     volumes:
       - .:/workspace
@@ -16,7 +16,7 @@ services:
       - |
         set -e
         echo "=========================================="
-        echo "  Pommel Setup for sfu-library-mcp"
+        echo "  Pommel Setup for sfu-library-mcp-training"
         echo "=========================================="
 
         # Install dependencies
@@ -208,13 +208,13 @@ services:
     extra_hosts:
       - "host.docker.internal:host-gateway"
     ports:
-      - "7424:7420"
+      - "7447:7420"
     networks:
       - claudebox-shared
     labels:
       - "com.claudebox.managed=true"
       - "com.claudebox.service=pommel"
-      - "com.claudebox.project=sfu-library-mcp"
+      - "com.claudebox.project=sfu-library-mcp-training"
     restart: unless-stopped
 
 networks:
@@ -224,8 +224,7 @@ networks:
 
 volumes:
   pommel-data:
-    name: claudebox-sfu-library-mcp-pommel-data
+    name: claudebox-sfu-library-mcp-training-pommel-data
     labels:
       com.claudebox.managed: "true"
-      com.claudebox.project: "sfu-library-mcp"
-
+      com.claudebox.project: "sfu-library-mcp-training"

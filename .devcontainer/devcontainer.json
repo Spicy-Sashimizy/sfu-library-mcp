@@ -1,8 +1,8 @@
 {
-  "name": "sfu-library-mcp-clone",
+  "name": "sfu-library-mcp-training",
   "dockerComposeFile": "docker-compose.yml",
   "service": "app",
-  "workspaceFolder": "/workspaces/sfu-library-mcp-clone",
+  "workspaceFolder": "/workspaces/sfu-library-mcp-training",
   "shutdownAction": "stopCompose",
   "initializeCommand": "powershell -NoProfile -File .devcontainer/initialize.ps1",
 
@@ -23,7 +23,7 @@
     "vscode": {
       "settings": {
         "terminal.integrated.defaultProfile.linux": "bash",
-        "python.defaultInterpreterPath": "/workspaces/sfu-library-mcp-clone/.venv/bin/python3",
+        "python.defaultInterpreterPath": "/workspaces/sfu-library-mcp-training/.venv/bin/python3",
         "python.formatting.provider": "none",
         "editor.formatOnSave": true,
       
