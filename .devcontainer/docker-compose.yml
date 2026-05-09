@@ -112,7 +112,7 @@ services:
       - discovery.type=single-node
       - OPENSEARCH_JAVA_OPTS=-Xms2g -Xmx2g
       - DISABLE_SECURITY_PLUGIN=true
-      - plugins.query.size.limit=10000
+      - plugins.query.size_limit=10000
       - http.max_content_length=500mb
     ulimits:
       memlock:
