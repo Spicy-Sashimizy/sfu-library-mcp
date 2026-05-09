@@ -259,6 +259,9 @@ class OpenAlexClient:
         retry_base_delay: float = 2.0,
         circuit_breaker_threshold: int = 5,
         circuit_breaker_timeout: float = 120.0,
+        opensearch_enabled: bool = False,
+        opensearch_url: str = "http://localhost:9200",
+        opensearch_index: str = "openalex_works",
     ):
         self.mailto = mailto
         self.api_key = api_key
@@ -272,6 +275,9 @@ class OpenAlexClient:
             threshold=circuit_breaker_threshold,
             timeout=circuit_breaker_timeout,
         )
+        self._opensearch_enabled = opensearch_enabled
+        self._opensearch_url = opensearch_url
+        self._opensearch_index = opensearch_index
 
     def _params(self, extra: dict) -> dict:
         p = dict(extra)
@@ -379,6 +385,56 @@ class OpenAlexClient:
         """Return current daily call budget status."""
         return self._tracker.status()
 
+    def _push_to_opensearch(self, results: list[dict]) -> None:
+        """Fire-and-forget: upsert live API results into local OpenSearch index.
+
+        Only active when opensearch_enabled=True. Runs in a daemon thread so it
+        never blocks the live search path. All exceptions are swallowed silently.
+        DOI is used as the document ID to avoid duplicates.
+        """
+        if not self._opensearch_enabled or not results:
+            return
+
+        def _do_push():
+            try:
+                import requests as _requests
+                base = self._opensearch_url.rstrip("/")
+                index = self._opensearch_index
+                bulk_lines: list[str] = []
+                import json as _json
+                for doc in results:
+                    doi = normalize_doi(doc.get("doi", ""))
+                    doc_id = doi or doc.get("openalex_id", "").split("/")[-1]
+                    if not doc_id:
+                        continue
+                    meta = _json.dumps({"index": {"_index": index, "_id": doc_id}})
+                    body = _json.dumps({
+                        "doi": doi,
+                        "openalex_id": doc.get("openalex_id", ""),
+                        "title": doc.get("title", ""),
+                        "abstract": doc.get("abstract", ""),
+                        "concepts": " ".join(doc.get("topics", [])),
+                        "publication_year": doc.get("date", "")[:4] or None,
+                        "type": doc.get("type", ""),
+                        "is_oa": doc.get("is_oa", False),
+                    })
+                    bulk_lines.extend([meta, body])
+                if not bulk_lines:
+                    return
+                payload = "\n".join(bulk_lines) + "\n"
+                _requests.post(
+                    f"{base}/_bulk",
+                    data=payload,
+                    headers={"Content-Type": "application/x-ndjson"},
+                    timeout=30,
+                )
+            except Exception:
+                pass  # never degrade live search path
+
+        import threading
+        t = threading.Thread(target=_do_push, daemon=True)
+        t.start()
+
     def search_works(
         self,
         query: str,
@@ -404,8 +460,7 @@ class OpenAlexClient:
             "results": [normalize_work(w) for w in data.get("results", [])],
             "meta": data.get("meta", {}),
         }
-        # TODO(Phase P.7): call self._push_to_opensearch(result["results"]) here when
-        # local_opensearch_enabled — docs/SPLADE_OPENSEARCH_INTEGRATION_PLAN.md §P.7
+        self._push_to_opensearch(result["results"])
         return result
 
     def get_work_by_doi(self, doi: str) -> dict | None:

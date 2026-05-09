@@ -163,6 +163,160 @@ def fetch_openalex_results(query: str, k: int = 50, use_cache: bool = True) -> l
     return results
 
 
+def fetch_opensearch_results(
+    query: str,
+    url: str = "http://localhost:9200",
+    index: str = "openalex_works",
+    k: int = 50,
+    splade: bool = False,
+) -> list[dict]:
+    """Fetch top-k results from a local OpenSearch index (P.11 eval path).
+
+    Uses BM25F (multi_match) by default. With splade=True the caller must have
+    pre-encoded the query into a rank_features body — not yet supported here
+    (requires P.3 index). For now this path validates the BM25F pilot (P.4).
+
+    Returns dicts compatible with the existing eval pipeline; ``cited_by_count``
+    is set to 0 since the current index doesn't store it (P.3 TODO). Use
+    ``_score`` (0-1 normalized) as a proxy relevance signal instead.
+    """
+    body = {
+        "size": k,
+        "query": {
+            "multi_match": {
+                "query": query,
+                "fields": ["title^3", "abstract", "concepts^2"],
+                "type": "best_fields",
+                "tie_breaker": 0.3,
+            }
+        },
+        "_source": ["doi", "title", "abstract", "publication_year", "type", "is_oa"],
+    }
+    try:
+        resp = requests.post(
+            f"{url.rstrip('/')}/{index}/_search",
+            json=body,
+            headers={"Content-Type": "application/json"},
+            timeout=15,
+        )
+        resp.raise_for_status()
+        data = resp.json()
+    except Exception as exc:
+        logger.warning("OpenSearch fetch failed for '%s': %s", query, exc)
+        return []
+
+    hits = (data.get("hits") or {}).get("hits") or []
+    if not hits:
+        return []
+    max_score = max(h.get("_score", 0.0) for h in hits) or 1.0
+    results = []
+    for hit in hits:
+        src = hit.get("_source") or {}
+        title = src.get("title", "")
+        if not title:
+            continue
+        norm_score = hit.get("_score", 0.0) / max_score
+        results.append({
+            "id": hit.get("_id", ""),
+            "title": title,
+            "abstract": src.get("abstract", ""),
+            "doi": src.get("doi", ""),
+            "publication_year": src.get("publication_year"),
+            "type": src.get("type", ""),
+            "is_oa": src.get("is_oa", False),
+            # Use normalized OpenSearch score as relevance proxy.
+            # Not directly comparable to citation-count proxy — see P.11 notes.
+            "cited_by_count": int(norm_score * 1000),
+        })
+    return results
+
+
+def evaluate_opensearch(
+    eval_queries: list[dict],
+    opensearch_url: str,
+    opensearch_index: str,
+    k: int = 10,
+    results_per_query: int = 50,
+    model=None,
+    fusion: str = "none",
+) -> dict:
+    """Evaluate BM25F (or SPLADE) OpenSearch retrieval on the eval query set (P.11).
+
+    Relevance proxy: normalized OpenSearch _score (0-1000 integer).
+    Note: this proxy differs from the citation-count proxy used for OpenAlex;
+    cross-system NDCG comparisons require the same ground truth.
+    Gate (from plan): SPLADE NDCG@10 >= OpenAlex baseline NDCG@10 - 0.02.
+    """
+    all_ndcg: list[float] = []
+    all_mrr: list[float] = []
+    all_recall: list[float] = []
+    subject_ndcg: dict[str, list[float]] = {}
+    query_results: list[dict] = []
+
+    for qi, q_item in enumerate(eval_queries):
+        query = q_item["query"]
+        subject = q_item.get("subject", "Unknown")
+
+        logger.info("  [OpenSearch %d/%d] '%s'", qi + 1, len(eval_queries), query[:60])
+
+        papers = fetch_opensearch_results(
+            query, url=opensearch_url, index=opensearch_index, k=results_per_query
+        )
+        if not papers:
+            logger.warning("  No OpenSearch results for: %s", query)
+            continue
+
+        relevance_scores = compute_relevance_proxy(papers)
+
+        if model is not None:
+            if fusion == "rrf":
+                reranked = rerank_with_rrf(query, papers, model)
+            else:
+                reranked = rerank_with_embedding(query, papers, model)
+            reranked_relevance = compute_relevance_proxy(reranked)
+        else:
+            reranked_relevance = relevance_scores
+
+        ndcg = ndcg_at_k(reranked_relevance, relevance_scores, k)
+        mrr = mrr_at_k(reranked_relevance, relevance_scores, k)
+        rec = recall_at_k(reranked_relevance, relevance_scores, k)
+        all_ndcg.append(ndcg)
+        all_mrr.append(mrr)
+        all_recall.append(rec)
+
+        subject_ndcg.setdefault(subject, []).append(ndcg)
+        query_results.append({
+            "query": query,
+            "subject": subject,
+            "ndcg_at_k": ndcg,
+            "mrr_at_k": mrr,
+            "recall_at_k": rec,
+            "num_results": len(papers),
+            "notes": q_item.get("notes", ""),
+        })
+
+    mean_ndcg = float(np.mean(all_ndcg)) if all_ndcg else 0.0
+    subject_breakdown = {
+        subj: {"mean_ndcg": float(np.mean(scores)), "queries": len(scores)}
+        for subj, scores in subject_ndcg.items()
+    }
+    return {
+        "model": "opensearch-bm25f" if model is None else f"opensearch+{model}",
+        "source": "opensearch",
+        "opensearch_url": opensearch_url,
+        "opensearch_index": opensearch_index,
+        "mean_ndcg_at_k": mean_ndcg,
+        "median_ndcg_at_k": float(np.median(all_ndcg)) if all_ndcg else 0.0,
+        "std_ndcg_at_k": float(np.std(all_ndcg)) if all_ndcg else 0.0,
+        "mean_mrr_at_k": float(np.mean(all_mrr)) if all_mrr else 0.0,
+        "mean_recall_at_k": float(np.mean(all_recall)) if all_recall else 0.0,
+        "num_queries": len(all_ndcg),
+        "k": k,
+        "subject_breakdown": subject_breakdown,
+        "per_query": sorted(query_results, key=lambda x: x["ndcg_at_k"]),
+    }
+
+
 def compute_relevance_proxy(papers: list[dict]) -> list[float]:
     """Citation-count relevance proxy (same method as benchmark_embeddings.py).
 
@@ -633,6 +787,16 @@ def main():
                              "and embedding models are scored against the same reference. "
                              "mpnet is the default because it's structurally distinct from both "
                              "the MiniLM baseline and the BGE-based custom model.")
+    # Phase P.11 — OpenSearch eval path
+    parser.add_argument("--source", choices=["openalex", "opensearch"], default="openalex",
+                        help="Retrieval source: 'openalex' (live API, default) or "
+                             "'opensearch' (local BM25F/SPLADE index, Phase P.4/P.11). "
+                             "OpenSearch must be running and indexed before use.")
+    parser.add_argument("--opensearch-url", type=str,
+                        default=os.environ.get("SFU_OPENSEARCH_URL", "http://localhost:9200"),
+                        help="OpenSearch base URL (default: SFU_OPENSEARCH_URL env or localhost:9200)")
+    parser.add_argument("--opensearch-index", type=str, default="openalex_works",
+                        help="OpenSearch index name (default: openalex_works)")
     args = parser.parse_args()
 
     # Load eval queries
@@ -646,6 +810,45 @@ def main():
     logger.info("Loaded %d SFU eval queries", len(eval_queries))
 
     all_results = []
+
+    # Phase P.11 — OpenSearch source path (BM25F pilot, P.4; SPLADE eval, P.11)
+    if args.source == "opensearch":
+        logger.info(
+            "Source: OpenSearch (%s / index=%s)", args.opensearch_url, args.opensearch_index
+        )
+        # Quick availability check
+        try:
+            health = requests.get(
+                f"{args.opensearch_url.rstrip('/')}/_cluster/health", timeout=5
+            ).json()
+            logger.info("OpenSearch cluster health: %s", health.get("status", "unknown"))
+        except Exception as exc:
+            logger.error("OpenSearch not reachable at %s: %s", args.opensearch_url, exc)
+            raise SystemExit(1)
+
+        result = evaluate_opensearch(
+            eval_queries=eval_queries,
+            opensearch_url=args.opensearch_url,
+            opensearch_index=args.opensearch_index,
+            k=args.k,
+            results_per_query=args.results_per_query,
+        )
+        all_results.append(result)
+
+        # Save to dated file in data/eval_results/
+        import datetime
+        today = datetime.date.today().isoformat()
+        out_dir = Path(__file__).parent.parent / "data" / "eval_results"
+        out_dir.mkdir(parents=True, exist_ok=True)
+        out_path = out_dir / f"bm25f_pilot_{today}.json"
+        out_path.write_text(json.dumps(result, indent=2))
+        logger.info("OpenSearch eval results saved to %s", out_path)
+        if args.output:
+            Path(args.output).parent.mkdir(parents=True, exist_ok=True)
+            Path(args.output).write_text(json.dumps(all_results, indent=2))
+
+        print_results_table(all_results, args.k)
+        return
 
     from sentence_transformers import SentenceTransformer
 

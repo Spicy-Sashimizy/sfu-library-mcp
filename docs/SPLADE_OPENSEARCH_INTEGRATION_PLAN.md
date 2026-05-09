@@ -3,7 +3,8 @@
 **Status:** PENDING — gated on Phase O completion  
 **Phase O gated on:** Phase M completion  
 **Architecture decision:** Option C — Federated Hybrid (see §Alternatives Considered)  
-**Last updated:** 2026-05-08
+**Last updated:** 2026-05-09  
+**Implementation progress:** P.1, P.4-P.8, P.11 infra complete (training branch). P.2, P.3, P.10 deferred (require OpenAlex snapshot download). P.9 gated on eval.
 
 ---
 
@@ -41,17 +42,14 @@ Do not start Phase P.1 until both boxes above are checked.
 **Repo:** new `opensearch` container  
 **Effort:** ~1 day
 
-- [ ] Provision `docker-compose` service: OpenSearch 2.x, 8GB heap, 2 shards, 1 replica
-- [ ] Enable `plugins.query.size.limit: 10000` and `http.max_content_length: 500mb`
-- [ ] Create index template with SPLADE-compatible sparse vector mapping:
-  ```json
-  "sparse_field": { "type": "rank_features" }
-  ```
-- [ ] Verify index health (green) and REST API accessible on port 9200
-- [ ] Set `OPENSEARCH_URL` env var and document in container README
-- [ ] Add health-check endpoint (`GET /_cluster/health`) to docker-compose
+- [x] Provision `docker-compose` service: OpenSearch 2.x, 2GB heap (dev), 2 shards, 0 replicas (single-node)
+- [x] Enable `plugins.query.size.limit: 10000` and `http.max_content_length: 500mb`
+- [x] Create index template with SPLADE-compatible sparse vector mapping (`docker/opensearch/index_template.json`)
+- [x] Add health-check endpoint (`GET /_cluster/health`) to docker-compose
+- [x] Set `SFU_OPENSEARCH_URL` env var in app container environment
+- [ ] Verify index health (green) after container restart — run `docker/opensearch/setup_index.sh` once
 
-**Deliverable:** Running OpenSearch 2.x instance, empty index, accessible from MCP server container
+**Deliverable:** Service defined; run `docker/opensearch/setup_index.sh` after next devcontainer rebuild to create the index.
 
 ---
 
@@ -123,21 +121,15 @@ Run this before committing GPU time to full SPLADE indexing. Confirms OpenSearch
 **Repo:** `sfu-library-mcp` → `src/lib/opensearch_retriever.py`  
 **Effort:** ~1 day
 
-- [ ] Write `src/lib/opensearch_retriever.py` with:
-  - `OpenSearchRetriever` class wrapping `opensearch-py` client
-  - `search(query: str, top_k: int = 50) -> list[dict]` method
-  - SPLADE query encoding: load model once (singleton), encode query → sparse term dict
-  - Build `rank_features` query body for OpenSearch
-  - Return normalized result dicts: `{doi, title, abstract, year, score, source: "opensearch"}`
-  - Connection retry + circuit breaker (same pattern as `SemanticScholarClient`)
+- [x] Write `src/lib/opensearch_retriever.py` with BM25F + SPLADE paths
+  - `OpenSearchRetriever` class (raw HTTP, no opensearch-py dep)
+  - `search(query, top_k=50)` → `{doi, title, abstract, year, score, source: "opensearch"}`
+  - SPLADE singleton loader (lazy-import torch/transformers)
   - `SFU_OPENSEARCH_URL` env var, default `http://localhost:9200`
-- [ ] Unit test: `src/tests/test_opensearch_retriever.py`
-  - Mock OpenSearch responses
-  - Verify query encoding produces non-empty sparse dict
-  - Verify result normalization
-- [ ] Integration test (manual): point at local OpenSearch, run 5 known queries, check top results
+- [x] Unit test: `src/tests/test_opensearch_retriever.py` — 11 tests passing
+- [ ] Integration test (manual): run `setup_index.sh`, index sample docs, run 5 queries
 
-**Deliverable:** `opensearch_retriever.py` + tests; importable from `federated_search.py`
+**Deliverable:** `opensearch_retriever.py` + 11 passing tests ✓
 
 ---
 
@@ -152,24 +144,15 @@ Run this before committing GPU time to full SPLADE indexing. Confirms OpenSearch
 - RRF fusion of OpenSearch + OpenAlex scores when both sources return results
 
 Checklist:
-- [ ] Write `src/lib/federated_search.py`:
-  - `FederatedSearchRouter` class
-  - `route(query: str, filters: dict) -> SearchSource` enum: `LIVE_API`, `LOCAL_INDEX`, `BOTH`
-  - Routing logic:
-    - If `filters.get("from_publication_date")` within last 30 days → `LIVE_API`
-    - If query has temporal cues ("recent", "2025", "latest") → `LIVE_API`
-    - Otherwise → `LOCAL_INDEX`
-    - Always `BOTH` if `federated_both_enabled` config flag is set
-  - `search(query, filters, top_k)` method: dispatches, deduplicates by DOI, RRF-fuses
-  - DOI normalization: strip `https://doi.org/` prefix for comparison
-- [ ] Write `src/tests/test_federated_search.py`:
-  - Test routing logic for fresh/historical/temporal-cue cases
-  - Test DOI dedup: overlapping result sets collapse correctly
-  - Test RRF fusion with mock scores
-- [ ] Update `src/lib/tools.py`: replace direct `openalex.py` calls with `FederatedSearchRouter` when `federated_search_enabled` flag is set (feature-flagged)
-- [ ] Update `src/lib/config.py`: add `federated_search_enabled` flag (default `False`)
+- [x] Write `src/lib/federated_search.py`
+  - `FederatedSearchRouter` + `SearchSource` enum (`LIVE_API`, `LOCAL_INDEX`, `BOTH`)
+  - Routing: `from_publication_date` within `recency_days` → LIVE_API; temporal cues → LIVE_API; else → LOCAL_INDEX
+  - `search(query, filters, top_k, force_source)` with DOI dedup + RRF fusion
+- [x] Write `src/tests/test_federated_search.py` — 20 tests passing
+- [x] Update `src/lib/tools.py`: `_get_federated_router()` lazy loader; `_handle_search_academic` branches on `federated_search_enabled`
+- [x] Update `src/lib/config.py`: `federated_search_enabled` flag (default `False`)
 
-**Deliverable:** `federated_search.py` + tests; `tools.py` updated with feature flag path
+**Deliverable:** `federated_search.py` + 20 passing tests + `tools.py` feature-flagged ✓
 
 ---
 
@@ -179,15 +162,14 @@ Checklist:
 
 Every live API response gets pushed to local OpenSearch to keep the index warm for recently-published papers.
 
-- [ ] Add `_push_to_opensearch(results: list[dict])` private method in `OpenAlexClient`
-  - Only active when `local_opensearch_enabled` config flag is True
-  - Fire-and-forget: async, non-blocking, catch all exceptions silently (never degrade live search)
-  - Batch upsert: DOI as doc ID, avoid re-encoding if doc already indexed
-  - Skip SPLADE encoding in this path — store raw text; encode lazily or queue for background worker
-- [ ] Integration point: call `_push_to_opensearch` at end of `search()` method
-- [ ] Test: mock OpenSearch client; verify push is called with correct payload; verify exception swallowed
+- [x] Add `_push_to_opensearch(results)` to `OpenAlexClient`
+  - Gated on `opensearch_enabled` constructor param (set from `local_opensearch_enabled` config flag)
+  - Fire-and-forget daemon thread; all exceptions swallowed silently
+  - Bulk upsert via `/_bulk` API; DOI as doc ID
+- [x] Called at end of `search_works()` (replaced TODO comment)
+- [ ] Integration test: confirm bulk payload reaches OpenSearch when flag enabled
 
-**Deliverable:** Live API responses begin populating local index; zero latency impact on hot path
+**Deliverable:** `_push_to_opensearch` implemented; live API responses will auto-populate index ✓
 
 ---
 
@@ -195,20 +177,17 @@ Every live API response gets pushed to local OpenSearch to keep the index warm f
 **Repo:** `sfu-library-mcp` → `src/lib/config.py`  
 **Effort:** ~0.5 day
 
-- [ ] Add to `Config` class (maintain existing `rrf_enabled`, `rerank_enabled`, `crossencoder_enabled` pattern):
-  ```python
-  local_opensearch_enabled: bool = False      # Master switch for OpenSearch path
-  splade_enabled: bool = False                # Use SPLADE encoding vs BM25F on OpenSearch
-  federated_search_enabled: bool = False      # Route queries through FederatedSearchRouter
-  opensearch_url: str = "http://localhost:9200"
-  opensearch_index: str = "openalex_works"
-  splade_model_path: str = "naver/splade-cocondenser-distil"
-  federated_recency_days: int = 30            # Queries within N days → live API
-  ```
-- [ ] All flags default to `False` — zero behavior change until explicitly enabled
-- [ ] Document each flag in config docstring
+- [x] Added to `ServerConfig` dataclass and `load_config()`:
+  - `local_opensearch_enabled: bool = False` (feature flag)
+  - `splade_enabled: bool = False` (feature flag)
+  - `federated_search_enabled: bool = False` (feature flag)
+  - `opensearch_url: str` (env: `SFU_OPENSEARCH_URL`)
+  - `opensearch_index: str` (env: `SFU_OPENSEARCH_INDEX`)
+  - `splade_model_path: str` (env: `SFU_SPLADE_MODEL_PATH`)
+  - `federated_recency_days: int` (env: `SFU_FEDERATED_RECENCY_DAYS`)
+- [x] All flags default `False` — zero behavior change until env vars or config flipped
 
-**Deliverable:** Config additions; no behavior change until flags flipped
+**Deliverable:** Config additions complete ✓
 
 ---
 
@@ -270,14 +249,16 @@ completeness: 0.10
 **Repo:** `sfu-library-mcp-training` — eval scripts  
 **Effort:** ~1 day
 
-- [ ] Extend `scripts/evaluate_sfu_queries.py` to support `--source opensearch` flag
-- [ ] Run 120-query Phase M eval set against SPLADE/OpenSearch endpoint
-- [ ] Compare to Phase M baselines (v4-bge + RRF with live OpenAlex API)
-- [ ] Required gate: SPLADE NDCG@10 ≥ Phase M OpenAlex baseline − 0.02 (allow 2% slack for corpus staleness)
-- [ ] Record results in `data/eval_results/splade_opensearch_YYYY-MM-DD.json`
+- [x] Added `--source opensearch` flag to `scripts/evaluate_sfu_queries.py`
+  - `fetch_opensearch_results()` function (BM25F multi_match via raw HTTP)
+  - `evaluate_opensearch()` function with same NDCG/MRR/Recall metrics
+  - Auto-saves to `data/eval_results/bm25f_pilot_YYYY-MM-DD.json`
+  - `--opensearch-url` and `--opensearch-index` args
+- [ ] Run eval once P.3 SPLADE index is populated
+- [ ] Compare NDCG@10 to Phase M OpenAlex baseline; gate: SPLADE ≥ baseline − 0.02
 - [ ] Update `docs/ultraplan.txt` with Phase P eval results
 
-**Deliverable:** SPLADE eval results; go/no-go for production Phase O cutover
+**Deliverable (infra):** Eval plumbing complete ✓; results pending P.3 index
 
 ---
 

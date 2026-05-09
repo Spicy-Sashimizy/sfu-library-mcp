@@ -60,9 +60,14 @@ class ServerConfig:
         # Structured query log for LambdaMART training data collection (Phase O.3).
         # Writes (query, ranked docs, latency) to query_log_path as JSONL.
         "query_log_enabled": False,
-        # TODO(Phase P): Add local_opensearch_enabled, splade_enabled,
-        # federated_search_enabled, opensearch_url, opensearch_index,
-        # splade_model_path, federated_recency_days — see docs/SPLADE_OPENSEARCH_INTEGRATION_PLAN.md §P.8
+        # Phase P: OpenSearch / SPLADE feature flags.
+        # Master switch — OpenSearch path (P.1 container must be running).
+        "local_opensearch_enabled": False,
+        # Use SPLADE sparse encoding instead of BM25F on OpenSearch queries.
+        # Requires splade_model_path and GPU/CPU torch stack.
+        "splade_enabled": False,
+        # Route queries through FederatedSearchRouter (live API + local index).
+        "federated_search_enabled": False,
     })
 
     # Local embedding model
@@ -86,6 +91,14 @@ class ServerConfig:
     # SFU Database Registry (Solr)
     sfu_db_registry_cache_ttl: int = 86400   # 24 h
     sfu_db_registry_cache_file: str = "/tmp/sfu_databases_cache.json"
+
+    # OpenSearch / SPLADE (Phase P)
+    opensearch_url: str = "http://localhost:9200"
+    opensearch_index: str = "openalex_works"
+    # HuggingFace model ID or local path; used when splade_enabled = True
+    splade_model_path: str = "naver/splade-cocondenser-distil"
+    # Queries within this many days of today route to the live API (federated router)
+    federated_recency_days: int = 30
 
     # Query log for LambdaMART training data (O.3); empty = disabled
     query_log_path: str = ""
@@ -177,6 +190,9 @@ def load_config() -> ServerConfig:
         "rrf_enabled": False,
         "crossencoder_enabled": False,
         "query_log_enabled": False,
+        "local_opensearch_enabled": False,
+        "splade_enabled": False,
+        "federated_search_enabled": False,
     }
     for key in default_features:
         env_key = f"SFU_FEATURE_{key.upper()}"
@@ -224,6 +240,12 @@ def load_config() -> ServerConfig:
         ),
         query_log_path=os.environ.get("SFU_QUERY_LOG_PATH", ""),
         metrics_log_path=os.environ.get("SFU_METRICS_LOG_PATH", ""),
+        opensearch_url=os.environ.get("SFU_OPENSEARCH_URL", "http://localhost:9200"),
+        opensearch_index=os.environ.get("SFU_OPENSEARCH_INDEX", "openalex_works"),
+        splade_model_path=os.environ.get(
+            "SFU_SPLADE_MODEL_PATH", "naver/splade-cocondenser-distil"
+        ),
+        federated_recency_days=int(os.environ.get("SFU_FEDERATED_RECENCY_DAYS", "30")),
     )
 
 

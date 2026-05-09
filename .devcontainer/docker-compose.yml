@@ -28,6 +28,7 @@ services:
     environment:
       - DATABASE_URL=postgresql://${DB_USER:-dev}:${DB_PASSWORD:-dev}@postgres:5432/${DB_NAME:-app_dev}
       - REDIS_URL=redis://:${REDIS_PASSWORD:-dev}@redis:6379/0
+      - SFU_OPENSEARCH_URL=http://claudebox-sfu-library-mcp-training-opensearch:9200
       - PYTHONPATH=/workspaces/sfu-library-mcp-training
       - CLAUDE_CONFIG_DIR=/home/vscode/.claude
       - CLAUDE_BACKEND=${CLAUDE_BACKEND:-anthropic}
@@ -59,6 +60,8 @@ services:
       postgres:
         condition: service_healthy
       redis:
+        condition: service_healthy
+      opensearch:
         condition: service_healthy
 
   cloudflared:
@@ -100,6 +103,40 @@ services:
       interval: 5s
       timeout: 5s
       retries: 5
+
+  opensearch:
+    container_name: claudebox-sfu-library-mcp-training-opensearch
+    image: opensearchproject/opensearch:2
+    restart: unless-stopped
+    environment:
+      - discovery.type=single-node
+      - OPENSEARCH_JAVA_OPTS=-Xms2g -Xmx2g
+      - DISABLE_SECURITY_PLUGIN=true
+      - plugins.query.size.limit=10000
+      - http.max_content_length=500mb
+    ulimits:
+      memlock:
+        soft: -1
+        hard: -1
+      nofile:
+        soft: 65536
+        hard: 65536
+    volumes:
+      - opensearch_data:/usr/share/opensearch/data
+    ports:
+      - "9200:9200"
+    networks:
+      - claudebox-sfu-library-mcp-training-net
+    labels:
+      - "com.claudebox.project=sfu-library-mcp-training"
+      - "com.claudebox.service=opensearch"
+      - "com.claudebox.managed=true"
+    healthcheck:
+      test: ["CMD-SHELL", "curl -s http://localhost:9200/_cluster/health | grep -qE '\"status\":\"(green|yellow)\"'"]
+      interval: 15s
+      timeout: 10s
+      retries: 10
+      start_period: 60s
 
   redis:
     container_name: claudebox-sfu-library-mcp-training-redis
@@ -157,6 +194,11 @@ volumes:
     external: true
   claude-local:
     name: claudebox-sfu-library-mcp-training-local
+    labels:
+      com.claudebox.project: sfu-library-mcp-training
+      com.claudebox.managed: "true"
+  opensearch_data:
+    name: claudebox-sfu-library-mcp-training-opensearch
     labels:
       com.claudebox.project: sfu-library-mcp-training
       com.claudebox.managed: "true"

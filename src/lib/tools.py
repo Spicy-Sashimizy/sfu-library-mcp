@@ -157,8 +157,34 @@ def _get_openalex() -> "OpenAlexClient":
             api_key=cfg.openalex_api_key,
             daily_call_limit=cfg.openalex_daily_call_limit,
             tracker_path=cfg.openalex_tracker_path,
+            opensearch_enabled=cfg.features.get("local_opensearch_enabled", False),
+            opensearch_url=cfg.opensearch_url,
+            opensearch_index=cfg.opensearch_index,
         )
     return _openalex_client
+
+
+_federated_router = None
+
+
+def _get_federated_router() -> "FederatedSearchRouter":
+    global _federated_router
+    if _federated_router is None:
+        from lib.federated_search import FederatedSearchRouter
+        from lib.opensearch_retriever import OpenSearchRetriever
+        cfg = _get_config()
+        retriever = OpenSearchRetriever(
+            url=cfg.opensearch_url,
+            index=cfg.opensearch_index,
+            splade_enabled=cfg.features.get("splade_enabled", False),
+            splade_model_path=cfg.splade_model_path,
+        )
+        _federated_router = FederatedSearchRouter(
+            openalex_client=_get_openalex(),
+            opensearch_retriever=retriever,
+            recency_days=cfg.federated_recency_days,
+        )
+    return _federated_router
 
 
 def _get_registry() -> "SFUDatabaseRegistry":
@@ -867,20 +893,12 @@ async def _s2_fallback(query: str, limit: int, reason: str) -> list[TextContent]
 
 # ── Search handlers ───────────────────────────────────────────────────────────
 
-# TODO(Phase P.6): when federated_search_enabled, replace direct OpenAlex calls below with
-# FederatedSearchRouter.search() — routes fresh queries to live API, historical to local
-# OpenSearch SPLADE index — docs/SPLADE_OPENSEARCH_INTEGRATION_PLAN.md §P.6
 async def _handle_search_academic(args: dict) -> list[TextContent]:
     query = sanitize_search_query(args.get("query", ""))
     if not query:
         return [TextContent(type="text", text="Empty search query.")]
     limit = min(args.get("limit", 10), 50)
     page = max(args.get("page", 1), 1)
-
-    # Pre-flight check: route to S2 immediately if OpenAlex is unavailable
-    unavailable = _openalex_unavailable_reason()
-    if unavailable:
-        return await _s2_fallback(query, limit, unavailable)
 
     filters: dict[str, str] = {}
     year_from = args.get("year_from")
@@ -897,13 +915,32 @@ async def _handle_search_academic(args: dict) -> list[TextContent]:
     if work_type:
         filters["type"] = work_type
 
+    # Phase P.6: route through FederatedSearchRouter when enabled.
+    if _get_features().get("federated_search_enabled"):
+        async with _request_semaphore:
+            results = await asyncio.get_event_loop().run_in_executor(
+                None,
+                lambda: _get_federated_router().search(query, filters, top_k=limit),
+            )
+        t0 = time.monotonic()
+        if results:
+            _cache_works(results)
+            results = _maybe_rerank(results, query, limit)
+        _log_query(query, results, (time.monotonic() - t0) * 1000, "search_academic_federated")
+        data = {"results": results, "meta": {"count": len(results)}}
+        return [TextContent(type="text", text=format_openalex_results(data, query))]
+
+    # Default path: direct OpenAlex live API (federated_search_enabled = False).
+    unavailable = _openalex_unavailable_reason()
+    if unavailable:
+        return await _s2_fallback(query, limit, unavailable)
+
     async with _request_semaphore:
         data = await asyncio.get_event_loop().run_in_executor(
             None,
             lambda: _get_openalex().search_works(query, filters=filters, per_page=limit, page=page),
         )
 
-    # If OpenAlex returned nothing (e.g. circuit just opened mid-call), try S2
     if not data.get("results"):
         fallback_reason = _openalex_unavailable_reason()
         if fallback_reason or _get_openalex().circuit_open:

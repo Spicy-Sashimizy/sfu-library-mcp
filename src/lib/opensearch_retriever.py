@@ -1,0 +1,179 @@
+"""OpenSearch retriever — BM25F and SPLADE sparse-vector search.
+
+Two search modes, selected by the `splade_enabled` config flag:
+  - BM25F (default, no GPU required): multi_match across title^3 / abstract / concepts^2.
+  - SPLADE (splade_enabled=True): encode query → sparse term weights → rank_features query.
+    Requires transformers + torch; loaded lazily so BM25F deployments don't need them.
+
+Index schema is defined in docker/opensearch/index_template.json.
+"""
+
+import logging
+import os
+import threading
+from typing import Any
+
+logger = logging.getLogger("sfu_library_mcp")
+
+_SPLADE_MODEL: Any = None
+_SPLADE_TOKENIZER: Any = None
+_SPLADE_LOCK = threading.Lock()
+
+
+def _get_splade_model(model_path: str):
+    """Load SPLADE model + tokenizer once (singleton, thread-safe)."""
+    global _SPLADE_MODEL, _SPLADE_TOKENIZER
+    with _SPLADE_LOCK:
+        if _SPLADE_MODEL is None:
+            try:
+                import torch
+                from transformers import AutoModelForMaskedLM, AutoTokenizer
+            except ImportError as exc:
+                raise ImportError(
+                    "transformers and torch are required for SPLADE encoding. "
+                    "Install them or disable splade_enabled."
+                ) from exc
+            logger.info("Loading SPLADE model from %s", model_path)
+            _SPLADE_TOKENIZER = AutoTokenizer.from_pretrained(model_path)
+            _SPLADE_MODEL = AutoModelForMaskedLM.from_pretrained(model_path)
+            device = "cuda" if torch.cuda.is_available() else "cpu"
+            _SPLADE_MODEL = _SPLADE_MODEL.to(device)
+            _SPLADE_MODEL.eval()
+            logger.info("SPLADE model loaded on %s", device)
+        return _SPLADE_MODEL, _SPLADE_TOKENIZER
+
+
+def encode_splade(text: str, model_path: str) -> dict[str, float]:
+    """Encode text to a sparse SPLADE term-weight dict."""
+    import torch
+
+    model, tokenizer = _get_splade_model(model_path)
+    device = next(model.parameters()).device
+    inputs = tokenizer(
+        text,
+        return_tensors="pt",
+        truncation=True,
+        max_length=512,
+        padding=True,
+    ).to(device)
+    with torch.no_grad():
+        logits = model(**inputs).logits
+    # ReLU + log(1 + x) → sparse weights; max-pool over sequence dim
+    sparse = torch.log1p(torch.relu(logits)).max(dim=1).values.squeeze(0)
+    vocab = tokenizer.get_vocab()
+    id_to_token = {v: k for k, v in vocab.items()}
+    sparse_dict: dict[str, float] = {}
+    nonzero = sparse.nonzero(as_tuple=True)[0].tolist()
+    for idx in nonzero:
+        weight = sparse[idx].item()
+        if weight > 0:
+            token = id_to_token.get(idx, f"__unk_{idx}__")
+            sparse_dict[token] = weight
+    return sparse_dict
+
+
+class OpenSearchRetriever:
+    """Retriever wrapping an OpenSearch index.
+
+    Supports BM25F (no extra deps) and SPLADE (requires torch + transformers).
+    The caller controls the mode via `splade_enabled`.
+    """
+
+    def __init__(
+        self,
+        url: str = "",
+        index: str = "openalex_works",
+        splade_enabled: bool = False,
+        splade_model_path: str = "naver/splade-cocondenser-distil",
+        timeout: int = 10,
+    ):
+        self.url = url or os.environ.get("SFU_OPENSEARCH_URL", "http://localhost:9200")
+        self.index = index
+        self.splade_enabled = splade_enabled
+        self.splade_model_path = splade_model_path
+        self.timeout = timeout
+
+    def _http(self, method: str, path: str, body: dict | None = None) -> dict | None:
+        """Execute an HTTP request against OpenSearch; return parsed JSON or None."""
+        try:
+            import requests as _requests
+            url = f"{self.url.rstrip('/')}/{path}"
+            resp = _requests.request(
+                method,
+                url,
+                json=body,
+                timeout=self.timeout,
+                headers={"Content-Type": "application/json"},
+            )
+            resp.raise_for_status()
+            return resp.json()
+        except Exception as exc:
+            logger.warning("OpenSearch request failed (%s %s): %s", method, path, exc)
+            return None
+
+    def _build_bm25f_query(self, query: str, top_k: int) -> dict:
+        return {
+            "size": top_k,
+            "query": {
+                "multi_match": {
+                    "query": query,
+                    "fields": ["title^3", "abstract", "concepts^2"],
+                    "type": "best_fields",
+                    "tie_breaker": 0.3,
+                }
+            },
+            "_source": ["doi", "title", "abstract", "publication_year", "type", "is_oa"],
+        }
+
+    def _build_splade_query(self, query: str, top_k: int) -> dict:
+        sparse = encode_splade(query, self.splade_model_path)
+        if not sparse:
+            logger.warning("SPLADE encoding produced empty vector; falling back to BM25F")
+            return self._build_bm25f_query(query, top_k)
+        return {
+            "size": top_k,
+            "query": {
+                "rank_features": {
+                    "field": "sparse_field",
+                    "linear": {"properties": sparse},
+                }
+            },
+            "_source": ["doi", "title", "abstract", "publication_year", "type", "is_oa"],
+        }
+
+    def search(self, query: str, top_k: int = 50) -> list[dict]:
+        """Run a search and return normalized result dicts.
+
+        Returns: list of {doi, title, abstract, year, score, source, type, is_oa}
+        """
+        if self.splade_enabled:
+            body = self._build_splade_query(query, top_k)
+        else:
+            body = self._build_bm25f_query(query, top_k)
+
+        data = self._http("POST", f"{self.index}/_search", body)
+        if not data:
+            return []
+
+        hits = (data.get("hits") or {}).get("hits") or []
+        results: list[dict] = []
+        for hit in hits:
+            src = hit.get("_source") or {}
+            results.append({
+                "doi": src.get("doi", ""),
+                "title": src.get("title", ""),
+                "abstract": src.get("abstract", ""),
+                "year": src.get("publication_year"),
+                "score": hit.get("_score", 0.0),
+                "source": "opensearch",
+                "type": src.get("type", ""),
+                "is_oa": src.get("is_oa", False),
+            })
+        return results
+
+    def is_available(self) -> bool:
+        """Return True if the OpenSearch cluster is reachable and healthy."""
+        data = self._http("GET", "_cluster/health")
+        if not data:
+            return False
+        return data.get("status") in ("green", "yellow")

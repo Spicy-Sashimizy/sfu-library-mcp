@@ -1,0 +1,23 @@
+{
+  "index_patterns": ["openalex_works*"],
+  "template": {
+    "settings": {
+      "number_of_shards": 2,
+      "number_of_replicas": 0,
+      "index.refresh_interval": "30s"
+    },
+    "mappings": {
+      "properties": {
+        "doi": { "type": "keyword" },
+        "openalex_id": { "type": "keyword" },
+        "title": { "type": "text", "boost": 3 },
+        "abstract": { "type": "text" },
+        "concepts": { "type": "text", "boost": 2 },
+        "publication_year": { "type": "integer" },
+        "type": { "type": "keyword" },
+        "is_oa": { "type": "boolean" },
+        "sparse_field": { "type": "rank_features" }
+      }
+    }
+  }
+}
