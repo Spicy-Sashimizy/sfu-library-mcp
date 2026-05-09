@@ -71,7 +71,7 @@ logger = logging.getLogger(__name__)
 # ── Constants ────────────────────────────────────────────────────────────────
 
 DEFAULT_INPUT_DIR = Path(__file__).parent.parent / "data" / "openalex_snapshot"
-DEFAULT_MODEL = "naver/splade-cocondenser-distil"
+DEFAULT_MODEL = "prithivida/Splade_PP_en_v1"
 DEFAULT_OPENSEARCH_URL = "http://localhost:9200"
 DEFAULT_INDEX = "openalex_works"
 DEFAULT_BATCH_SIZE = 64
@@ -206,7 +206,7 @@ class SpladeEncoder:
             "reserved_gb": round(torch.cuda.memory_reserved() / 1e9, 2),
             "max_allocated_gb": round(torch.cuda.max_memory_allocated() / 1e9, 2),
             "utilization_pct": round(
-                100.0 * torch.cuda.memory_allocated() / torch.cuda.get_device_properties(0).total_mem, 1
+                100.0 * torch.cuda.memory_allocated() / torch.cuda.get_device_properties(0).total_memory, 1
             ),
         }
 

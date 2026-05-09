@@ -64,7 +64,7 @@ logger = logging.getLogger(__name__)
 # ── Constants ────────────────────────────────────────────────────────────────
 
 DEFAULT_DATA_DIR = Path(__file__).parent.parent / "data" / "openalex_snapshot"
-DEFAULT_MODEL = "naver/splade-cocondenser-distil"
+DEFAULT_MODEL = "prithivida/Splade_PP_en_v1"
 DEFAULT_OPENSEARCH_URL = "http://localhost:9200"
 DEFAULT_INDEX = "openalex_works"
 DEFAULT_MIN_YEAR = 2015
