@@ -3,7 +3,7 @@
 
 Evaluates the production pipeline end-to-end on the 120-query SFU eval set.
 Pipeline: Primo search (limit=30 over-fetch) → rerank_results() → top-10.
-Ground truth: seed_doi + top-20 cited-by references from OpenAlex (cached).
+Ground truth: seed_doi + top-50 papers that CITE the seed (from OpenAlex, cached).
 
 Metrics per query: NDCG@10, MRR@10, Recall@10, latency (ms).
 Outputs:
@@ -46,10 +46,10 @@ CACHE_PATH = REPO_ROOT / "data" / "baseline_eval_cache.json"
 RESULTS_PATH = REPO_ROOT / "results" / "baseline_eval.json"
 HISTORY_PATH = REPO_ROOT / "results" / "sfu_eval_history.jsonl"
 
-FETCH_LIMIT = 30       # over-fetch for reranker (mirrors production: limit*3)
-RERANK_LIMIT = 10      # return top-10 after rerank
-OPENALEX_REFS = 20     # how many cited references to include in ground truth
-OPENALEX_DELAY = 0.35  # seconds between OpenAlex calls (rate-limit courtesy)
+FETCH_LIMIT = 30        # over-fetch for reranker (mirrors production: limit*3)
+RERANK_LIMIT = 10       # return top-10 after rerank
+OPENALEX_CITERS = 50    # top-N papers that CITE the seed (sorted by their own citation count)
+OPENALEX_DELAY = 0.35   # seconds between OpenAlex calls (rate-limit courtesy)
 PIPELINE_ID = "primo_heuristic_reranker_baseline"
 PIPELINE_DESC = (
     "Primo API search → heuristic reranker "
@@ -99,53 +99,60 @@ def _openalex_headers() -> dict:
 def fetch_openalex_references(seed_doi: str, cache: dict) -> set[str]:
     """Return a set of normalized DOIs relevant to seed_doi.
 
-    Relevant set = {seed_doi} ∪ {top-N references cited by the seed paper}.
-    Results are stored in *cache* keyed by seed_doi to avoid re-fetching.
+    Relevant set = {seed_doi} ∪ {top-N papers that CITE the seed paper}.
+    Citing papers are sorted by their own citation count (most influential first)
+    so the ground truth prioritises well-established, high-impact work.
+
+    This direction (cited_by) is correct for IR evaluation: a search for
+    "protein structure prediction AlphaFold" should surface papers that cite
+    AlphaFold, not the older papers AlphaFold itself cited.
+
+    Cache key prefix "cb:" distinguishes these from old referenced_works entries.
     Returns an empty set (not raising) on any API failure.
     """
+    cache_key = f"cb:{seed_doi.lower().strip()}"
     doi_key = seed_doi.lower().strip()
-    if doi_key in cache:
-        return set(d for d in cache[doi_key] if d)
+
+    if cache_key in cache:
+        return set(d for d in cache[cache_key] if d)
 
     relevant: list[str] = []
     try:
+        # Step 1: resolve seed DOI → OpenAlex work ID
         url = f"https://api.openalex.org/works/https://doi.org/{doi_key}"
         resp = requests.get(url, headers=_openalex_headers(), timeout=20)
         if resp.status_code != 200:
-            cache[doi_key] = []
+            cache[cache_key] = []
             return set()
 
         work = resp.json()
 
-        # Seed DOI itself (OpenAlex may canonicalize it)
+        # Always include the seed DOI itself (canonicalized)
         canonical = _normalize_doi(work.get("doi", ""))
-        if canonical:
-            relevant.append(canonical)
-        elif doi_key:
-            relevant.append(doi_key)
+        relevant.append(canonical if canonical else doi_key)
 
-        # Fetch DOIs for cited referenced works (referenced_works = what this paper cites)
-        ref_ids = work.get("referenced_works", [])[:OPENALEX_REFS]
-        if ref_ids:
-            # Batch resolve OpenAlex IDs → DOIs via filter API
-            id_filter = "|".join(rid.split("/")[-1] for rid in ref_ids)
-            batch_url = (
+        # Step 2: fetch top-N papers that CITE this work, sorted by impact
+        oa_id = work.get("id", "").split("/")[-1]  # e.g. "W3111255098"
+        if oa_id:
+            citers_url = (
                 f"https://api.openalex.org/works"
-                f"?filter=openalex:{id_filter}"
-                f"&select=doi&per_page={OPENALEX_REFS}"
+                f"?filter=cites:{oa_id}"
+                f"&select=doi,cited_by_count"
+                f"&sort=cited_by_count:desc"
+                f"&per_page={OPENALEX_CITERS}"
             )
             time.sleep(OPENALEX_DELAY)
-            batch_resp = requests.get(batch_url, headers=_openalex_headers(), timeout=20)
-            if batch_resp.status_code == 200:
-                for ref_work in batch_resp.json().get("results", []):
-                    ref_doi = _normalize_doi(ref_work.get("doi", ""))
+            citers_resp = requests.get(citers_url, headers=_openalex_headers(), timeout=20)
+            if citers_resp.status_code == 200:
+                for citer in citers_resp.json().get("results", []):
+                    ref_doi = _normalize_doi(citer.get("doi", ""))
                     if ref_doi:
                         relevant.append(ref_doi)
 
     except Exception:
         pass
 
-    cache[doi_key] = relevant
+    cache[cache_key] = relevant
     return set(d for d in relevant if d)
 
 
