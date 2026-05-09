@@ -260,6 +260,7 @@ def run(
 
 
 def main() -> None:
+    global CACHE_FILE
     parser = argparse.ArgumentParser(
         description="Phase K: Mine hard negatives from OpenAlex for existing triplets"
     )
@@ -275,7 +276,6 @@ def main() -> None:
     parser.add_argument("--cache-file", default=str(CACHE_FILE))
     args = parser.parse_args()
 
-    global CACHE_FILE
     CACHE_FILE = Path(args.cache_file)
     cache = _load_cache(CACHE_FILE)
     logger.info("Hard-neg cache: %d entries", len(cache))
