@@ -277,6 +277,7 @@ def run(
 
 
 def main() -> None:
+    global CACHE_FILE
     parser = argparse.ArgumentParser(
         description="Phase I-bis C: LLM-generated synthetic query triplets"
     )
@@ -306,7 +307,6 @@ def main() -> None:
     output_path = Path(args.append_to) if args.append_to else Path(args.output)
     output_path.parent.mkdir(parents=True, exist_ok=True)
 
-    global CACHE_FILE
     CACHE_FILE = Path(args.cache_file)
     cache = _load_cache(CACHE_FILE)
     logger.info("Cache: %d entries loaded from %s", len(cache), CACHE_FILE)
