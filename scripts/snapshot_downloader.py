@@ -127,6 +127,13 @@ def reconstruct_abstract(inverted_index: dict | None) -> str | None:
 # ── Manifest fetching ────────────────────────────────────────────────────────
 
 
+def _s3_uri_to_https(uri: str) -> str:
+    """Convert s3://openalex/path to https://openalex.s3.amazonaws.com/path."""
+    if uri.startswith("s3://openalex/"):
+        return uri.replace("s3://openalex/", "https://openalex.s3.amazonaws.com/", 1)
+    return uri
+
+
 def fetch_manifest(session: requests.Session) -> list[dict]:
     """Fetch the OpenAlex Works snapshot manifest.
 
@@ -140,6 +147,8 @@ def fetch_manifest(session: requests.Session) -> list[dict]:
         manifest = resp.json()
         entries = manifest.get("entries", [])
         if entries:
+            for entry in entries:
+                entry["url"] = _s3_uri_to_https(entry.get("url", ""))
             logger.info("Manifest has %d part files", len(entries))
             return entries
     except Exception as e:
