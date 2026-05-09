@@ -71,7 +71,7 @@ CHECKPOINT_FILE = "download_checkpoint.json"
 STATUS_FILE = "snapshot_status.json"
 DEFAULT_MIN_YEAR = 2015
 DEFAULT_CHUNK_SIZE = 500_000  # records per output chunk
-HTTP_TIMEOUT = 60
+HTTP_TIMEOUT = 300  # large parts can be 500MB-1.1GB
 MAX_RETRIES = 3
 RETRY_BACKOFF_BASE = 5  # seconds
 
@@ -213,20 +213,22 @@ def download_and_process_part(
 ) -> tuple[list[dict], dict]:
     """Download a single gz part, filter records, return (records, stats).
 
+    Uses streaming decompression to avoid loading entire parts into memory.
+    Parts can be 500MB-1.1GB compressed; full decompression would use 2-4GB RAM.
     Retries up to MAX_RETRIES on HTTP errors with exponential backoff.
     """
     stats = {"total": 0, "kept": 0, "no_abstract": 0, "too_old": 0, "parse_error": 0}
 
     for attempt in range(1, MAX_RETRIES + 1):
         try:
-            resp = session.get(part_url, timeout=HTTP_TIMEOUT, stream=True)
+            resp = session.get(part_url, timeout=300, stream=True)
             resp.raise_for_status()
 
-            raw_bytes = resp.content
-            decompressed = gzip.decompress(raw_bytes)
             records = []
+            decompressor = gzip.GzipFile(fileobj=io.BytesIO(resp.content))
+            text_stream = io.TextIOWrapper(decompressor, encoding="utf-8", errors="replace")
 
-            for line in decompressed.decode("utf-8", errors="replace").splitlines():
+            for line in text_stream:
                 line = line.strip()
                 if not line:
                     continue
