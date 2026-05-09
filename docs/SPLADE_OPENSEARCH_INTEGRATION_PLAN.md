@@ -4,7 +4,7 @@
 **Phase O gated on:** Phase M completion  
 **Architecture decision:** Option C — Federated Hybrid (see §Alternatives Considered)  
 **Last updated:** 2026-05-09  
-**Implementation progress:** P.1, P.4-P.8, P.11 infra complete (training branch). P.2, P.3, P.10 deferred (require OpenAlex snapshot download). P.9 gated on eval.
+**Implementation progress:** P.1-P.8, P.10-P.11 infra complete (training branch). All scripts written with checkpoint/resume and failsafes. P.2, P.3, P.10 ready to run (require OpenAlex snapshot download + OpenSearch instance). P.9 gated on eval.
 
 ---
 
@@ -57,16 +57,19 @@ Do not start Phase P.1 until both boxes above are checked.
 **Repo:** `sfu-library-mcp-training` → `scripts/snapshot_downloader.py`  
 **Effort:** ~2 days (mostly I/O wait)
 
-- [ ] Write `scripts/snapshot_downloader.py`:
+- [x] Write `scripts/snapshot_downloader.py`:
   - Fetch OpenAlex monthly snapshot manifest (Works entity only)
   - Stream-extract JSONL parts; filter: `publication_year >= 2015`, `has_abstract == true`
   - Extract per-record: `id`, `doi`, `title`, `abstract_inverted_index` (reconstruct to string), `publication_year`, `type`
-  - Write to compressed JSONL chunks: `data/openalex_snapshot/works_YYYY-MM_part_NNNN.jsonl.gz`
+  - Write to compressed JSONL chunks: `data/openalex_snapshot/works_part_NNNN.jsonl.gz`
   - Progress log with ETA; resumable via checkpoint file
-- [ ] Estimate storage: ~15-30GB compressed after filtering (full unfiltered ~215GB)
-- [ ] Add `--dry-run` flag that processes 1 chunk and reports stats
-- [ ] Verify sample: spot-check 50 records for abstract reconstruction correctness
-- [ ] Document monthly re-run cadence (snapshot releases: first Monday of each month)
+  - SIGINT/SIGTERM graceful shutdown with checkpoint save
+  - Atomic checkpoint writes (safe against sudden kill)
+  - Retry with exponential backoff on HTTP failures (3 attempts)
+- [x] Estimate storage: ~15-30GB compressed after filtering (full unfiltered ~215GB)
+- [x] Add `--dry-run` flag that processes 1 chunk and reports stats
+- [ ] Verify sample: spot-check 50 records for abstract reconstruction correctness (run with `--dry-run`)
+- [x] Document monthly re-run cadence (snapshot releases: first Monday of each month)
 
 **Deliverable:** `data/openalex_snapshot/` directory with filtered Works JSONL, ~60M records
 
@@ -83,14 +86,17 @@ Do not start Phase P.1 until both boxes above are checked.
 
 Checklist:
 - [ ] Install `transformers>=4.38`, `torch`, `scipy` into training venv
-- [ ] Write `scripts/splade_indexer.py`:
-  - Load SPLADE model onto GPU (CUDA)
+- [x] Write `scripts/splade_indexer.py`:
+  - Load SPLADE model onto GPU (CUDA) with auto-detection
   - Batch-process JSONL chunks from `data/openalex_snapshot/`
   - For each doc: encode `title + " " + abstract`, apply ReLU+log1p → sparse term weights
   - Batch-upsert to OpenSearch via `rank_features` field (doc ID = OpenAlex work ID)
   - Include DOI in stored fields for deduplication in federated search
-  - Checkpoint every 100k docs; skip already-indexed IDs on resume
+  - Checkpoint every 100k docs (configurable); skip already-indexed IDs on resume
   - Log GPU memory usage, throughput (docs/sec), ETA
+  - 10 failsafes: atomic checkpoints, SIGINT/SIGTERM, double-signal force exit,
+    batch retry, per-doc error isolation, VRAM monitoring (>90% warning),
+    throughput tracking, status file, heartbeat file, --dry-run
 - [ ] Benchmark: target ≥ 2,000 docs/sec on RTX 4070 Ti SUPER
 - [ ] Full index run: ~60M docs ÷ 2,000/sec ≈ 8-10 hours (schedule overnight)
 - [ ] Verify: random 100-doc sample — query each doc's title, confirm it ranks in top 3
@@ -232,13 +238,15 @@ completeness: 0.10
 **Repo:** `sfu-library-mcp-training` → `scripts/opensearch_sync.py`  
 **Effort:** ~1 day
 
-- [ ] Write `scripts/opensearch_sync.py`:
+- [x] Write `scripts/opensearch_sync.py`:
   - Fetch latest manifest; compare to `data/openalex_snapshot/last_sync.json`
   - Download only new/updated JSONL parts (delta sync)
   - Re-run SPLADE indexer on delta only
   - Update `last_sync.json` with new manifest hash + timestamp
   - Idempotent: safe to run multiple times
-- [ ] Document: run on first Monday of each month (mirrors OpenAlex release cadence)
+  - SIGINT graceful shutdown with checkpoint; resumable via `--resume`
+  - `--dry-run` shows delta size without downloading
+- [x] Document: run on first Monday of each month (mirrors OpenAlex release cadence)
 - [ ] Add to crontab instructions in container README
 
 **Deliverable:** `opensearch_sync.py`; monthly sync reduces incremental update time to ~1-2 hours

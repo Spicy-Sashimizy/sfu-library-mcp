@@ -52,15 +52,15 @@ Last updated: 2026-05-09
 | Sub-phase | Description | Repo | Status |
 |---|---|---|---|
 | P.1 | OpenSearch container | `.devcontainer/docker-compose.yml` + `docker/opensearch/` | **DONE** — service, index template, setup script added |
-| P.2 | Snapshot downloader | `sfu-library-mcp-training` | Pending — requires ~15-30GB download; deferred |
-| P.3 | SPLADE indexer | `sfu-library-mcp-training` | Pending (needs P.2) |
+| P.2 | Snapshot downloader | `sfu-library-mcp-training` | **DONE** (script) — `snapshot_downloader.py` with checkpoint/resume, SIGINT handling, --dry-run; needs actual run |
+| P.3 | SPLADE indexer | `sfu-library-mcp-training` | **DONE** (script) — `splade_indexer.py` with 10 failsafes, checkpoint/resume, VRAM monitoring; needs P.2 data + OpenSearch |
 | P.4 | BM25F pilot eval infra | `sfu-library-mcp-training` | **DONE** — `evaluate_sfu_queries.py --source opensearch` path added; needs P.1 index populated |
 | P.5 | `opensearch_retriever.py` | `src/lib/opensearch_retriever.py` | **DONE** — BM25F + SPLADE paths, 11 unit tests passing |
 | P.6 | `federated_search.py` | `src/lib/federated_search.py` | **DONE** — routing, DOI dedup, RRF fusion, 20 unit tests; `tools.py` feature-flagged |
 | P.7 | `openalex.py` incremental hook | `src/lib/openalex.py` | **DONE** — `_push_to_opensearch` fire-and-forget, gated on `local_opensearch_enabled` |
 | P.8 | Config additions | `src/lib/config.py` | **DONE** — 7 new fields (3 bool flags + 4 scalars), all default-off |
 | P.9 | Reranker weight update | `src/lib/reranker.py` | Pending — gated on P.11 eval gate (SPLADE NDCG ≥ baseline − 0.02) |
-| P.10 | Monthly sync pipeline | `sfu-library-mcp-training` | Deferred — depends on P.2 + P.3 snapshot infrastructure |
+| P.10 | Monthly sync pipeline | `sfu-library-mcp-training` | **DONE** (script) — `opensearch_sync.py` with delta detection, resume, idempotency; needs P.2+P.3 first run |
 | P.11 | End-to-end eval | `scripts/evaluate_sfu_queries.py` | **DONE** (infra) — `--source opensearch` + `evaluate_opensearch()` + auto-save to `data/eval_results/`; needs P.3 index to measure NDCG |
 
 ---
