@@ -1,17 +1,20 @@
 #!/usr/bin/env python3
 """Reserve VRAM from the SPLADE indexer for other GPU tasks.
 
-The SPLADE indexer checks a control file between batches and dynamically
-reduces its batch size + clears GPU cache when a reservation is active.
+The SPLADE indexer checks a control file between batches and responds:
+
+  pause  (default) — offloads model to CPU, checkpoints, frees all VRAM,
+                      and blocks until the reservation is cleared.
+  reduce           — shrinks batch size proportionally (stays on GPU).
 
 Usage:
-    # Reserve 4 GB of VRAM
-    python scripts/vram_reserve.py 4
+    # Pause indexer and free all VRAM (default)
+    python scripts/vram_reserve.py --pause
 
-    # Reserve 2.5 GB
-    python scripts/vram_reserve.py 2.5
+    # Reduce batch size to free ~4 GB (indexer keeps running)
+    python scripts/vram_reserve.py --reduce 4
 
-    # Clear reservation (indexer resumes full speed)
+    # Clear reservation (indexer resumes)
     python scripts/vram_reserve.py --clear
 
     # Show current reservation and GPU status
@@ -28,16 +31,20 @@ from pathlib import Path
 VRAM_RESERVE_FILE = Path(__file__).parent.parent / "data" / "vram_reserve.json"
 
 
-def set_reservation(reserve_gb: float) -> None:
+def set_reservation(reserve_gb: float, mode: str = "pause") -> None:
     VRAM_RESERVE_FILE.parent.mkdir(parents=True, exist_ok=True)
     data = {
         "active": True,
         "reserve_gb": reserve_gb,
+        "mode": mode,
         "requested_at": time.strftime("%Y-%m-%dT%H:%M:%S"),
         "pid": os.getpid(),
     }
     VRAM_RESERVE_FILE.write_text(json.dumps(data, indent=2))
-    print(f"Reserved {reserve_gb:.1f} GB VRAM. Indexer will reduce batch size on next batch.")
+    if mode == "pause":
+        print("VRAM pause requested. Indexer will checkpoint, offload model to CPU, and wait.")
+    else:
+        print(f"Reserved {reserve_gb:.1f} GB VRAM. Indexer will reduce batch size on next batch.")
 
 
 def clear_reservation() -> None:
@@ -52,7 +59,11 @@ def show_status() -> None:
     if VRAM_RESERVE_FILE.exists():
         data = json.loads(VRAM_RESERVE_FILE.read_text())
         if data.get("active"):
-            print(f"Active reservation: {data['reserve_gb']:.1f} GB (since {data.get('requested_at', '?')})")
+            mode = data.get("mode", "pause")
+            if mode == "pause":
+                print(f"Active reservation: PAUSED (since {data.get('requested_at', '?')})")
+            else:
+                print(f"Active reservation: {data['reserve_gb']:.1f} GB reduce (since {data.get('requested_at', '?')})")
         else:
             print("Reservation file exists but is inactive.")
     else:
@@ -81,15 +92,20 @@ def main():
         description="Reserve VRAM from the SPLADE indexer",
         formatter_class=argparse.RawDescriptionHelpFormatter,
     )
-    parser.add_argument(
-        "gb", type=float, nargs="?",
-        help="Amount of VRAM to reserve in GB (e.g., 4, 2.5)",
+    group = parser.add_mutually_exclusive_group()
+    group.add_argument(
+        "--pause", action="store_true",
+        help="Pause indexer: offload model to CPU and free all VRAM (default)",
     )
-    parser.add_argument(
+    group.add_argument(
+        "--reduce", type=float, metavar="GB",
+        help="Reduce mode: keep indexer running but free N GB (e.g., --reduce 4)",
+    )
+    group.add_argument(
         "--clear", action="store_true",
-        help="Clear the VRAM reservation",
+        help="Clear the VRAM reservation (indexer resumes)",
     )
-    parser.add_argument(
+    group.add_argument(
         "--status", action="store_true",
         help="Show current reservation and GPU status",
     )
@@ -99,13 +115,15 @@ def main():
         show_status()
     elif args.clear:
         clear_reservation()
-    elif args.gb is not None:
-        if args.gb <= 0:
+    elif args.reduce is not None:
+        if args.reduce <= 0:
             print("Error: reservation must be > 0 GB", file=sys.stderr)
             sys.exit(1)
-        set_reservation(args.gb)
+        set_reservation(args.reduce, mode="reduce")
+    elif args.pause:
+        set_reservation(0, mode="pause")
     else:
-        parser.print_help()
+        set_reservation(0, mode="pause")
 
 
 if __name__ == "__main__":

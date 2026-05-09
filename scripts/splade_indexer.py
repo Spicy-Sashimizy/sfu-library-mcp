@@ -127,61 +127,131 @@ def _touch_heartbeat(path: Path) -> None:
 
 _last_vram_check = 0.0
 _VRAM_CHECK_INTERVAL = 5.0  # seconds between file checks
+_VRAM_POLL_INTERVAL = 10.0  # seconds between polls while paused
+_vram_paused = False
 
 
-def check_vram_reservation(original_batch_size: int, current_batch_size: int) -> int:
-    """Check if VRAM reservation is requested and return adjusted batch size.
+def _read_vram_reserve() -> dict | None:
+    """Read the VRAM reserve file. Returns None if absent or inactive."""
+    try:
+        if not VRAM_RESERVE_FILE.exists():
+            return None
+        data = json.loads(VRAM_RESERVE_FILE.read_text())
+        if not data.get("active", False):
+            return None
+        return data
+    except Exception:
+        return None
 
-    Reads VRAM_RESERVE_FILE; if a reservation is active, reduces batch size
-    proportionally and clears GPU cache. Returns the batch size to use.
+
+def check_vram_reservation(
+    encoder: "SpladeEncoder",
+    original_batch_size: int,
+    current_batch_size: int,
+    checkpoint_fn: callable = None,
+) -> int:
+    """Check VRAM reservation and pause/resume the indexer as needed.
+
+    Three modes based on the reserve file:
+      - No file / inactive  → run at original batch size.
+      - active, mode="reduce" → shrink batch size proportionally (legacy).
+      - active, mode="pause" (default) → offload model to CPU, save checkpoint,
+        poll until reservation clears, then reload to GPU and resume.
+
+    Returns the batch size to use for the next batch.
     """
-    global _last_vram_check
+    global _last_vram_check, _vram_paused
     now = time.time()
     if now - _last_vram_check < _VRAM_CHECK_INTERVAL:
         return current_batch_size
     _last_vram_check = now
 
-    try:
-        if not VRAM_RESERVE_FILE.exists():
-            if current_batch_size != original_batch_size:
-                logger.info("VRAM reservation cleared — restoring batch_size to %d", original_batch_size)
-            return original_batch_size
+    data = _read_vram_reserve()
 
-        data = json.loads(VRAM_RESERVE_FILE.read_text())
-        if not data.get("active", False):
-            if current_batch_size != original_batch_size:
-                logger.info("VRAM reservation inactive — restoring batch_size to %d", original_batch_size)
-            return original_batch_size
+    # ── No reservation → restore if we were throttled ────────────────────
+    if data is None:
+        if _vram_paused:
+            _vram_paused = False
+        if current_batch_size != original_batch_size:
+            logger.info("VRAM reservation cleared — restoring batch_size to %d", original_batch_size)
+        return original_batch_size
 
-        reserve_gb = data.get("reserve_gb", 0)
-        if reserve_gb <= 0:
-            return original_batch_size
+    reserve_gb = data.get("reserve_gb", 0)
+    mode = data.get("mode", "pause")
 
+    if mode != "pause" and reserve_gb <= 0:
+        return original_batch_size
+
+    # ── Pause mode: offload model, checkpoint, wait ──────────────────────
+    if mode == "pause":
         import torch
-        if not torch.cuda.is_available():
-            return original_batch_size
 
-        total_gb = torch.cuda.get_device_properties(0).total_mem / 1e9
-        model_gb = 0.5  # approximate SPLADE model footprint
-        available_for_batches = total_gb - model_gb - reserve_gb
+        if checkpoint_fn:
+            checkpoint_fn()
+            logger.info("VRAM pause: checkpoint saved before offloading")
 
-        if available_for_batches <= 0:
-            new_batch = max(1, original_batch_size // 8)
-        else:
-            usable_fraction = available_for_batches / (total_gb - model_gb)
-            new_batch = max(1, int(original_batch_size * usable_fraction))
-
-        if new_batch != current_batch_size:
+        was_on_gpu = encoder.device == "cuda"
+        if was_on_gpu:
+            encoder.model.cpu()
+            encoder.device = "cpu"
             torch.cuda.empty_cache()
+            freed = torch.cuda.memory_reserved() / 1e9
             logger.info(
-                "VRAM reservation: %.1f GB reserved — batch_size %d → %d, GPU cache cleared",
-                reserve_gb, current_batch_size, new_batch,
+                "VRAM pause: model offloaded to CPU, GPU cache cleared (%.2f GB reserved remains)",
+                freed,
             )
 
-        return new_batch
+        _vram_paused = True
+        logger.info("VRAM pause: indexer paused — polling every %.0fs for release", _VRAM_POLL_INTERVAL)
 
-    except Exception:
-        return current_batch_size
+        while not _shutdown_requested:
+            time.sleep(_VRAM_POLL_INTERVAL)
+            check = _read_vram_reserve()
+            if check is None:
+                break
+            if check.get("mode", "pause") != "pause" or not check.get("active", False):
+                break
+
+        _vram_paused = False
+
+        if _shutdown_requested:
+            return current_batch_size
+
+        if was_on_gpu and torch.cuda.is_available():
+            encoder.model.to("cuda")
+            encoder.device = "cuda"
+            torch.cuda.empty_cache()
+            logger.info(
+                "VRAM resumed: model reloaded to GPU (%.2f GB allocated)",
+                torch.cuda.memory_allocated() / 1e9,
+            )
+
+        logger.info("VRAM resumed: continuing at batch_size %d", original_batch_size)
+        return original_batch_size
+
+    # ── Reduce mode: shrink batch size proportionally ────────────────────
+    import torch
+    if not torch.cuda.is_available():
+        return original_batch_size
+
+    total_gb = torch.cuda.get_device_properties(0).total_mem / 1e9
+    model_gb = 0.5
+    available_for_batches = total_gb - model_gb - reserve_gb
+
+    if available_for_batches <= 0:
+        new_batch = max(1, original_batch_size // 8)
+    else:
+        usable_fraction = available_for_batches / (total_gb - model_gb)
+        new_batch = max(1, int(original_batch_size * usable_fraction))
+
+    if new_batch != current_batch_size:
+        torch.cuda.empty_cache()
+        logger.info(
+            "VRAM reservation: %.1f GB reserved — batch_size %d → %d, GPU cache cleared",
+            reserve_gb, current_batch_size, new_batch,
+        )
+
+    return new_batch
 
 
 # ── SPLADE model management ─────────────────────────────────────────────────
@@ -534,7 +604,27 @@ def run_indexer(
                 return {**cumulative, "state": "interrupted"}
 
             # ── Check VRAM reservation ───────────────────────────────────
-            active_batch_size = check_vram_reservation(original_batch_size, active_batch_size)
+            def _save_checkpoint_for_pause():
+                save_checkpoint(input_dir, {
+                    "file_index": file_idx,
+                    "doc_offset": doc_idx,
+                    "cumulative": cumulative,
+                    "total_indexed": cumulative["total_indexed"],
+                    "state": "vram_paused",
+                })
+                write_status(input_dir, {
+                    "state": "vram_paused",
+                    "file_index": file_idx,
+                    "total_files": total_files,
+                    "doc_in_file": doc_idx,
+                    "total_indexed": cumulative["total_indexed"],
+                    "timestamp": time.strftime("%Y-%m-%dT%H:%M:%S"),
+                })
+
+            active_batch_size = check_vram_reservation(
+                encoder, original_batch_size, active_batch_size,
+                checkpoint_fn=_save_checkpoint_for_pause,
+            )
 
             # ── Prepare batch ────────────────────────────────────────────
             batch_records = records[: active_batch_size]
