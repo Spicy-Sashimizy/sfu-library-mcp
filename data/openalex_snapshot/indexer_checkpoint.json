@@ -1,0 +1,13 @@
+{
+  "file_index": 6,
+  "doc_offset": 400128,
+  "cumulative": {
+    "total_indexed": 2908691,
+    "total_errors": 0,
+    "total_docs_scanned": 2908691,
+    "total_empty_sparse": 0
+  },
+  "total_indexed": 2908691,
+  "state": "running",
+  "timestamp": "2026-05-10T06:23:00"
+}

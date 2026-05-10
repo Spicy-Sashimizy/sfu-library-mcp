@@ -1,0 +1,850 @@
+ ▐▛███▜▌   Claude Code v2.1.129
+▝▜█████▛▘  Sonnet 4.6 · Claude Pro
+  ▘▘ ▝▝    /workspaces/sfu-library-mcp-clone
+
+❯ /model                                                                        
+  ⎿  Set model to Sonnet 4.6 (default)
+
+❯ could you summerize the project as it is currently and the most recent        
+  importnat changes that was made                                               
+
+● Let me pull the recent git history and scan the project structure.
+
+● Bash(git log --oneline -20)
+  ⎿  5be5a3d Fix all pre-existing test failures surfaced by the refactor
+     538adb9 Replace in-memory-only _record_metric with persistent JSONL me
+     trics log
+     … +18 lines (ctrl+o to expand)
+
+  Searched for 1 pattern (ctrl+o to expand)
+
+● Bash(git show 5be5a3d --stat && echo "---" && git show 538adb9 --stat && echo
+      "---" && git show 53b1a10 --stat)
+  ⎿  commit 5be5a3d98db48bf474899c6137ed952cee2d5c11
+     Author: ClaudeBox <claudebox@local>
+     Date:   Wed May 6 02:26:37 2026 +0000
+     … +53 lines (ctrl+o to expand)
+
+  Read 1 file (ctrl+o to expand)
+
+● Here's a summary of the project and the most recent important changes:
+
+  ---
+  Project: SFU Library MCP Server
+
+  An MCP (Model Context Protocol) server that gives Claude access to academic
+  research tools, wired to SFU Library databases, OpenAlex, Semantic Scholar,
+  and Zotero. The core job is: take a natural-language research query, retrieve,
+   embed, rerank, and return the best academic papers — along with citation
+  generation, Zotero saving, and access resolution (can SFU students actually
+  get this paper?).
+
+  Key modules:
+  - openalex.py / semantic_scholar.py — external API clients with budget
+  tracking
+  - embedding.py / reranker.py — BGE embeddings + CrossEncoder reranking (RRF
+  fusion)
+  - citations.py, zotero.py, access_resolver.py — downstream tools
+  - tools.py — the MCP tool definitions wired to all of the above
+  - config.py — server config loaded from env vars
+
+  ---
+  Most Recent Important Changes (last 3 commits)
+
+  1. All test failures fixed — suite now 367 passed, 0 failed (5be5a3d)
+  A prior refactor surfaced several pre-existing test bugs: a TypeError in
+  _openalex_unavailable_reason() when budget was falsy, wrong tool set in a
+  DOI-validation test, and _extract_doc_text being called on a raw doc instead
+  of a normalized one. All fixed.
+
+  2. Persistent JSONL metrics log (538adb9)
+  _record_metric() previously wrote to an in-memory dict that reset on every
+  server restart — useless for trend analysis. Now it also appends {ts, tool, 
+  latency_ms, success, server_version} to a JSONL file when SFU_METRICS_LOG_PATH
+   is set (same pattern as the query log). 12 new tests cover the full
+  write/append/failure/bad-path behavior.
+
+  3. Retry + CircuitBreaker on Semantic Scholar (53b1a10)
+  S2's free-tier client had no resilience — a single timeout returned None
+  silently. It now matches the OpenAlex client: 3 retries with exponential
+  backoff, 4x multiplier on 429s (S2's 5-min rate window), and a
+  CircuitBreaker(threshold=5, timeout=120s) that opens after 5 consecutive
+  failures and probes half-open after the timeout.
+
+✻ Cogitated for 24s
+
+※ recap: SFU Library MCP server that retrieves and reranks academic papers for Claude. All 367 tests are passing after recent resilience and metrics work. Next: decide what to build or fix next. (disable recaps in /config)
+
+❯ could you give me and overview of all key moduals inside of the mcp server    
+
+● Let me read through each key module.
+
+  Read 13 files (ctrl+o to expand)
+
+● Here's a complete overview of all key modules:
+
+  ---
+  Module Map: src/lib/
+
+  Entrypoint / Orchestration
+
+  tools.py — The MCP tool definitions and central dispatcher. Registers all
+  tools exposed to Claude (search, cite, Zotero save, access resolve, etc.),
+  wires together all the other modules, manages a semaphore limiting 8
+  concurrent outbound API requests, records metrics on every tool call, and
+  optionally writes a structured query log for training data.
+
+  ---
+  External Data Sources
+
+  openalex.py — Primary search client. Hits the OpenAlex API for academic paper
+  retrieval and CrossRef for DOI enrichment. Has two important sub-components:
+  - DailyCallTracker — persists today's API call count to disk so the 900
+  req/day budget survives server restarts
+  - OpenAlexClient — wrapped with retry + circuit breaker; falls back to
+  Semantic Scholar if OpenAlex is over budget or its circuit is open
+
+  semantic_scholar.py — Secondary/fallback search client for the S2 Graph API.
+  Provides papers, citations, references, and TLDRs. Free tier is ~100 req/5
+  min; with API key ~1 req/s. Now has full retry + CircuitBreaker(threshold=5, 
+  timeout=120s).
+
+  ---
+  Ranking Pipeline
+
+  embedding.py — Loads a sentence-transformer model as a process-level singleton
+   (default all-MiniLM-L6-v2, overridable with a fine-tuned checkpoint via
+  SFU_EMBEDDING_MODEL_PATH). Provides embed_texts() and cosine similarity
+  scoring used by the reranker.
+
+  reranker.py — Two-stage reranking after initial API results come back:
+  - Stage 1 (rerank_results): multi-signal scoring — semantic embedding cosine
+  (0.35 weight), title token match, recency, fulltext availability, doc type
+  match, completeness. Optional RRF fusion with original lexical rank.
+  - Stage 2 (rerank_with_crossencoder): CrossEncoder second pass on top-20 Stage
+   1 candidates. Feature-flagged off until latency budget is confirmed.
+  - Normalizes both PNX (Primo/SFU) and OpenAlex flat doc shapes before scoring.
+
+  ---
+  Access & Discovery
+
+  access_resolver.py — Determines the best URL for a paper via a 5-step cascade:
+   OpenAlex OA flag → Unpaywall DOI lookup → SFU Database Registry domain match
+  → publisher fuzzy match → plain DOI link as last resort. Wraps SFU's EZProxy
+  for paywalled subscription content.
+
+  sfu_databases.py — Client for SFU's public Solr-backed database registry
+  (databases.lib.sfu.ca). Caches the full registry on disk (24h TTL) and
+  provides domain extraction + provider name fuzzy matching so AccessResolver
+  can map a publisher to an SFU-licensed database.
+
+  ---
+  Citation & Reference Management
+
+  citations.py — Extracts metadata from PNX records and formats it into APA,
+  MLA, Chicago, BibTeX, and RIS. Falls back to CrossRef enrichment (via
+  openalex.py) when key fields (authors, date, source) are missing.
+
+  zotero.py — Zotero API wrapper. Maps PNX metadata to Zotero item types, saves
+  to user library, manages collections, and deduplicates via multi-signal
+  matching. Wrapped with a circuit breaker. Fetches valid item types from the
+  public Zotero API (24h cache).
+
+  ---
+  Infrastructure
+
+  retry.py — Shared CircuitBreaker (CLOSED/OPEN/HALF_OPEN state machine) and
+  retry_with_backoff decorator. Works on both sync and async functions. 429
+  responses get a 4x backoff multiplier. Used by OpenAlex, Semantic Scholar, and
+   Zotero clients.
+
+  cache.py — Thread-safe TTL LRU cache with both a max-entry count and a
+  max-memory-MB bound. Used by the API clients to avoid redundant outbound
+  calls.
+
+  config.py — All server configuration via env vars + Docker secrets. Defines
+  ServerConfig dataclass, load_config(), and validate_config() (returns a list
+  of warnings for missing credentials/suboptimal settings). Feature flags like
+  rrf_enabled, crossencoder_enabled, query_log_enabled are all here.
+
+  validators.py — Input sanitization: ISBN-10/13 validation, query length
+  enforcement, encoding normalization. Guards the MCP tool input boundary.
+
+  formatters.py — Formats raw API results (OpenAlex, Primo PNX, SFU database
+  registry) into clean text blocks for Claude to read.
+
+  logging_setup.py — Configures structured logging for the server process.
+
+✻ Crunched for 43s
+
+❯ so the two major ranking systems at play within the MCP server currently is   
+  RRF comboing all of the sources and the embeding models and open alexes and   
+  BM25 could you currently list what are all the systmes that are currently     
+  interacting with eachother                                                    
+
+● Let me read the reranker and tools pipeline more carefully to map all the
+  interactions.
+
+  Read 2 files (ctrl+o to expand)
+
+● Now I have the full picture. Here's a complete map of every ranking signal and
+   how they interact:
+
+  ---
+  All Active Ranking Systems
+
+  Layer 0 — Upstream Lexical Rankers (external, no control)
+
+  OpenAlex BM25 — When docs arrive from the OpenAlex API they're already ordered
+   by OpenAlex's internal relevance ranking, which is BM25-derived (term
+  frequency + inverse document frequency over titles, abstracts, concepts). The
+  server treats this as the "lexical order" of the result list — position 0 =
+  strongest keyword match.
+
+  Primo/SFU BM25 — Same principle for SFU database results. Primo (ExLibris)
+  returns docs in its own BM25-derived relevance order. Also becomes the
+  "lexical position" input.
+
+  ---
+  Layer 1 — Stage 1 Reranker (reranker.py → rerank_results)
+
+  This runs on the upstream results and combines 5–6 signals into a weighted 
+  sum:
+
+  ┌─────────────────────┬────────────┬────────────┬─────────────────────────┐
+  │                     │  Weight    │ Weight (no │                         │
+  │       Signal        │   (with    │            │      How it works       │
+  │                     │ embedding) │ embedding) │                         │
+  ├─────────────────────┼────────────┼────────────┼─────────────────────────┤
+  │                     │            │            │ Cosine similarity       │
+  │ semantic_similarity │ 0.35       │ —          │ between query and       │
+  │                     │            │            │ title+abstract via      │
+  │                     │            │            │ local embedding model   │
+  ├─────────────────────┼────────────┼────────────┼─────────────────────────┤
+  │                     │            │            │ Simple token overlap:   │
+  │ title_relevance     │ 0.15       │ 0.35       │ query_tokens ∩          │
+  │                     │            │            │ title_tokens /          │
+  │                     │            │            │ len(query_tokens)       │
+  ├─────────────────────┼────────────┼────────────┼─────────────────────────┤
+  │                     │            │            │ Year-based decay: 1.0   │
+  │ recency             │ 0.15       │ 0.20       │ for current year, −0.05 │
+  │                     │            │            │  per year back, floor   │
+  │                     │            │            │ 0.0                     │
+  ├─────────────────────┼────────────┼────────────┼─────────────────────────┤
+  │                     │            │            │ Binary: 1.0 if          │
+  │ fulltext_available  │ 0.15       │ 0.20       │ OA/PDF/EZProxy link     │
+  │                     │            │            │ exists                  │
+  ├─────────────────────┼────────────┼────────────┼─────────────────────────┤
+  │                     │            │            │ Article=1.0,            │
+  │ type_match          │ 0.10       │ 0.15       │ book/chapter=0.7,       │
+  │                     │            │            │ conference/thesis=0.6,  │
+  │                     │            │            │ other=0.5               │
+  ├─────────────────────┼────────────┼────────────┼─────────────────────────┤
+  │ completeness        │ 0.10       │ 0.10       │ DOI + authors + year    │
+  │                     │            │            │ each add ~0.33          │
+  └─────────────────────┴────────────┴────────────┴─────────────────────────┘
+
+  Embedding model (embedding.py): sentence-transformer loaded as a singleton.
+  Default is all-MiniLM-L6-v2, overridable with a fine-tuned checkpoint via
+  SFU_EMBEDDING_MODEL_PATH (the v4-bge checkpoint from the training runs).
+
+  ---
+  Layer 1b — RRF Fusion (feature-flagged OFF by default)
+
+  When rrf_enabled=True, the semantic_similarity slot is replaced by an RRF
+  score instead of raw cosine:
+
+  rrf(d) = 1/(60 + rank_lexical(d))  +  1/(60 + rank_embedding(d))
+
+  This fuses two ranked lists — the original BM25 position from OpenAlex/Primo
+  and the embedding cosine rank — normalized to [0,1] and dropped into the same
+  0.35-weight slot. The benefit is that neither ranker can fully suppress a doc
+  the other rates highly; it rescues queries where one signal is blind.
+
+  ---
+  Layer 2 — CrossEncoder Second Pass (feature-flagged OFF by default)
+
+  When crossencoder_enabled=True, the top-20 Stage 1 results get re-scored by
+  cross-encoder/ms-marco-MiniLM-L-6-v2. Unlike the bi-encoder (which embeds
+  query and doc independently), a cross-encoder takes (query, doc) as a single
+  input and scores interaction effects between them. More accurate but ~50–100ms
+   latency on CPU, which is why it's gated.
+
+  ---
+  How They Chain Together
+
+  OpenAlex/Primo API call
+          │
+          ▼
+    Upstream BM25 order (lexical position 0..N)
+          │
+          ├──► [rrf_enabled] fuse with embedding cosine rank via RRF ──┐
+          │                                                             │
+          └──► [default] raw embedding cosine ────────────────────────►│
+                                                                        ▼
+                                                Weighted sum (semantic + title +
+   recency
+                                                             + fulltext + type +
+   completeness)
+                                                                        │
+                                                                        ▼
+                                                [crossencoder_enabled]
+  CrossEncoder second pass
+                                                       on top-20 → final ranked
+  list
+                                                                        │
+                                                                        ▼
+                                                               Return top N to
+  Claude
+
+  ---
+  Current Active vs Dormant
+
+  ┌───────────────────────────────┬─────────────────────────────────────────┐
+  │            System             │                 Status                  │
+  ├───────────────────────────────┼─────────────────────────────────────────┤
+  │ OpenAlex BM25 (upstream)      │ Always active — it's just the API       │
+  │                               │ response order                          │
+  ├───────────────────────────────┼─────────────────────────────────────────┤
+  │ Primo BM25 (upstream)         │ Always active — same                    │
+  ├───────────────────────────────┼─────────────────────────────────────────┤
+  │ Embedding cosine (Stage 1)    │ Active — rerank_enabled=True by default │
+  ├───────────────────────────────┼─────────────────────────────────────────┤
+  │ Title token overlap           │ Active — always part of the weighted    │
+  │                               │ sum                                     │
+  ├───────────────────────────────┼─────────────────────────────────────────┤
+  │ Recency / fulltext / type /   │ Active — always part of the weighted    │
+  │ completeness                  │ sum                                     │
+  ├───────────────────────────────┼─────────────────────────────────────────┤
+  │ RRF fusion                    │ Dormant — rrf_enabled=False             │
+  ├───────────────────────────────┼─────────────────────────────────────────┤
+  │ CrossEncoder (Stage 2)        │ Dormant — crossencoder_enabled=False    │
+  └───────────────────────────────┴─────────────────────────────────────────┘
+
+  The current production path is: upstream BM25 order → embedding cosine + 4
+  heuristic signals → weighted sum → serve.
+
+✻ Brewed for 42s
+
+❯ is it worth looking into open source alteraltives to open alex so we arent    
+  bottle necked by there api and can run it locally?                            
+
+● This is worth thinking through carefully. Short answer: yes, but the practical
+   path is self-hosting OpenAlex's own data dump, not replacing it with 
+  something else.
+
+  Here's why:
+
+  OpenAlex publishes their full dataset under CC0 — ~250M works as Parquet
+  snapshots on AWS S3, updated weekly. You could download the snapshots, index
+  them into a local Elasticsearch or OpenSearch cluster, and run unlimited
+  queries against your own instance. It's the same data, zero API rate limits,
+  and no daily budget tracking needed.
+
+  The tradeoff is real though:
+  - The full snapshot is ~500GB+ compressed (multi-TB uncompressed) —
+  significant storage and indexing infra
+  - You'd own the update cadence — weekly re-sync jobs to stay fresh
+  - Search relevance would be your problem: OpenAlex's hosted API gives you
+  their BM25 tuning; a bare Elasticsearch index gives you vanilla BM25 with
+  whatever mappings you configure
+
+  True third-party alternatives are weaker:
+
+  ┌────────────────────┬──────────────────────┬─────────────────────────────┐
+  │       Option       │       Strength       │       Gap vs OpenAlex       │
+  ├────────────────────┼──────────────────────┼─────────────────────────────┤
+  │ Semantic Scholar   │ 200M+ papers, TLDRs, │ Already used as fallback;   │
+  │ (already have it)  │  citation graph      │ same API rate constraints   │
+  ├────────────────────┼──────────────────────┼─────────────────────────────┤
+  │ CORE               │ OA-only, good        │ ~50M works, no citation     │
+  │                    │ fulltext             │ counts                      │
+  ├────────────────────┼──────────────────────┼─────────────────────────────┤
+  │ PubMed local dump  │ Best for biomedical  │ Biomedical only, no         │
+  │                    │                      │ citation graph              │
+  ├────────────────────┼──────────────────────┼─────────────────────────────┤
+  │ CrossRef local     │ DOI metadata         │ No abstracts, no semantic   │
+  │                    │                      │ search                      │
+  ├────────────────────┼──────────────────────┼─────────────────────────────┤
+  │ DBLP               │ CS literature        │ CS only                     │
+  └────────────────────┴──────────────────────┴─────────────────────────────┘
+
+  My actual recommendation: Before investing in self-hosting, check whether the
+  900/day limit is actually a bottleneck in practice. At this server's scale
+  (individual researchers querying through Claude), 900 searches/day is a lot.
+  The more likely real constraint is the training data mining use case — bulk
+  corpus fetching for the NDCG eval pipeline — which hits limits fast.
+
+  If that's the driver, the cleaner fix is a dedicated bulk-fetch script that
+  uses the OpenAlex snapshot directly (their S3 Parquet files), while keeping
+  the live API for the real-time search path. That way you don't need to
+  self-host the full search infrastructure, but you can mine the full corpus
+  offline without burning the daily budget.
+
+  Want me to look at how the current mining scripts use the API to see if that's
+   actually where the budget goes?
+
+✻ Cooked for 29s
+
+❯ is open alexes BM25 open source to see if there are any bottle necks or       
+  customiliztoins that we could make?                                           
+
+● Short answer: No — OpenAlex's search layer is not open source, but it's built 
+  on Elasticsearch, which is.
+
+  Here's the breakdown:
+
+  What is open:
+  - Their data (CC0 snapshots on S3) — fully open
+  - The BM25 algorithm itself — Elasticsearch uses Okapi BM25 as its default
+  similarity function since v5.0, and OpenSearch (the Apache 2.0 fork) has the
+  full implementation visible
+  - Some of their data pipeline code is on GitHub (ourresearch/openalex-guts)
+  but it's the ETL/enrichment layer, not the search layer
+
+  What is not open:
+  - Their API/search service — closed, hosted-only
+  - Their specific Elasticsearch field mappings, query construction, and BM25 
+  tuning parameters (k1, b, field boosts per field like title vs. abstract vs.
+  concepts) — unpublished
+  - How they weight concept tags, institution signals, citation counts in
+  relevance — unknown
+
+  What this means practically:
+
+  You can't inspect or fork their BM25 config. But since it's Elasticsearch
+  under the hood, if you self-hosted the snapshot you'd have more control than
+  you do now, not less — you could tune:
+  - k1 (term frequency saturation) and b (field length normalization)
+  - Per-field boost weights (title vs. abstract vs. author vs. concept tags)
+  - Custom analyzers (stemming, synonyms for academic jargon)
+  - Query-time boosting by citation count or recency
+
+  The actual bottleneck in the current setup isn't BM25 tuning though — it's
+  that the upstream lexical rank from OpenAlex is a black box that the reranker
+  then tries to correct. The reranker's title token overlap signal
+  (title_relevance at 0.15 weight) is essentially a crude BM25 approximation
+  applied after the fact to compensate for not controlling the upstream query.
+
+  If you self-hosted on OpenSearch, you'd close that loop — the reranker's title
+   signal could be replaced by a properly tuned upstream BM25 query you control
+  directly. That's the real architectural win, more than the rate limit removal.
+
+  Want me to look at how the current OpenAlex query is actually constructed in
+  openalex.py to see what fields it's hitting and where tuning headroom might
+  exist even within the current API?
+
+✻ Crunched for 22s
+
+※ recap: We're building an MCP server for SFU Library academic search and just discussed whether to self-host OpenAlex's data dump for unlimited local queries. Next action is inspecting how openalex.py constructs its search queries to find tuning headroom within the current API. (disable recaps in /config)
+
+❯ from what im understanding the next step for an architectural rewrite would   
+  be to locally host both Okapi BM25 and opensearch then we could tune the      
+  reranker better would we need to download open alex snapshots for any type of 
+   usage locally                                                                
+
+● Let me check what data is already being fetched and cached locally before
+  answering.
+  Read 1 file, listed 1 directory (ctrl+o to expand)
+
+● Bash(head -3
+      /workspaces/sfu-library-mcp-clone/data/sfu_training_triplets.jsonl |
+      python3 -c "import sys,json; [print(json.dumps(json.loads(l),
+      indent=2)[:800]) for…)
+  ⎿  {
+       "anchor": "Acute Kidney Injury Network: report of an initiative to i
+     mprove outcomes in acute kidney injury. INTRODUCTION: Acute kidney inj
+     … +32 lines (ctrl+o to expand)
+
+● Bash(wc -c /workspaces/sfu-library-mcp-clone/data/openalex_eval_cache.json &&
+      python3 -c "
+      import json…)
+  ⎿  12055671 /workspaces/sfu-library-mcp-clone/data/openalex_eval_cache.js
+     on
+     keys: ['50::indigenous language revitalization First Nations British C
+     … +6 lines (ctrl+o to expand)
+
+● Good context from the data files. Here's the honest picture:
+
+  ---
+  Do You Need OpenAlex Snapshots?
+
+  Yes, for a full local search index — but you already have a head start and the
+   scale question matters a lot.
+
+  You already have locally:
+  - openalex_eval_cache.json — 227 query result sets, 12MB of pre-fetched
+  OpenAlex responses
+  - sfu_training_triplets.jsonl — 9,234 anchor/positive/negative triplets
+  (already a mini-corpus)
+
+  This is proto-index behavior. An OpenSearch instance would replace this ad-hoc
+   caching with a real queryable document store.
+
+  For the snapshot question, you have three tiers:
+
+  Tier: Filtered subset
+  What: OpenAlex Parquet filtered by year (2000+) + fields relevant to SFU
+  Size: ~20–80GB
+  When: Practical starting point
+  ────────────────────────────────────────
+  Tier: Full snapshot
+  What: All 250M+ works
+  Size: ~500GB compressed, multi-TB indexed
+  When: Only if you need full breadth
+  ────────────────────────────────────────
+  Tier: Incremental (no snapshot)
+  What: Index only what users actually search, filling the OpenSearch store as
+    queries hit the live API
+  Size: Starts at 0, grows organically
+  When: Good hybrid approach
+
+  The incremental path is actually viable here — every live query to OpenAlex
+  fills your local index, and over time you build a warm corpus of the queries
+  your users actually care about. You'd only need a snapshot if you want day-one
+   coverage of arbitrary queries.
+
+  ---
+  What the Architectural Rewrite Actually Buys You
+
+  The real gain isn't just removing the rate limit. It's that the current
+  pipeline has a structural inefficiency:
+
+  Current flow:
+  OpenAlex black-box BM25 → you get results in order you can't control
+                          → reranker compensates with title_relevance (0.15
+  weight)
+                            as a crude post-hoc BM25 approximation
+
+  With local OpenSearch:
+  Your tunable BM25 query → results already shaped by:
+    - field boosts you control (title^3, abstract^1, concepts^2)
+    - custom analyzers (academic synonyms, stemming)
+    - citation count / recency scoring at query time
+  → reranker only needs to add what BM25 can't do (semantic similarity,
+  CrossEncoder)
+    → title_relevance signal removed from reranker entirely (it's now upstream)
+    → all four heuristic weights can be redistributed to semantic signals
+
+  The title_relevance signal in the reranker at 0.15 weight is basically a patch
+   for not owning the query. In an OpenSearch architecture that weight
+  disappears and you'd likely see cleaner NDCG gains from the remaining signals.
+
+  ---
+  Recommended Path
+
+  1. Stand up a local OpenSearch instance (Docker, single node is fine for dev)
+  2. Start incremental — wire it so every OpenAlex API response gets indexed
+  locally before being returned; the live API fills the store, no snapshot
+  needed initially
+  3. Tune BM25 (k1, b, field boosts) against your existing 227-query eval set —
+  you already have the benchmark infrastructure
+  4. Once local index has meaningful coverage, remove the title_relevance
+  reranker signal and redistribute those weights to semantic similarity
+  5. Snapshot later if coverage gaps become a real problem
+
+  Want me to look at how hard the OpenSearch indexing step would be to wire into
+   the existing OpenAlexClient without disrupting the current search path?
+
+✻ Sautéed for 55s
+
+※ recap: Exploring a local OpenSearch architecture to replace the OpenAlex API dependency and gain BM25 tuning control. Next step is wiring incremental indexing into OpenAlexClient so every API response populates the local store. (disable recaps in /config)
+
+❯ would there be a method to where the local BM25 and tuned open search would   
+  be able to superseed the models online at open alex. the idea behind that is  
+  that i would like the requests being sent out to be though the custom pipline 
+   but ultamatly i need the infomation to be the newest that it can be and open 
+   alex updates weekly and i cant have that become and issue. if i create a     
+  custom bm25 plus a opensearch how would i be able to request uptodate         
+  academic info to search though without having my results be muddled by the    
+  data sources that i have presently would it come down to just replacing the   
+  data sources with standard search?                                            
+
+● This is the core architectural tension worth getting right before building
+  anything. Let me think through the options clearly.
+
+  ---
+  The Fundamental Split
+
+  Your data freshness concern and your ranking control concern are actually two 
+  independent problems that don't need the same solution:
+
+  Data freshness  →  WHERE the documents come from
+  Ranking quality →  HOW you score and order them
+
+  You can solve ranking without touching data freshness, and vice versa. The
+  question is which combination makes sense.
+
+  ---
+  Three Architectures
+
+  Option A — Over-fetch + Local Pipeline (least infra, solvable now)
+
+  Keep OpenAlex as the live data source. Never replace it. But instead of taking
+   their top 10, request their top 50–100, then run your own BM25 + reranker on
+  those candidates.
+
+  Live OpenAlex API (fresh, authoritative) → top 100 raw results
+          ↓
+  Your local BM25 re-scores those 100 (title/abstract field boosts you control)
+          ↓
+  Your reranker (embedding + CrossEncoder)
+          ↓
+  Top 10 served
+
+  What you gain: Full ranking control, always fresh data, no snapshot needed, no
+   staleness problem.
+  What you lose: You still can't control which 100 OpenAlex gives you — their
+  upstream BM25 determines the candidate pool. If the right paper isn't in their
+   top 100, you never see it.
+  Infra cost: Zero new infra. This is a code change to openalex.py.
+
+  ---
+  Option B — OpenSearch as Cache + Weekly Diff Sync
+
+  Self-host OpenSearch, seed it from OpenAlex snapshots, apply OpenAlex's weekly
+   diff updates via a cron job. Your pipeline queries OpenSearch exclusively.
+
+  OpenAlex weekly diff (cron job) → OpenSearch local index (always ≤7 days
+  stale)
+          ↓
+  Your tunable BM25 query (field boosts, analyzers, citation scoring at query
+  time)
+          ↓
+  Your reranker
+          ↓
+  Top N served
+
+  What you gain: Zero API rate limits, full BM25 tuning, no daily budget
+  tracking, can pre-index your entire eval corpus.
+  What you lose: 7-day staleness window. Papers published this week don't exist
+  until next sync. OpenAlex's diff format requires an ETL pipeline to maintain.
+  Infra cost: OpenSearch container + weekly sync job + initial snapshot load
+  (~20–80GB filtered).
+
+  ---
+  Option C — Federated Hybrid (solves the "muddling" problem directly)
+
+  This is the architecture that answers your exact concern. Two separate
+  indexes, clear priority rules, no muddling:
+
+  Query comes in
+      │
+      ├──► Live OpenAlex API  (papers < 30 days old, or when local misses)
+      │         fresh, authoritative, rate-limited
+      │
+      └──► Local OpenSearch   (papers > 30 days old, your enriched corpus)
+                stale-safe zone, no rate limits, fully tunable
+
+      Both result sets fed into the same reranker
+      Deduplication by DOI before ranking
+      Source tag attached to each result (for debugging)
+
+  What you gain: Fresh papers always come from live API, older papers come from
+  your tunable local index, the reranker doesn't care which source a doc came
+  from.
+  What this avoids: Your local stale data never competes with fresh results on
+  the same paper — if a DOI exists in both, you deduplicate and keep the
+  freshest version.
+  Infra cost: OpenSearch container + the incremental index-as-you-search
+  approach (no snapshot needed to start).
+
+  ---
+  The "Muddling" Answer Directly
+
+  The muddling problem you described — local stale data mixing with fresh API
+  results — only happens if you merge two result sets for the same query without
+   deduplication. The fix is simple:
+
+  # Route by age, not by query
+  if result["date"] > thirty_days_ago:
+      source = "live_api"   # authoritative for new papers
+  else:
+      source = "local_index"  # authoritative for established literature
+
+  Or more robustly: always query both, deduplicate by DOI keeping the freshest
+  version, then rank the merged set. Your local corpus enriches the candidate
+  pool for established literature; the live API covers everything recent.
+  Neither muddies the other because DOI deduplication is the separator.
+
+  ---
+  My Recommendation
+
+  Start with Option A — it's a code change, not an infrastructure change, and it
+   directly addresses your ranking control concern without introducing a
+  staleness problem. Over-fetching 50–100 from OpenAlex and running your own
+  BM25 scoring on the candidate pool is a meaningful improvement over the
+  current setup and costs nothing to operate.
+
+  Then move to Option C once you have evidence the 100-candidate ceiling is
+  actually limiting result quality. At that point you have a working local
+  OpenSearch index (built incrementally from query history) and a clear
+  freshness routing rule that prevents muddling.
+
+  Option B (full snapshot + weekly sync) is only worth the ops cost if you need
+  offline/air-gapped operation or bulk corpus mining without hitting the API
+  budget.
+
+  Want me to sketch out what Option A would look like as a concrete code change
+  to openalex.py — specifically what the over-fetch + local BM25 re-score step
+  would look like?
+
+✻ Baked for 56s
+
+❯ /export                                                                       
+  ⎿  Conversation copied to clipboard
+
+❯ one of the issues im seeing with plan A currently is that if we need to hit   
+  open alex for the first 100 results for a given search wont we run out of api 
+   credits before we get anything useful say a user makes ten searches within a 
+   given session thatll eat entirely though either of the public api and or the 
+   private account based one. another question is is it worth if i end up       
+  running locall BM25 and also opensearch to see if there are any other         
+  alteratives to BM25 that might be better for my use case. also if i end up    
+  going for the full infra changes wouldnt it be redundant to route my searches 
+   though open alex are there any other academic info surving hosters that      
+  would be able to handle and give back raw infomation to the client since we   
+  are handeling ranking and indexing and all the other search engin thing       
+  locally?                                                                      
+
+● Three separate questions, each has a distinct answer.
+
+  ---
+  1. Option A's API Credit Problem
+
+  Actually a clarification first: over-fetching 100 results vs 10 from OpenAlex
+  is still one API request — OpenAlex counts per call, not per result. Fetching
+  100 costs the same budget as fetching 10.
+
+  But your broader point is correct. At real usage scale, even 1 call per search
+   burns through 900/day fast:
+
+  10 users × 10 searches/session × 1 session/day = 100 calls (fine)
+  50 users × 10 searches             = 500 calls (tight)
+  90 users × 10 searches             = 900 calls (ceiling hit, everyone blocked)
+
+  Option A only makes sense as a temporary improvement, not a real solution. It
+  doesn't change the fundamental rate limit problem — it just gives you better
+  ranking within that constraint. It confirms you need to move off the live API
+  for primary search, which leads to your third question.
+
+  ---
+  2. Alternatives to BM25 Worth Evaluating
+
+  Yes, and one in particular is very relevant to your use case:
+
+  SPLADE (Sparse Lexical and Expansion Model)
+  Probably the most interesting upgrade from vanilla BM25 for academic text.
+  It's a learned sparse retrieval model — it works in the same inverted index
+  paradigm as BM25 (so OpenSearch can serve it) but instead of term frequency,
+  it uses a BERT-like encoder to learn which terms are important and expands
+  queries with semantically related terms automatically.
+
+  On academic benchmarks (BEIR, TREC-COVID, NFCorpus) SPLADE consistently
+  outperforms BM25 by 10–20% nDCG. It would directly replace BM25 in your
+  OpenSearch index and remove the need for the title_relevance heuristic in your
+   reranker entirely.
+
+  Other options ranked by relevance to your use case:
+
+  ┌────────────┬────────────────────────────┬───────────────────────────────┐
+  │   Model    │        What it does        │           Relevance           │
+  ├────────────┼────────────────────────────┼───────────────────────────────┤
+  │ SPLADE     │ Learned sparse retrieval,  │ High — best upgrade path      │
+  │            │ BM25-compatible infra      │                               │
+  ├────────────┼────────────────────────────┼───────────────────────────────┤
+  │ BM25F      │ Field-aware BM25 (title vs │ Medium — already in           │
+  │            │  abstract weighting)       │ OpenSearch, low-effort tuning │
+  ├────────────┼────────────────────────────┼───────────────────────────────┤
+  │ LM         │ Language model similarity, │ Medium — good for papers with │
+  │ Dirichlet  │  better for longer docs    │  long abstracts               │
+  ├────────────┼────────────────────────────┼───────────────────────────────┤
+  │            │ Late interaction dense     │ Low for now — needs dedicated │
+  │ ColBERT    │ retrieval                  │  vector infra, powerful but   │
+  │            │                            │ heavier                       │
+  ├────────────┼────────────────────────────┼───────────────────────────────┤
+  │ TF-IDF     │ Simpler than BM25          │ No — strictly worse, not      │
+  │            │                            │ worth it                      │
+  └────────────┴────────────────────────────┴───────────────────────────────┘
+
+  The practical path: start with tuned BM25F (field boosts on title, abstract,
+  concepts), evaluate against your existing 227-query eval set, then try SPLADE
+  as a drop-in replacement for the same infra.
+
+  ---
+  3. If You Own the Full Stack, Do You Still Need OpenAlex at All?
+
+  This is the right question. If your pipeline handles indexing, ranking, and
+  retrieval locally, OpenAlex the company goes from being your search API to 
+  just being your data provider. You download their data, you never call their
+  API for search queries again.
+
+  The distinction:
+
+  Current:   User query → OpenAlex API (their servers, their BM25, their rate
+  limits)
+  Future:    User query → YOUR OpenSearch (OpenAlex data you downloaded and
+  indexed)
+                                           ↑
+                          OpenAlex just sends you weekly data diffs
+                          They're a data vendor, not a search provider
+
+  Are there alternatives to OpenAlex as a data source?
+
+  For raw academic metadata at scale, OpenAlex is genuinely the best open option
+   — nothing else matches its breadth + quality + CC0 license. But you'd combine
+   it with other sources for coverage gaps:
+
+  Source: OpenAlex
+  Coverage: 250M+ works, all fields
+  Format: Parquet/JSON on S3, weekly diffs
+  Strength: Broadest open academic metadata
+  ────────────────────────────────────────
+  Source: Semantic Scholar S2ORC
+  Coverage: 200M+ papers
+  Format: Bulk download
+  Strength: Full text for many papers, strong citation graph
+  ────────────────────────────────────────
+  Source: arXiv
+  Coverage: All preprints (CS/physics/math/econ/bio)
+  Format: S3 bulk access
+  Strength: Preprint coverage, very current
+  ────────────────────────────────────────
+  Source: CrossRef
+  Coverage: 140M+ DOI records
+  Format: Bulk download
+  Strength: DOI metadata enrichment, no abstracts
+  ────────────────────────────────────────
+  Source: PubMed/MEDLINE
+  Coverage: Biomedical
+  Format: NCBI FTP dumps
+  Strength: Biomedical depth
+
+  For SFU Library's general research audience, the practical combination is
+  OpenAlex as the primary index + arXiv for preprint freshness + CrossRef for 
+  DOI enrichment on gaps. You'd already have Semantic Scholar as a live fallback
+   for citation graph queries (those don't need to go through your local index).
+
+  ---
+  The Clean Architecture This Points To
+
+  Data layer (no API at query time):
+    OpenAlex weekly snapshot sync → OpenSearch index (primary)
+    arXiv S3 sync (daily)         → same OpenSearch index
+    CrossRef bulk                 → enrichment pass on DOI gaps
+
+  Query layer (fully local):
+    User query → OpenSearch (SPLADE or tuned BM25F)
+               → your reranker (embedding + CrossEncoder)
+               → results
+
+  Live API (narrowed role):
+    Semantic Scholar → citation graph only (get_citations, get_references tools)
+    Unpaywall        → OA link resolution only
+    CrossRef         → on-demand enrichment for new DOIs not yet in local index
+
+  The live API budget problem goes away entirely for search. The only live calls
+   left are for citation graph traversal and OA link resolution, which are
+  low-volume by nature.
+
+✻ Cogitated for 59s
