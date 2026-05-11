@@ -78,8 +78,11 @@ try:
     rmm.mr.set_current_device_resource(
         rmm.mr.PoolMemoryResource(
             rmm.mr.ManagedMemoryResource(),
-            initial_pool_size=2 * 1024**3,    # 2 GB initial pool
-            maximum_pool_size=14 * 1024**3,   # cap below 16 GB total VRAM
+            initial_pool_size=2 * 1024**3,   # 2 GB initial pool
+            # No maximum_pool_size — pool grows without limit; ManagedMemoryResource
+            # (CUDA Unified Memory) spills to system RAM when VRAM is full.
+            # A hard cap caused std::bad_alloc → std::terminate (silent crash) when
+            # parsing large parts that exceed the pool ceiling.
         )
     )
     import cudf  # cuDF picks up the pool resource set above
