@@ -46,6 +46,7 @@ Usage:
 """
 
 import argparse
+import concurrent.futures
 import gzip
 import hashlib
 import io
@@ -76,6 +77,7 @@ CHECKPOINT_FILE = "download_checkpoint.json"
 STATUS_FILE = "snapshot_status.json"
 DEFAULT_MIN_YEAR = 2015
 DEFAULT_CHUNK_SIZE = 500_000  # records per output chunk
+DEFAULT_WORKERS = 3          # concurrent part downloads
 HTTP_TIMEOUT = 300  # large parts can be 500MB-1.1GB
 MAX_RETRIES = 3
 RETRY_BACKOFF_BASE = 5  # seconds
@@ -230,7 +232,10 @@ def download_and_process_part(
             resp.raise_for_status()
 
             records = []
-            decompressor = gzip.GzipFile(fileobj=io.BytesIO(resp.content))
+            # True streaming: decompress while downloading instead of buffering
+            # the entire 500MB-1.1GB part in RAM first.
+            resp.raw.decode_content = True
+            decompressor = gzip.GzipFile(fileobj=resp.raw)
             text_stream = io.TextIOWrapper(decompressor, encoding="utf-8", errors="replace")
 
             for line in text_stream:
@@ -406,6 +411,7 @@ def run_download(
     chunk_size: int,
     resume: bool,
     dry_run: bool,
+    workers: int = DEFAULT_WORKERS,
 ) -> dict:
     """Main download pipeline. Returns final stats dict."""
     global _shutdown_requested
@@ -424,6 +430,7 @@ def run_download(
 
     total_parts = len(manifest)
     logger.info("Snapshot has %d parts, filtering to year >= %d", total_parts, min_year)
+    logger.info("Parallel workers: %d (downloads next %d parts while processing current)", workers, workers)
 
     # Load or init checkpoint
     checkpoint = None
@@ -446,98 +453,128 @@ def run_download(
     start_time = time.time()
     parts_processed = 0
 
-    for i in range(start_part, total_parts):
-        if _shutdown_requested:
-            logger.info("Shutdown requested — saving checkpoint at part %d/%d", i, total_parts)
-            writer.flush()
+    # Prefetch pool: submit up to `workers` downloads ahead so the network
+    # stays busy while the main thread processes the current part.
+    executor = concurrent.futures.ThreadPoolExecutor(max_workers=workers)
+    pending: dict[int, concurrent.futures.Future] = {}
+
+    def _submit_prefetch(idx: int) -> None:
+        if idx < total_parts and idx not in pending:
+            part_url = manifest[idx].get("url", "")
+            if part_url:
+                pending[idx] = executor.submit(
+                    download_and_process_part, session, part_url, min_year
+                )
+
+    # Pre-fill the prefetch queue
+    for j in range(start_part, min(start_part + workers, total_parts)):
+        _submit_prefetch(j)
+
+    try:
+        for i in range(start_part, total_parts):
+            if _shutdown_requested:
+                logger.info("Shutdown requested — saving checkpoint at part %d/%d", i, total_parts)
+                for f in pending.values():
+                    f.cancel()
+                writer.flush()
+                save_checkpoint(output_dir, {
+                    "completed_parts": i,
+                    "total_parts": total_parts,
+                    "next_chunk_index": writer.chunk_index,
+                    "cumulative_stats": cumulative_stats,
+                    "total_kept": cumulative_stats["total_kept"],
+                    "state": "interrupted",
+                })
+                write_status(output_dir, {
+                    "state": "interrupted",
+                    "completed_parts": i,
+                    "total_parts": total_parts,
+                    "total_kept": cumulative_stats["total_kept"],
+                    "timestamp": time.strftime("%Y-%m-%dT%H:%M:%S"),
+                })
+                logger.info("Checkpoint saved. Run with --resume to continue.")
+                return {**cumulative_stats, "state": "interrupted", "completed_parts": i}
+
+            part = manifest[i]
+            part_url = part.get("url", "")
+            if not part_url:
+                logger.warning("Part %d has no URL — skipping", i)
+                _submit_prefetch(i + workers)
+                continue
+
+            elapsed = time.time() - start_time
+            if parts_processed > 0:
+                rate = parts_processed / elapsed
+                remaining = (total_parts - i) / rate
+                eta_str = time.strftime("%H:%M:%S", time.gmtime(remaining))
+            else:
+                eta_str = "calculating..."
+
+            logger.info(
+                "Processing part %d/%d (%.1f%%) — ETA: %s — kept so far: %d",
+                i + 1, total_parts,
+                100.0 * (i + 1) / total_parts,
+                eta_str,
+                cumulative_stats["total_kept"],
+            )
+
+            # Kick off the next prefetch slot now that we're consuming one
+            _submit_prefetch(i + workers)
+
+            try:
+                if i in pending:
+                    records, part_stats = pending.pop(i).result()
+                else:
+                    records, part_stats = download_and_process_part(session, part_url, min_year)
+            except Exception as e:
+                logger.error("Skipping part %d after all retries failed: %s", i, e)
+                continue
+
+            cumulative_stats["total_scanned"] += part_stats["total"]
+            cumulative_stats["total_kept"] += part_stats["kept"]
+            cumulative_stats["total_no_abstract"] += part_stats["no_abstract"]
+            cumulative_stats["total_too_old"] += part_stats["too_old"]
+            cumulative_stats["total_parse_error"] += part_stats["parse_error"]
+            cumulative_stats["total_retracted"] += part_stats["retracted"]
+
+            if records:
+                writer.add_records(records)
+
+            parts_processed += 1
+
+            # Checkpoint after every part
             save_checkpoint(output_dir, {
-                "completed_parts": i,
+                "completed_parts": i + 1,
                 "total_parts": total_parts,
                 "next_chunk_index": writer.chunk_index,
                 "cumulative_stats": cumulative_stats,
                 "total_kept": cumulative_stats["total_kept"],
-                "state": "interrupted",
+                "state": "running",
             })
+
             write_status(output_dir, {
-                "state": "interrupted",
-                "completed_parts": i,
+                "state": "running",
+                "completed_parts": i + 1,
                 "total_parts": total_parts,
                 "total_kept": cumulative_stats["total_kept"],
+                "progress_pct": round(100.0 * (i + 1) / total_parts, 1),
+                "eta": eta_str,
+                "pid": os.getpid(),
                 "timestamp": time.strftime("%Y-%m-%dT%H:%M:%S"),
             })
-            logger.info("Checkpoint saved. Run with --resume to continue.")
-            return {**cumulative_stats, "state": "interrupted", "completed_parts": i}
 
-        part = manifest[i]
-        part_url = part.get("url", "")
-        if not part_url:
-            logger.warning("Part %d has no URL — skipping", i)
-            continue
+            if dry_run:
+                logger.info("─── DRY RUN COMPLETE ───")
+                logger.info("Processed 1 part: %d records scanned, %d kept", part_stats["total"], part_stats["kept"])
+                logger.info("Filtering: %d no abstract, %d too old, %d retracted, %d parse errors",
+                            part_stats["no_abstract"], part_stats["too_old"], part_stats["retracted"], part_stats["parse_error"])
+                if records:
+                    logger.info("Sample record:\n%s", json.dumps(records[0], indent=2, ensure_ascii=False)[:500])
+                writer.flush()
+                return {**cumulative_stats, "state": "dry_run", "completed_parts": 1}
 
-        elapsed = time.time() - start_time
-        if parts_processed > 0:
-            rate = parts_processed / elapsed
-            remaining = (total_parts - i) / rate
-            eta_str = time.strftime("%H:%M:%S", time.gmtime(remaining))
-        else:
-            eta_str = "calculating..."
-
-        logger.info(
-            "Processing part %d/%d (%.1f%%) — ETA: %s — kept so far: %d",
-            i + 1, total_parts,
-            100.0 * (i + 1) / total_parts,
-            eta_str,
-            cumulative_stats["total_kept"],
-        )
-
-        try:
-            records, part_stats = download_and_process_part(session, part_url, min_year)
-        except Exception as e:
-            logger.error("Skipping part %d after all retries failed: %s", i, e)
-            continue
-
-        cumulative_stats["total_scanned"] += part_stats["total"]
-        cumulative_stats["total_kept"] += part_stats["kept"]
-        cumulative_stats["total_no_abstract"] += part_stats["no_abstract"]
-        cumulative_stats["total_too_old"] += part_stats["too_old"]
-        cumulative_stats["total_parse_error"] += part_stats["parse_error"]
-        cumulative_stats["total_retracted"] += part_stats["retracted"]
-
-        if records:
-            writer.add_records(records)
-
-        parts_processed += 1
-
-        # Checkpoint after every part
-        save_checkpoint(output_dir, {
-            "completed_parts": i + 1,
-            "total_parts": total_parts,
-            "next_chunk_index": writer.chunk_index,
-            "cumulative_stats": cumulative_stats,
-            "total_kept": cumulative_stats["total_kept"],
-            "state": "running",
-        })
-
-        write_status(output_dir, {
-            "state": "running",
-            "completed_parts": i + 1,
-            "total_parts": total_parts,
-            "total_kept": cumulative_stats["total_kept"],
-            "progress_pct": round(100.0 * (i + 1) / total_parts, 1),
-            "eta": eta_str,
-            "pid": os.getpid(),
-            "timestamp": time.strftime("%Y-%m-%dT%H:%M:%S"),
-        })
-
-        if dry_run:
-            logger.info("─── DRY RUN COMPLETE ───")
-            logger.info("Processed 1 part: %d records scanned, %d kept", part_stats["total"], part_stats["kept"])
-            logger.info("Filtering: %d no abstract, %d too old, %d retracted, %d parse errors",
-                        part_stats["no_abstract"], part_stats["too_old"], part_stats["retracted"], part_stats["parse_error"])
-            if records:
-                logger.info("Sample record:\n%s", json.dumps(records[0], indent=2, ensure_ascii=False)[:500])
-            writer.flush()
-            return {**cumulative_stats, "state": "dry_run", "completed_parts": 1}
+    finally:
+        executor.shutdown(wait=False)
 
     # Final flush
     writer.flush()
@@ -603,12 +640,17 @@ def main():
         "--dry-run", action="store_true",
         help="Process 1 part and report stats without full download",
     )
+    parser.add_argument(
+        "--workers", type=int, default=DEFAULT_WORKERS,
+        help=f"Concurrent part downloads (default: {DEFAULT_WORKERS})",
+    )
     args = parser.parse_args()
 
     logger.info("OpenAlex Snapshot Downloader")
     logger.info("Output: %s", args.output)
     logger.info("Filter: year >= %d, has abstract (>= 50 chars)", args.min_year)
     logger.info("Chunk size: %d records/file", args.chunk_size)
+    logger.info("Workers: %d", args.workers)
     if args.resume:
         logger.info("Mode: RESUME from checkpoint")
     if args.dry_run:
@@ -620,6 +662,7 @@ def main():
         chunk_size=args.chunk_size,
         resume=args.resume,
         dry_run=args.dry_run,
+        workers=args.workers,
     )
 
     if result.get("state") == "interrupted":
