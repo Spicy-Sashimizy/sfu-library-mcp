@@ -217,6 +217,7 @@ def download_and_process_part(
     session: requests.Session,
     part_url: str,
     min_year: int,
+    legacy_schema: bool = False,
 ) -> tuple[list[dict], dict]:
     """Download a single gz part, filter records, return (records, stats).
 
@@ -268,37 +269,47 @@ def download_and_process_part(
                 if openalex_id.startswith("https://openalex.org/"):
                     openalex_id = openalex_id.replace("https://openalex.org/", "")
 
-                def _strip_oa_prefix(works_list):
-                    return [
-                        w.replace("https://openalex.org/", "") if isinstance(w, str) else w
-                        for w in (works_list or [])
-                    ]
+                if legacy_schema:
+                    record = {
+                        "id": openalex_id,
+                        "doi": work.get("doi"),
+                        "title": work.get("title", ""),
+                        "abstract": abstract,
+                        "publication_year": pub_year,
+                        "type": work.get("type", ""),
+                    }
+                else:
+                    def _strip_oa_prefix(works_list):
+                        return [
+                            w.replace("https://openalex.org/", "") if isinstance(w, str) else w
+                            for w in (works_list or [])
+                        ]
 
-                def _extract_names(items, name_key="display_name"):
-                    return [
-                        item.get(name_key, "") for item in (items or [])
-                        if isinstance(item, dict) and item.get(name_key)
-                    ]
+                    def _extract_names(items, name_key="display_name"):
+                        return [
+                            item.get(name_key, "") for item in (items or [])
+                            if isinstance(item, dict) and item.get(name_key)
+                        ]
 
-                record = {
-                    "id": openalex_id,
-                    "doi": work.get("doi"),
-                    "title": work.get("title", ""),
-                    "abstract": abstract,
-                    "publication_year": pub_year,
-                    "type": work.get("type", ""),
-                    "language": work.get("language"),
-                    "cited_by_count": work.get("cited_by_count", 0),
-                    "keywords": _extract_names(work.get("keywords", [])),
-                    "concepts": _extract_names(work.get("concepts", [])),
-                    "topics": _extract_names(work.get("topics", [])),
-                    "mesh": [
-                        item.get("descriptor_name", "") for item in (work.get("mesh") or [])
-                        if isinstance(item, dict) and item.get("descriptor_name")
-                    ],
-                    "referenced_works": _strip_oa_prefix(work.get("referenced_works", [])),
-                    "related_works": _strip_oa_prefix(work.get("related_works", [])),
-                }
+                    record = {
+                        "id": openalex_id,
+                        "doi": work.get("doi"),
+                        "title": work.get("title", ""),
+                        "abstract": abstract,
+                        "publication_year": pub_year,
+                        "type": work.get("type", ""),
+                        "language": work.get("language"),
+                        "cited_by_count": work.get("cited_by_count", 0),
+                        "keywords": _extract_names(work.get("keywords", [])),
+                        "concepts": _extract_names(work.get("concepts", [])),
+                        "topics": _extract_names(work.get("topics", [])),
+                        "mesh": [
+                            item.get("descriptor_name", "") for item in (work.get("mesh") or [])
+                            if isinstance(item, dict) and item.get("descriptor_name")
+                        ],
+                        "referenced_works": _strip_oa_prefix(work.get("referenced_works", [])),
+                        "related_works": _strip_oa_prefix(work.get("related_works", [])),
+                    }
                 records.append(record)
                 stats["kept"] += 1
 
@@ -412,6 +423,7 @@ def run_download(
     resume: bool,
     dry_run: bool,
     workers: int = DEFAULT_WORKERS,
+    legacy_schema: bool = False,
 ) -> dict:
     """Main download pipeline. Returns final stats dict."""
     global _shutdown_requested
@@ -431,6 +443,7 @@ def run_download(
     total_parts = len(manifest)
     logger.info("Snapshot has %d parts, filtering to year >= %d", total_parts, min_year)
     logger.info("Parallel workers: %d (downloads next %d parts while processing current)", workers, workers)
+    logger.info("Schema: %s", "legacy (6-field)" if legacy_schema else "enriched (14-field)")
 
     # Load or init checkpoint
     checkpoint = None
@@ -463,7 +476,7 @@ def run_download(
             part_url = manifest[idx].get("url", "")
             if part_url:
                 pending[idx] = executor.submit(
-                    download_and_process_part, session, part_url, min_year
+                    download_and_process_part, session, part_url, min_year, legacy_schema
                 )
 
     # Pre-fill the prefetch queue
@@ -644,6 +657,12 @@ def main():
         "--workers", type=int, default=DEFAULT_WORKERS,
         help=f"Concurrent part downloads (default: {DEFAULT_WORKERS})",
     )
+    parser.add_argument(
+        "--legacy-schema", action="store_true",
+        help="Write 6-field records (id, doi, title, abstract, publication_year, type) "
+             "matching the original schema — use when resuming a download started before "
+             "the enriched schema was added, to keep chunk files consistent.",
+    )
     args = parser.parse_args()
 
     logger.info("OpenAlex Snapshot Downloader")
@@ -651,6 +670,8 @@ def main():
     logger.info("Filter: year >= %d, has abstract (>= 50 chars)", args.min_year)
     logger.info("Chunk size: %d records/file", args.chunk_size)
     logger.info("Workers: %d", args.workers)
+    if args.legacy_schema:
+        logger.info("Schema: LEGACY (6-field) — matching original chunk files")
     if args.resume:
         logger.info("Mode: RESUME from checkpoint")
     if args.dry_run:
@@ -663,6 +684,7 @@ def main():
         resume=args.resume,
         dry_run=args.dry_run,
         workers=args.workers,
+        legacy_schema=args.legacy_schema,
     )
 
     if result.get("state") == "interrupted":
