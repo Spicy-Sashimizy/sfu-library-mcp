@@ -628,18 +628,28 @@ def run_download(
     total_parts = len(manifest)
     logger.info("Snapshot has %d parts, filtering to year >= %d", total_parts, min_year)
 
-    # In GPU mode each worker buffers a full decompressed part in RAM (~3-8 GB)
-    # before cuDF processes it. With RTX 4070 Ti Super (16 GB VRAM) and 32 GB
-    # system RAM, more than 2 concurrent workers exhausts both budgets.
-    # WSL2 virtual switch bandwidth (~300-600 Mbps) is NOT the bottleneck here.
-    GPU_MAX_WORKERS = 2
-    if use_gpu and workers > GPU_MAX_WORKERS:
-        logger.info(
-            "GPU mode: capping workers %d → %d (each decompressed part uses 3-8 GB RAM; "
-            "VRAM budget is 16 GB for RTX 4070 Ti Super)",
-            workers, GPU_MAX_WORKERS,
-        )
-        workers = GPU_MAX_WORKERS
+    # In GPU mode each worker buffers a full decompressed part in RAM (~3-8 GB).
+    # managed_memory=True handles VRAM overflow via Unified Memory, but system
+    # RAM is the hard limit. Allow ~8 GB per worker; cap based on what's free.
+    if use_gpu:
+        try:
+            _mem = Path("/proc/meminfo").read_text()
+            for _line in _mem.splitlines():
+                if _line.startswith("MemAvailable"):
+                    _avail_gb = int(_line.split()[1]) / 1024 / 1024
+                    break
+            else:
+                _avail_gb = 0.0
+        except Exception:
+            _avail_gb = 0.0
+
+        GPU_MAX_WORKERS = max(1, min(workers, int(_avail_gb / 8))) if _avail_gb else 2
+        if workers > GPU_MAX_WORKERS:
+            logger.info(
+                "GPU mode: capping workers %d → %d (%.1f GB RAM free, ~8 GB per worker)",
+                workers, GPU_MAX_WORKERS, _avail_gb,
+            )
+            workers = GPU_MAX_WORKERS
 
     logger.info("Parallel workers: %d (downloads next %d parts while processing current)", workers, workers)
     logger.info("Schema: %s", "legacy (6-field)" if legacy_schema else "enriched (14-field)")
