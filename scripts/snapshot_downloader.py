@@ -64,13 +64,25 @@ from urllib.parse import urljoin
 import requests
 
 try:
-    import cudf
     import rmm
-    # Use CUDA Unified Memory so VRAM spills to system RAM rather than OOMing.
-    # Without this, cuDF's default pool allocator exhausts the 16 GB VRAM on
-    # parts with large nested JSON (abstract_inverted_index) and raises
-    # cudaErrorMemoryAllocation even though total VRAM looks free.
-    rmm.reinitialize(managed_memory=True)
+    import rmm.mr
+    # Must set memory resource BEFORE importing cudf — cuDF's C++ layer captures
+    # the current device resource at first allocation. If cudf is imported first,
+    # it latches onto CudaMemoryResource (raw CUDA allocator), and later calls to
+    # rmm.reinitialize() don't update cuDF's already-initialized internal pool.
+    # PoolMemoryResource backed by ManagedMemoryResource gives us:
+    #   - Fast pool allocation (avoids per-alloc CUDA overhead)
+    #   - Unified Memory spillover to system RAM when VRAM is exhausted
+    # Without this, cuDF raises cudaErrorMemoryAllocation on tiny allocs (< 1 MB)
+    # because the raw pool runs out and can't fall back to system RAM.
+    rmm.mr.set_current_device_resource(
+        rmm.mr.PoolMemoryResource(
+            rmm.mr.ManagedMemoryResource(),
+            initial_pool_size=2 * 1024**3,    # 2 GB initial pool
+            maximum_pool_size=14 * 1024**3,   # cap below 16 GB total VRAM
+        )
+    )
+    import cudf  # cuDF picks up the pool resource set above
     _CUDF_AVAILABLE = True
 except ImportError:
     _CUDF_AVAILABLE = False
