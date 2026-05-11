@@ -2,8 +2,13 @@
 """Download and filter OpenAlex Works snapshot for SPLADE indexing.
 
 Downloads the OpenAlex monthly snapshot (Works entity only), streams each
-compressed part, filters to publication_year >= 2015 with abstracts present,
-and writes cleaned JSONL chunks to data/openalex_snapshot/.
+compressed part, filters to publication_year >= 2015 with abstracts present
+(retracted works excluded), and writes enriched JSONL chunks to
+data/openalex_snapshot/.
+
+Each output record includes: id, doi, title, abstract, publication_year,
+type, language, cited_by_count, keywords, concepts, topics, mesh,
+referenced_works, related_works.
 
 Checkpoint / Resume
 ───────────────────
@@ -217,7 +222,7 @@ def download_and_process_part(
     Parts can be 500MB-1.1GB compressed; full decompression would use 2-4GB RAM.
     Retries up to MAX_RETRIES on HTTP errors with exponential backoff.
     """
-    stats = {"total": 0, "kept": 0, "no_abstract": 0, "too_old": 0, "parse_error": 0}
+    stats = {"total": 0, "kept": 0, "no_abstract": 0, "too_old": 0, "parse_error": 0, "retracted": 0}
 
     for attempt in range(1, MAX_RETRIES + 1):
         try:
@@ -239,6 +244,10 @@ def download_and_process_part(
                     stats["parse_error"] += 1
                     continue
 
+                if work.get("is_retracted", False):
+                    stats["retracted"] += 1
+                    continue
+
                 pub_year = work.get("publication_year")
                 if pub_year is not None and pub_year < min_year:
                     stats["too_old"] += 1
@@ -254,6 +263,18 @@ def download_and_process_part(
                 if openalex_id.startswith("https://openalex.org/"):
                     openalex_id = openalex_id.replace("https://openalex.org/", "")
 
+                def _strip_oa_prefix(works_list):
+                    return [
+                        w.replace("https://openalex.org/", "") if isinstance(w, str) else w
+                        for w in (works_list or [])
+                    ]
+
+                def _extract_names(items, name_key="display_name"):
+                    return [
+                        item.get(name_key, "") for item in (items or [])
+                        if isinstance(item, dict) and item.get(name_key)
+                    ]
+
                 record = {
                     "id": openalex_id,
                     "doi": work.get("doi"),
@@ -261,6 +282,17 @@ def download_and_process_part(
                     "abstract": abstract,
                     "publication_year": pub_year,
                     "type": work.get("type", ""),
+                    "language": work.get("language"),
+                    "cited_by_count": work.get("cited_by_count", 0),
+                    "keywords": _extract_names(work.get("keywords", [])),
+                    "concepts": _extract_names(work.get("concepts", [])),
+                    "topics": _extract_names(work.get("topics", [])),
+                    "mesh": [
+                        item.get("descriptor_name", "") for item in (work.get("mesh") or [])
+                        if isinstance(item, dict) and item.get("descriptor_name")
+                    ],
+                    "referenced_works": _strip_oa_prefix(work.get("referenced_works", [])),
+                    "related_works": _strip_oa_prefix(work.get("related_works", [])),
                 }
                 records.append(record)
                 stats["kept"] += 1
@@ -398,7 +430,7 @@ def run_download(
     start_part = 0
     cumulative_stats = {
         "total_scanned": 0, "total_kept": 0, "total_no_abstract": 0,
-        "total_too_old": 0, "total_parse_error": 0,
+        "total_too_old": 0, "total_parse_error": 0, "total_retracted": 0,
     }
 
     if resume:
@@ -469,6 +501,7 @@ def run_download(
         cumulative_stats["total_no_abstract"] += part_stats["no_abstract"]
         cumulative_stats["total_too_old"] += part_stats["too_old"]
         cumulative_stats["total_parse_error"] += part_stats["parse_error"]
+        cumulative_stats["total_retracted"] += part_stats["retracted"]
 
         if records:
             writer.add_records(records)
@@ -499,8 +532,8 @@ def run_download(
         if dry_run:
             logger.info("─── DRY RUN COMPLETE ───")
             logger.info("Processed 1 part: %d records scanned, %d kept", part_stats["total"], part_stats["kept"])
-            logger.info("Filtering: %d no abstract, %d too old, %d parse errors",
-                        part_stats["no_abstract"], part_stats["too_old"], part_stats["parse_error"])
+            logger.info("Filtering: %d no abstract, %d too old, %d retracted, %d parse errors",
+                        part_stats["no_abstract"], part_stats["too_old"], part_stats["retracted"], part_stats["parse_error"])
             if records:
                 logger.info("Sample record:\n%s", json.dumps(records[0], indent=2, ensure_ascii=False)[:500])
             writer.flush()
@@ -515,9 +548,10 @@ def run_download(
     logger.info("Parts processed: %d/%d", total_parts, total_parts)
     logger.info("Records scanned: %d", cumulative_stats["total_scanned"])
     logger.info("Records kept: %d", cumulative_stats["total_kept"])
-    logger.info("Filtered out — no abstract: %d, too old: %d, parse error: %d",
+    logger.info("Filtered out — no abstract: %d, too old: %d, retracted: %d, parse error: %d",
                 cumulative_stats["total_no_abstract"],
                 cumulative_stats["total_too_old"],
+                cumulative_stats["total_retracted"],
                 cumulative_stats["total_parse_error"])
 
     save_checkpoint(output_dir, {
