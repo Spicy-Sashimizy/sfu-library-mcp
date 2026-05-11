@@ -457,7 +457,9 @@ def run_download(
         checkpoint = load_checkpoint(output_dir)
         if checkpoint:
             start_part = checkpoint.get("completed_parts", 0)
-            cumulative_stats = checkpoint.get("cumulative_stats", cumulative_stats)
+            # Merge loaded stats over defaults so new keys (e.g. total_retracted)
+            # survive resuming from an older checkpoint that didn't have them.
+            cumulative_stats.update(checkpoint.get("cumulative_stats", {}))
 
     writer = ChunkWriter(output_dir, chunk_size)
     writer.set_chunk_index(checkpoint.get("next_chunk_index", 0) if checkpoint else 0)
