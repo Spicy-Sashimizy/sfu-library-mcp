@@ -47,6 +47,7 @@ Usage:
 
 import argparse
 import concurrent.futures
+import gc
 import gzip
 import hashlib
 import io
@@ -55,11 +56,24 @@ import logging
 import os
 import signal
 import sys
+import threading
 import time
 from pathlib import Path
 from urllib.parse import urljoin
 
 import requests
+
+try:
+    import cudf
+    import rmm
+    # Use CUDA Unified Memory so VRAM spills to system RAM rather than OOMing.
+    # Without this, cuDF's default pool allocator exhausts the 16 GB VRAM on
+    # parts with large nested JSON (abstract_inverted_index) and raises
+    # cudaErrorMemoryAllocation even though total VRAM looks free.
+    rmm.reinitialize(managed_memory=True)
+    _CUDF_AVAILABLE = True
+except ImportError:
+    _CUDF_AVAILABLE = False
 
 logging.basicConfig(
     level=logging.INFO,
@@ -81,6 +95,9 @@ DEFAULT_WORKERS = 3          # concurrent part downloads
 HTTP_TIMEOUT = 300  # large parts can be 500MB-1.1GB
 MAX_RETRIES = 3
 RETRY_BACKOFF_BASE = 5  # seconds
+
+# Serialise GPU access — cuDF needs ~5-10 GB VRAM per part; one at a time is safe
+_gpu_semaphore = threading.Semaphore(1)
 
 # ── Graceful shutdown ────────────────────────────────────────────────────────
 
@@ -328,6 +345,173 @@ def download_and_process_part(
                 raise
 
 
+# ── GPU download + processing (cuDF) ─────────────────────────────────────────
+
+
+def download_and_process_part_gpu(
+    session: requests.Session,
+    part_url: str,
+    min_year: int,
+    legacy_schema: bool = False,
+) -> tuple[list[dict], dict]:
+    """GPU-accelerated variant using cuDF for decompression + JSON parsing.
+
+    Downloads the full compressed part into RAM (required by cuDF), then uses
+    cuDF to decompress and parse the JSONL on GPU. Year/retracted filtering
+    happens on GPU before the much smaller filtered set is transferred to CPU
+    for abstract reconstruction (which requires Python-level dict traversal).
+
+    Falls back to the CPU implementation on any GPU failure.
+    """
+    stats = {"total": 0, "kept": 0, "no_abstract": 0, "too_old": 0, "parse_error": 0, "retracted": 0}
+
+    for attempt in range(1, MAX_RETRIES + 1):
+        try:
+            # Download full compressed part — cuDF needs the whole file at once.
+            resp = session.get(part_url, timeout=HTTP_TIMEOUT, stream=True)
+            resp.raise_for_status()
+            compressed_data = resp.content
+
+            # CPU decompression: cuDF's GPU gzip decompressor rejects
+            # multi-member gzip (common in OpenAlex parts), so we decompress
+            # on CPU first using libz, then hand raw JSONL bytes to the GPU.
+            decompressed = gzip.decompress(compressed_data)
+            del compressed_data  # free ~700 MB before GPU allocation
+
+            # GPU semaphore: only one part on GPU at a time (~5-10 GB VRAM each).
+            with _gpu_semaphore:
+                df = cudf.read_json(io.BytesIO(decompressed), lines=True)
+                del decompressed  # GPU has its own copy; free CPU RAM
+                stats["total"] = len(df)
+
+                if len(df) == 0:
+                    return [], stats
+
+                # GPU filter: retracted
+                if "is_retracted" in df.columns:
+                    ret_mask = df["is_retracted"].fillna(False)
+                    stats["retracted"] = int(ret_mask.sum())
+                    df = df[~ret_mask]
+
+                # GPU filter: publication year
+                if "publication_year" in df.columns:
+                    old_mask = df["publication_year"].notna() & (df["publication_year"] < min_year)
+                    stats["too_old"] = int(old_mask.sum())
+                    df = df[~old_mask]
+
+                # GPU filter: abstract present
+                if "abstract_inverted_index" not in df.columns:
+                    stats["no_abstract"] = len(df)
+                    return [], stats
+                df = df[df["abstract_inverted_index"].notna()]
+
+                if len(df) == 0:
+                    return [], stats
+
+                # Transfer only needed columns to CPU to minimise PCIe traffic.
+                needed = ["id", "doi", "title", "publication_year", "type",
+                          "abstract_inverted_index"]
+                if not legacy_schema:
+                    needed += ["language", "cited_by_count", "keywords",
+                               "concepts", "topics", "mesh",
+                               "referenced_works", "related_works"]
+                cols = [c for c in needed if c in df.columns]
+                pdf = df[cols].to_pandas()
+                del df  # free GPU DataFrame inside semaphore before releasing
+
+            # Release GPU memory back to the driver between parts.
+            gc.collect()
+            try:
+                import cupy
+                cupy.get_default_memory_pool().free_all_blocks()
+                cupy.get_default_pinned_memory_pool().free_all_blocks()
+            except Exception:
+                pass
+
+            # CPU: abstract reconstruction (unavoidable — dict-key traversal).
+            records = []
+            for _, row in pdf.iterrows():
+                inv = row.get("abstract_inverted_index")
+                if isinstance(inv, str):
+                    try:
+                        inv = json.loads(inv)
+                    except Exception:
+                        stats["parse_error"] += 1
+                        continue
+                abstract = reconstruct_abstract(inv)
+                if not abstract or len(abstract) < 50:
+                    stats["no_abstract"] += 1
+                    continue
+
+                oa_id = str(row.get("id") or "")
+                if oa_id.startswith("https://openalex.org/"):
+                    oa_id = oa_id.replace("https://openalex.org/", "")
+
+                pub_year = row.get("publication_year")
+                pub_year = int(pub_year) if pub_year is not None and pub_year == pub_year else None
+
+                if legacy_schema:
+                    record = {
+                        "id": oa_id,
+                        "doi": row.get("doi"),
+                        "title": str(row.get("title") or ""),
+                        "abstract": abstract,
+                        "publication_year": pub_year,
+                        "type": str(row.get("type") or ""),
+                    }
+                else:
+                    def _strip(lst):
+                        return [
+                            w.replace("https://openalex.org/", "") if isinstance(w, str) else w
+                            for w in (lst or [])
+                        ]
+
+                    def _names(lst):
+                        return [
+                            x.get("display_name", "") for x in (lst or [])
+                            if isinstance(x, dict) and x.get("display_name")
+                        ]
+
+                    record = {
+                        "id": oa_id,
+                        "doi": row.get("doi"),
+                        "title": str(row.get("title") or ""),
+                        "abstract": abstract,
+                        "publication_year": pub_year,
+                        "type": str(row.get("type") or ""),
+                        "language": row.get("language"),
+                        "cited_by_count": int(row.get("cited_by_count") or 0),
+                        "keywords": _names(row.get("keywords")),
+                        "concepts": _names(row.get("concepts")),
+                        "topics": _names(row.get("topics")),
+                        "mesh": [
+                            x.get("descriptor_name") for x in (row.get("mesh") or [])
+                            if isinstance(x, dict) and x.get("descriptor_name")
+                        ],
+                        "referenced_works": _strip(row.get("referenced_works")),
+                        "related_works": _strip(row.get("related_works")),
+                    }
+
+                records.append(record)
+                stats["kept"] += 1
+
+            return records, stats
+
+        except Exception as e:
+            if attempt < MAX_RETRIES:
+                wait = RETRY_BACKOFF_BASE * (2 ** (attempt - 1))
+                logger.warning(
+                    "GPU part failed (attempt %d/%d): %s — retrying in %ds",
+                    attempt, MAX_RETRIES, e, wait,
+                )
+                time.sleep(wait)
+            else:
+                logger.warning(
+                    "GPU failed after %d attempts, falling back to CPU: %s", MAX_RETRIES, e
+                )
+                return download_and_process_part(session, part_url, min_year, legacy_schema)
+
+
 # ── Chunk writer ─────────────────────────────────────────────────────────────
 
 
@@ -424,6 +608,7 @@ def run_download(
     dry_run: bool,
     workers: int = DEFAULT_WORKERS,
     legacy_schema: bool = False,
+    use_gpu: bool = False,
 ) -> dict:
     """Main download pipeline. Returns final stats dict."""
     global _shutdown_requested
@@ -442,8 +627,28 @@ def run_download(
 
     total_parts = len(manifest)
     logger.info("Snapshot has %d parts, filtering to year >= %d", total_parts, min_year)
+
+    # In GPU mode each worker buffers a full decompressed part in RAM (~3-8 GB)
+    # before cuDF processes it. With RTX 4070 Ti Super (16 GB VRAM) and 32 GB
+    # system RAM, more than 2 concurrent workers exhausts both budgets.
+    # WSL2 virtual switch bandwidth (~300-600 Mbps) is NOT the bottleneck here.
+    GPU_MAX_WORKERS = 2
+    if use_gpu and workers > GPU_MAX_WORKERS:
+        logger.info(
+            "GPU mode: capping workers %d → %d (each decompressed part uses 3-8 GB RAM; "
+            "VRAM budget is 16 GB for RTX 4070 Ti Super)",
+            workers, GPU_MAX_WORKERS,
+        )
+        workers = GPU_MAX_WORKERS
+
     logger.info("Parallel workers: %d (downloads next %d parts while processing current)", workers, workers)
     logger.info("Schema: %s", "legacy (6-field)" if legacy_schema else "enriched (14-field)")
+    if use_gpu:
+        logger.info("Processing: GPU (cuDF) — GPU decompression + JSON parse, CPU abstract reconstruction")
+    else:
+        logger.info("Processing: CPU — streaming gzip + line-by-line JSON parse")
+
+    _part_fn = download_and_process_part_gpu if use_gpu else download_and_process_part
 
     # Load or init checkpoint
     checkpoint = None
@@ -478,7 +683,7 @@ def run_download(
             part_url = manifest[idx].get("url", "")
             if part_url:
                 pending[idx] = executor.submit(
-                    download_and_process_part, session, part_url, min_year, legacy_schema
+                    _part_fn, session, part_url, min_year, legacy_schema
                 )
 
     # Pre-fill the prefetch queue
@@ -660,6 +865,10 @@ def main():
         help=f"Concurrent part downloads (default: {DEFAULT_WORKERS})",
     )
     parser.add_argument(
+        "--no-gpu", action="store_true",
+        help="Force CPU processing even if cuDF is available",
+    )
+    parser.add_argument(
         "--legacy-schema", action="store_true",
         help="Write 6-field records (id, doi, title, abstract, publication_year, type) "
              "matching the original schema — use when resuming a download started before "
@@ -672,6 +881,13 @@ def main():
     logger.info("Filter: year >= %d, has abstract (>= 50 chars)", args.min_year)
     logger.info("Chunk size: %d records/file", args.chunk_size)
     logger.info("Workers: %d", args.workers)
+    use_gpu = _CUDF_AVAILABLE and not args.no_gpu
+    if use_gpu:
+        logger.info("GPU: cuDF detected — using GPU-accelerated processing")
+    elif _CUDF_AVAILABLE and args.no_gpu:
+        logger.info("GPU: cuDF available but disabled via --no-gpu")
+    else:
+        logger.info("GPU: cuDF not installed — using CPU processing")
     if args.legacy_schema:
         logger.info("Schema: LEGACY (6-field) — matching original chunk files")
     if args.resume:
@@ -687,6 +903,7 @@ def main():
         dry_run=args.dry_run,
         workers=args.workers,
         legacy_schema=args.legacy_schema,
+        use_gpu=use_gpu,
     )
 
     if result.get("state") == "interrupted":
