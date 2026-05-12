@@ -239,31 +239,89 @@ class FP16GpuTopkEncoder:
         return results
 
 
-# ── Variant 4: FP16 + GPU top-K + length-bucketed batches ────────────────────
+# ── Variant 4: BF16 + GPU top-K ──────────────────────────────────────────────
 
 
-class FP16BucketEncoder(FP16GpuTopkEncoder):
-    """Same as fp16_gpu_topk but the caller passes pre-sorted batches.
-
-    The benchmark sorts the input by length once and then chunks into batches;
-    the per-batch cost is the same code, the win comes from less padding waste.
+class BF16GpuTopkEncoder(FP16GpuTopkEncoder):
+    """BF16 variant — Ada Lovelace (sm_89) handles BF16 at full FP16 throughput
+    with a much larger exponent range, so it's a safer drop-in than FP16.
     """
 
-    name = "fp16_bucket"
+    name = "bf16_gpu_topk"
+
+    def __init__(self, model_name, device):
+        import torch
+        from transformers import AutoModelForMaskedLM, AutoTokenizer
+
+        self.device = device
+        self.tokenizer = AutoTokenizer.from_pretrained(model_name)
+        self.model = AutoModelForMaskedLM.from_pretrained(model_name)
+        if device == "cuda":
+            self.model = self.model.to(torch.bfloat16)
+        self.model.to(device).eval()
+        self.id_to_token = {v: k for k, v in self.tokenizer.get_vocab().items()}
+        self._skip_token_ids = {
+            tok_id for tok, tok_id in self.tokenizer.get_vocab().items() if tok.startswith("[")
+        }
 
 
-# ── Variant 5: FP16 + GPU top-K + torch.compile ──────────────────────────────
+# ── Variant 5: FP16 + GPU top-K + larger fixed max_length=256 ────────────────
+
+
+class FP16Short256Encoder(FP16GpuTopkEncoder):
+    """Truncate to max_length=256. Loses information from 22.6% of docs
+    (those with >=256 tokens), but cuts encode time roughly in half.
+    """
+
+    name = "fp16_max256"
+
+    def encode_batch(self, texts):
+        import torch
+        tokens = self.tokenizer(
+            texts, max_length=256, padding=True, truncation=True, return_tensors="pt"
+        ).to(self.device)
+        with torch.no_grad():
+            output = self.model(**tokens)
+        logits = output.logits.float()
+        vecs = torch.log1p(torch.relu(logits))
+        vecs = torch.max(vecs, dim=1).values
+        top_w, top_idx = torch.topk(vecs, SPARSE_TOP_K, dim=1)
+        top_w_cpu = top_w.cpu().numpy()
+        top_idx_cpu = top_idx.cpu().numpy()
+        results = []
+        skip, id2tok = self._skip_token_ids, self.id_to_token
+        for i in range(top_w_cpu.shape[0]):
+            d = {}
+            for j in range(SPARSE_TOP_K):
+                w = float(top_w_cpu[i, j])
+                if w <= 0.01:
+                    continue
+                idx = int(top_idx_cpu[i, j])
+                if idx in skip:
+                    continue
+                t = id2tok.get(idx)
+                if t:
+                    d[t] = round(w, 4)
+            results.append(d)
+        return results
+
+
+# ── Variant 6: FP16 + GPU top-K + torch.compile ──────────────────────────────
 
 
 class FP16CompileEncoder(FP16GpuTopkEncoder):
+    """Compile only the BERT body (avoids transformers @wraps decorator bug
+    that breaks torch.compile of the whole MLM wrapper).
+    """
+
     name = "fp16_compile"
 
     def __init__(self, model_name, device):
         super().__init__(model_name, device)
         import torch
         try:
-            # mode='reduce-overhead' is best for small-batch transformer inference
-            self.model = torch.compile(self.model, mode="reduce-overhead", dynamic=True)
+            # Wrap just the BERT body — the MLM head is small, no need to compile
+            self.model.bert = torch.compile(self.model.bert, dynamic=True, mode="default")
             self._compile_ok = True
         except Exception as e:
             print(f"  torch.compile failed: {e} — falling back to eager")
@@ -324,8 +382,8 @@ def main():
     parser.add_argument("--model", default=DEFAULT_MODEL)
     parser.add_argument(
         "--variants", nargs="+",
-        default=["baseline", "fp16", "fp16_gpu_topk", "fp16_bucket"],
-        choices=["baseline", "fp16", "fp16_gpu_topk", "fp16_bucket", "fp16_compile"],
+        default=["baseline", "fp16_gpu_topk", "bf16_gpu_topk", "fp16_max256", "fp16_compile"],
+        choices=["baseline", "fp16", "fp16_gpu_topk", "bf16_gpu_topk", "fp16_max256", "fp16_compile"],
     )
     parser.add_argument("--larger-batch", type=int, default=None,
                         help="Also re-run the best variant at this batch size (e.g. 128, 192, 256)")
@@ -347,7 +405,8 @@ def main():
         "baseline": BaselineEncoder,
         "fp16": FP16Encoder,
         "fp16_gpu_topk": FP16GpuTopkEncoder,
-        "fp16_bucket": FP16BucketEncoder,
+        "bf16_gpu_topk": BF16GpuTopkEncoder,
+        "fp16_max256": FP16Short256Encoder,
         "fp16_compile": FP16CompileEncoder,
     }
 
@@ -362,22 +421,19 @@ def main():
         enc = cls(args.model, device)
         print(f"  Loaded in {time.time()-t0:.1f}s")
 
-        sort = variant == "fp16_bucket"
         dps, total, sample, all_out = benchmark_variant(
-            enc, docs, args.batch_size, sort_by_length=sort, warmup=2
+            enc, docs, args.batch_size, sort_by_length=False, warmup=2
         )
 
-        # Reference correctness: compare to baseline
+        # Reference correctness: compare to baseline (if it was run)
         if variant == "baseline":
             baseline_out = all_out
             correctness = 1.0
-        else:
-            if sort:
-                # Bucket variant: outputs are in sorted order; just check overlap on samples
-                ovs = [overlap(all_out[i], baseline_out[0]) for i in range(min(20, len(all_out)))]
-            else:
-                ovs = [overlap(all_out[i], baseline_out[i]) for i in range(min(50, len(all_out)))]
+        elif baseline_out is not None:
+            ovs = [overlap(all_out[i], baseline_out[i]) for i in range(min(50, len(all_out)))]
             correctness = sum(ovs) / max(len(ovs), 1)
+        else:
+            correctness = float("nan")
 
         # Sparse stats
         avg_terms = sum(len(d) for d in all_out if d) / max(sum(1 for d in all_out if d), 1)
