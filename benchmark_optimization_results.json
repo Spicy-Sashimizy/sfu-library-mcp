@@ -1,0 +1,49 @@
+{
+  "timestamp": "2026-05-12T23:22:27",
+  "device": "NVIDIA GeForce RTX 4070 Ti SUPER",
+  "torch_version": "2.6.0+cu124",
+  "n_docs": 3000,
+  "batch_size": 64,
+  "results": [
+    {
+      "variant": "baseline",
+      "docs_per_sec": 134.1,
+      "total_seconds": 22.37,
+      "correctness_vs_baseline": 1.0,
+      "avg_terms_per_doc": 159.4,
+      "gpu_gb": 0.45
+    },
+    {
+      "variant": "fp16_async_max256",
+      "docs_per_sec": 696.1,
+      "total_seconds": 4.31,
+      "correctness_vs_baseline": 0.901,
+      "avg_terms_per_doc": 149.9,
+      "gpu_gb": 0.23
+    },
+    {
+      "variant": "fp16_async_sdpa_max256",
+      "docs_per_sec": 733.1,
+      "total_seconds": 4.09,
+      "correctness_vs_baseline": 0.901,
+      "avg_terms_per_doc": 149.9,
+      "gpu_gb": 0.23
+    },
+    {
+      "variant": "fp16_async_sdpa_max384",
+      "docs_per_sec": 505.0,
+      "total_seconds": 5.94,
+      "correctness_vs_baseline": 0.951,
+      "avg_terms_per_doc": 156.9,
+      "gpu_gb": 0.23
+    },
+    {
+      "variant": "fp16_async_sdpa",
+      "docs_per_sec": 374.3,
+      "total_seconds": 8.02,
+      "correctness_vs_baseline": 1.0,
+      "avg_terms_per_doc": 159.4,
+      "gpu_gb": 0.23
+    }
+  ]
+}

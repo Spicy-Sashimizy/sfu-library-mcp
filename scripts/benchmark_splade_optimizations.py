@@ -265,27 +265,98 @@ class BF16GpuTopkEncoder(FP16GpuTopkEncoder):
         }
 
 
-# ── Variant 5: FP16 + GPU top-K + larger fixed max_length=256 ────────────────
+# ── Variant 5: FP16 + GPU top-K + max_length=256 ─────────────────────────────
 
 
-class FP16Short256Encoder(FP16GpuTopkEncoder):
-    """Truncate to max_length=256. Loses information from 22.6% of docs
-    (those with >=256 tokens), but cuts encode time roughly in half.
+def _make_max_length_encoder(N):
+    """Factory for FP16 encoders with custom max_length."""
+
+    class _Enc(FP16GpuTopkEncoder):
+        name = f"fp16_max{N}"
+
+        def encode_batch(self, texts):
+            import torch
+            tokens = self.tokenizer(
+                texts, max_length=N, padding=True, truncation=True, return_tensors="pt"
+            ).to(self.device)
+            with torch.no_grad():
+                output = self.model(**tokens)
+            logits = output.logits.float()
+            vecs = torch.log1p(torch.relu(logits))
+            vecs = torch.max(vecs, dim=1).values
+            top_w, top_idx = torch.topk(vecs, SPARSE_TOP_K, dim=1)
+            top_w_cpu = top_w.cpu().numpy()
+            top_idx_cpu = top_idx.cpu().numpy()
+            results = []
+            skip, id2tok = self._skip_token_ids, self.id_to_token
+            for i in range(top_w_cpu.shape[0]):
+                d = {}
+                for j in range(SPARSE_TOP_K):
+                    w = float(top_w_cpu[i, j])
+                    if w <= 0.01:
+                        continue
+                    idx = int(top_idx_cpu[i, j])
+                    if idx in skip:
+                        continue
+                    t = id2tok.get(idx)
+                    if t:
+                        d[t] = round(w, 4)
+                results.append(d)
+            return results
+
+    return _Enc
+
+
+FP16Short256Encoder = _make_max_length_encoder(256)
+FP16Short384Encoder = _make_max_length_encoder(384)
+FP16Short384Encoder.name = "fp16_max384"
+
+
+# ── Variant: FP16 + GPU top-K + async tokenization (background thread) ───────
+
+
+class FP16AsyncTokenizeEncoder(FP16GpuTopkEncoder):
+    """Overlap CPU tokenization with GPU compute via a 1-slot lookahead queue.
+
+    Tokenizations are submitted to a background thread and pulled off a FIFO
+    queue by encode_batch. Caller submits batch i (via pre_load_next) before
+    calling encode_batch — encode_batch always pulls the head of the queue, so
+    order is preserved.
     """
 
-    name = "fp16_max256"
+    name = "fp16_async_tok"
+
+    def __init__(self, model_name, device, max_length=MAX_DOC_LENGTH):
+        super().__init__(model_name, device)
+        from concurrent.futures import ThreadPoolExecutor
+        from collections import deque
+        self._tok_pool = ThreadPoolExecutor(max_workers=1)
+        self._tok_queue = deque()
+        self._max_length = max_length
+
+    def _tokenize(self, texts):
+        return self.tokenizer(
+            texts, max_length=self._max_length, padding=True, truncation=True, return_tensors="pt"
+        )
 
     def encode_batch(self, texts):
         import torch
-        tokens = self.tokenizer(
-            texts, max_length=256, padding=True, truncation=True, return_tensors="pt"
-        ).to(self.device)
+        # Pull next tokenization from queue (must have been pre-loaded)
+        if self._tok_queue:
+            tokens = self._tok_queue.popleft().result()
+        else:
+            tokens = self._tokenize(texts)
+
+        tokens = tokens.to(self.device, non_blocking=True)
+
         with torch.no_grad():
             output = self.model(**tokens)
+
         logits = output.logits.float()
         vecs = torch.log1p(torch.relu(logits))
         vecs = torch.max(vecs, dim=1).values
         top_w, top_idx = torch.topk(vecs, SPARSE_TOP_K, dim=1)
+
         top_w_cpu = top_w.cpu().numpy()
         top_idx_cpu = top_idx.cpu().numpy()
         results = []
@@ -304,6 +375,104 @@ class FP16Short256Encoder(FP16GpuTopkEncoder):
                     d[t] = round(w, 4)
             results.append(d)
         return results
+
+    def pre_load_next(self, texts):
+        """Append a tokenization job to the background queue."""
+        self._tok_queue.append(self._tok_pool.submit(self._tokenize, texts))
+
+
+def _make_async_max_length_encoder(N):
+    """Async tokenization + custom max_length encoder factory."""
+
+    class _Enc(FP16AsyncTokenizeEncoder):
+        name = f"fp16_async_max{N}"
+
+        def __init__(self, model_name, device):
+            super().__init__(model_name, device, max_length=N)
+
+    return _Enc
+
+
+FP16AsyncMax256Encoder = _make_async_max_length_encoder(256)
+FP16AsyncMax384Encoder = _make_async_max_length_encoder(384)
+
+
+# ── Variant: FP16 + GPU top-K + async tok + SDPA attention ───────────────────
+
+
+class FP16AsyncSDPAEncoder(FP16AsyncTokenizeEncoder):
+    """Force `attn_implementation='sdpa'` so PyTorch routes attention through
+    scaled_dot_product_attention (FlashAttention / mem-efficient kernels under
+    the hood). Zero install — built into PyTorch 2.6.
+    """
+
+    name = "fp16_async_sdpa"
+
+    def __init__(self, model_name, device, max_length=MAX_DOC_LENGTH):
+        # Re-init by hand so we can pass attn_implementation
+        import torch
+        from transformers import AutoModelForMaskedLM, AutoTokenizer
+        from concurrent.futures import ThreadPoolExecutor
+        from collections import deque
+
+        self.device = device
+        self.tokenizer = AutoTokenizer.from_pretrained(model_name)
+        self.model = AutoModelForMaskedLM.from_pretrained(
+            model_name, attn_implementation="sdpa"
+        )
+        if device == "cuda":
+            self.model = self.model.half()
+        self.model.to(device).eval()
+        self.id_to_token = {v: k for k, v in self.tokenizer.get_vocab().items()}
+        self._skip_token_ids = {
+            tok_id for tok, tok_id in self.tokenizer.get_vocab().items() if tok.startswith("[")
+        }
+        self._tok_pool = ThreadPoolExecutor(max_workers=1)
+        self._tok_queue = deque()
+        self._max_length = max_length
+
+
+def _make_sdpa_max_length_encoder(N):
+    class _Enc(FP16AsyncSDPAEncoder):
+        name = f"fp16_async_sdpa_max{N}"
+
+        def __init__(self, model_name, device):
+            super().__init__(model_name, device, max_length=N)
+
+    return _Enc
+
+
+FP16AsyncSDPAMax256Encoder = _make_sdpa_max_length_encoder(256)
+FP16AsyncSDPAMax384Encoder = _make_sdpa_max_length_encoder(384)
+
+
+# ── Variant: same but force eager attention (control, to isolate SDPA effect) ─
+
+
+class FP16AsyncEagerEncoder(FP16AsyncTokenizeEncoder):
+    name = "fp16_async_eager"
+
+    def __init__(self, model_name, device, max_length=MAX_DOC_LENGTH):
+        import torch
+        from transformers import AutoModelForMaskedLM, AutoTokenizer
+        from concurrent.futures import ThreadPoolExecutor
+        from collections import deque
+
+        self.device = device
+        self.tokenizer = AutoTokenizer.from_pretrained(model_name)
+        self.model = AutoModelForMaskedLM.from_pretrained(
+            model_name, attn_implementation="eager"
+        )
+        if device == "cuda":
+            self.model = self.model.half()
+        self.model.to(device).eval()
+        self.id_to_token = {v: k for k, v in self.tokenizer.get_vocab().items()}
+        self._skip_token_ids = {
+            tok_id for tok, tok_id in self.tokenizer.get_vocab().items() if tok.startswith("[")
+        }
+        self._tok_pool = ThreadPoolExecutor(max_workers=1)
+        self._tok_queue = deque()
+        self._max_length = max_length
 
 
 # ── Variant 6: FP16 + GPU top-K + torch.compile ──────────────────────────────
@@ -350,8 +519,17 @@ def benchmark_variant(encoder, docs, batch_size, sort_by_length=False, warmup=1)
     sample = None
     t0 = time.time()
     out_all = []
+    has_lookahead = hasattr(encoder, "pre_load_next")
+    # Prime lookahead with first batch
+    if has_lookahead and texts:
+        encoder.pre_load_next(texts[:batch_size])
     for i in range(0, len(texts), batch_size):
         batch = texts[i : i + batch_size]
+        if has_lookahead:
+            # Submit next-batch tokenization before encoding this one
+            next_start = i + batch_size
+            if next_start < len(texts):
+                encoder.pre_load_next(texts[next_start : next_start + batch_size])
         out = encoder.encode_batch(batch)
         if sample is None and out:
             sample = out[0]
@@ -382,8 +560,13 @@ def main():
     parser.add_argument("--model", default=DEFAULT_MODEL)
     parser.add_argument(
         "--variants", nargs="+",
-        default=["baseline", "fp16_gpu_topk", "bf16_gpu_topk", "fp16_max256", "fp16_compile"],
-        choices=["baseline", "fp16", "fp16_gpu_topk", "bf16_gpu_topk", "fp16_max256", "fp16_compile"],
+        default=["baseline", "fp16_gpu_topk", "fp16_async_tok", "fp16_max384",
+                 "fp16_max256", "fp16_async_max256"],
+        choices=["baseline", "fp16", "fp16_gpu_topk", "bf16_gpu_topk",
+                 "fp16_max256", "fp16_max384", "fp16_async_tok",
+                 "fp16_async_max256", "fp16_async_max384", "fp16_compile",
+                 "fp16_async_sdpa", "fp16_async_sdpa_max256",
+                 "fp16_async_sdpa_max384", "fp16_async_eager"],
     )
     parser.add_argument("--larger-batch", type=int, default=None,
                         help="Also re-run the best variant at this batch size (e.g. 128, 192, 256)")
@@ -407,6 +590,14 @@ def main():
         "fp16_gpu_topk": FP16GpuTopkEncoder,
         "bf16_gpu_topk": BF16GpuTopkEncoder,
         "fp16_max256": FP16Short256Encoder,
+        "fp16_max384": FP16Short384Encoder,
+        "fp16_async_tok": FP16AsyncTokenizeEncoder,
+        "fp16_async_max256": FP16AsyncMax256Encoder,
+        "fp16_async_max384": FP16AsyncMax384Encoder,
+        "fp16_async_sdpa": FP16AsyncSDPAEncoder,
+        "fp16_async_sdpa_max256": FP16AsyncSDPAMax256Encoder,
+        "fp16_async_sdpa_max384": FP16AsyncSDPAMax384Encoder,
+        "fp16_async_eager": FP16AsyncEagerEncoder,
         "fp16_compile": FP16CompileEncoder,
     }
 
