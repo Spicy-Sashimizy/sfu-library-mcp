@@ -1,48 +1,48 @@
 {
-  "timestamp": "2026-05-12T23:22:27",
+  "timestamp": "2026-05-13T00:10:15",
   "device": "NVIDIA GeForce RTX 4070 Ti SUPER",
   "torch_version": "2.6.0+cu124",
-  "n_docs": 3000,
+  "n_docs": 2000,
   "batch_size": 64,
   "results": [
     {
       "variant": "baseline",
-      "docs_per_sec": 134.1,
-      "total_seconds": 22.37,
+      "docs_per_sec": 193.5,
+      "total_seconds": 10.34,
       "correctness_vs_baseline": 1.0,
-      "avg_terms_per_doc": 159.4,
+      "avg_terms_per_doc": 152.9,
       "gpu_gb": 0.45
     },
     {
-      "variant": "fp16_async_max256",
-      "docs_per_sec": 696.1,
-      "total_seconds": 4.31,
-      "correctness_vs_baseline": 0.901,
-      "avg_terms_per_doc": 149.9,
-      "gpu_gb": 0.23
-    },
-    {
-      "variant": "fp16_async_sdpa_max256",
-      "docs_per_sec": 733.1,
-      "total_seconds": 4.09,
-      "correctness_vs_baseline": 0.901,
-      "avg_terms_per_doc": 149.9,
+      "variant": "fp16_async_sdpa",
+      "docs_per_sec": 375.2,
+      "total_seconds": 5.33,
+      "correctness_vs_baseline": 1.0,
+      "avg_terms_per_doc": 152.9,
       "gpu_gb": 0.23
     },
     {
       "variant": "fp16_async_sdpa_max384",
-      "docs_per_sec": 505.0,
-      "total_seconds": 5.94,
+      "docs_per_sec": 490.3,
+      "total_seconds": 4.08,
       "correctness_vs_baseline": 0.951,
-      "avg_terms_per_doc": 156.9,
+      "avg_terms_per_doc": 151.0,
       "gpu_gb": 0.23
     },
     {
-      "variant": "fp16_async_sdpa",
-      "docs_per_sec": 374.3,
-      "total_seconds": 8.02,
-      "correctness_vs_baseline": 1.0,
-      "avg_terms_per_doc": 159.4,
+      "variant": "fp16_async_sdpa_max256",
+      "docs_per_sec": 694.1,
+      "total_seconds": 2.88,
+      "correctness_vs_baseline": 0.901,
+      "avg_terms_per_doc": 145.0,
+      "gpu_gb": 0.23
+    },
+    {
+      "variant": "fp16_async_sdpa_max128",
+      "docs_per_sec": 1175.4,
+      "total_seconds": 1.7,
+      "correctness_vs_baseline": 0.728,
+      "avg_terms_per_doc": 121.9,
       "gpu_gb": 0.23
     }
   ]

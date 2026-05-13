@@ -88,10 +88,14 @@ class BaselineEncoder:
             texts, max_length=MAX_DOC_LENGTH, padding=True, truncation=True, return_tensors="pt"
         ).to(self.device)
 
-        with torch.no_grad():
+        with torch.inference_mode():
             output = self.model(**tokens)
 
+        # SPLADE: log1p(relu(logits)) * attention_mask — must mask padding
+        # before max-pool, otherwise padding positions leak into the sparse vec.
+        # Source: NAVER splade transformer_rep.py + Splade_PP_en_v1 model card §6d.
         vecs = torch.log1p(torch.relu(output.logits))
+        vecs = vecs * tokens["attention_mask"].unsqueeze(-1)
         vecs = torch.max(vecs, dim=1).values
 
         results = []
@@ -134,12 +138,12 @@ class FP16Encoder(BaselineEncoder):
             texts, max_length=MAX_DOC_LENGTH, padding=True, truncation=True, return_tensors="pt"
         ).to(self.device)
 
-        with torch.no_grad():
+        with torch.inference_mode():
             output = self.model(**tokens)
 
-        # Up-cast logits to fp32 for the SPLADE post-processing (numerical safety)
         logits = output.logits.float()
         vecs = torch.log1p(torch.relu(logits))
+        vecs = vecs * tokens["attention_mask"].unsqueeze(-1)  # mask padding
         vecs = torch.max(vecs, dim=1).values
 
         results = []
@@ -200,16 +204,15 @@ class FP16GpuTopkEncoder:
             texts, max_length=MAX_DOC_LENGTH, padding=True, truncation=True, return_tensors="pt"
         ).to(self.device)
 
-        with torch.no_grad():
+        with torch.inference_mode():
             output = self.model(**tokens)
 
-        # Cast back to fp32 for the SPLADE pooling math (cheap)
         logits = output.logits.float()
         vecs = torch.log1p(torch.relu(logits))
+        vecs = vecs * tokens["attention_mask"].unsqueeze(-1)  # mask padding
         vecs = torch.max(vecs, dim=1).values  # (B, V)
 
         # Top-K on GPU across full vocab (avoid scan-for-nonzero)
-        # SPARSE_TOP_K is small relative to V, so this is fast
         top_w, top_idx = torch.topk(vecs, SPARSE_TOP_K, dim=1)  # (B, K)
 
         # Zero out small weights still on GPU
@@ -279,10 +282,11 @@ def _make_max_length_encoder(N):
             tokens = self.tokenizer(
                 texts, max_length=N, padding=True, truncation=True, return_tensors="pt"
             ).to(self.device)
-            with torch.no_grad():
+            with torch.inference_mode():
                 output = self.model(**tokens)
             logits = output.logits.float()
             vecs = torch.log1p(torch.relu(logits))
+            vecs = vecs * tokens["attention_mask"].unsqueeze(-1)  # mask padding
             vecs = torch.max(vecs, dim=1).values
             top_w, top_idx = torch.topk(vecs, SPARSE_TOP_K, dim=1)
             top_w_cpu = top_w.cpu().numpy()
@@ -307,6 +311,8 @@ def _make_max_length_encoder(N):
     return _Enc
 
 
+FP16Short128Encoder = _make_max_length_encoder(128)
+FP16Short128Encoder.name = "fp16_max128"
 FP16Short256Encoder = _make_max_length_encoder(256)
 FP16Short384Encoder = _make_max_length_encoder(384)
 FP16Short384Encoder.name = "fp16_max384"
@@ -347,13 +353,16 @@ class FP16AsyncTokenizeEncoder(FP16GpuTopkEncoder):
         else:
             tokens = self._tokenize(texts)
 
-        tokens = tokens.to(self.device, non_blocking=True)
+        # non_blocking only helps with pinned memory; HF tokenizer output isn't
+        # pinned, so the flag is a no-op here. Kept for clarity.
+        tokens = tokens.to(self.device)
 
-        with torch.no_grad():
+        with torch.inference_mode():
             output = self.model(**tokens)
 
         logits = output.logits.float()
         vecs = torch.log1p(torch.relu(logits))
+        vecs = vecs * tokens["attention_mask"].unsqueeze(-1)  # mask padding
         vecs = torch.max(vecs, dim=1).values
         top_w, top_idx = torch.topk(vecs, SPARSE_TOP_K, dim=1)
 
@@ -393,6 +402,7 @@ def _make_async_max_length_encoder(N):
     return _Enc
 
 
+FP16AsyncMax128Encoder = _make_async_max_length_encoder(128)
 FP16AsyncMax256Encoder = _make_async_max_length_encoder(256)
 FP16AsyncMax384Encoder = _make_async_max_length_encoder(384)
 
@@ -442,8 +452,127 @@ def _make_sdpa_max_length_encoder(N):
     return _Enc
 
 
+FP16AsyncSDPAMax128Encoder = _make_sdpa_max_length_encoder(128)
 FP16AsyncSDPAMax256Encoder = _make_sdpa_max_length_encoder(256)
 FP16AsyncSDPAMax384Encoder = _make_sdpa_max_length_encoder(384)
+
+
+# ── Variant: ONNX Runtime (CUDA EP) + GPU top-K + async tok ──────────────────
+
+
+class ONNXEncoder:
+    """SPLADE inference via ONNX Runtime CUDA Execution Provider.
+
+    The SPLADE post-processing (log1p(relu(logits)) → max-pool → top-K) is
+    performed in PyTorch on the same GPU, since ONNX export of the masked LM
+    head produces a (B, S, V) logits tensor that we still need to reduce.
+    """
+
+    name = "onnx_cuda"
+
+    def __init__(self, model_name, device, max_length=256, providers=None):
+        import torch
+        from optimum.onnxruntime import ORTModelForMaskedLM
+        from transformers import AutoTokenizer
+        from concurrent.futures import ThreadPoolExecutor
+        from collections import deque
+        from pathlib import Path
+
+        self.device = device
+        self._max_length = max_length
+        self.tokenizer = AutoTokenizer.from_pretrained(model_name)
+
+        # Lazy-export to a local cache dir to avoid re-converting each run
+        cache = Path("/workspaces/sfu-library-mcp-training/models/splade_onnx")
+        cache.mkdir(parents=True, exist_ok=True)
+
+        if not (cache / "model.onnx").exists():
+            print(f"  Exporting {model_name} to ONNX (one-time, ~1 min)...")
+            tmp_model = ORTModelForMaskedLM.from_pretrained(
+                model_name, export=True, provider="CUDAExecutionProvider"
+            )
+            tmp_model.save_pretrained(str(cache))
+            print(f"  Exported → {cache}")
+
+        self.model = ORTModelForMaskedLM.from_pretrained(
+            str(cache),
+            provider=providers[0] if providers else "CUDAExecutionProvider",
+            provider_options=[{"device_id": 0}] if providers and providers[0] == "CUDAExecutionProvider" else None,
+        )
+
+        self.id_to_token = {v: k for k, v in self.tokenizer.get_vocab().items()}
+        self._skip_token_ids = {
+            tok_id for tok, tok_id in self.tokenizer.get_vocab().items() if tok.startswith("[")
+        }
+
+        self._tok_pool = ThreadPoolExecutor(max_workers=1)
+        self._tok_queue = deque()
+
+    def _tokenize(self, texts):
+        return self.tokenizer(
+            texts, max_length=self._max_length, padding=True, truncation=True, return_tensors="pt"
+        )
+
+    def encode_batch(self, texts):
+        import torch
+
+        if self._tok_queue:
+            tokens = self._tok_queue.popleft().result()
+        else:
+            tokens = self._tokenize(texts)
+
+        # ORT models accept dict of tensors; logits returned on GPU when CUDA EP is used
+        with torch.inference_mode():
+            output = self.model(**tokens)
+
+        logits = output.logits
+        if not logits.is_cuda:
+            logits = logits.to("cuda")
+        logits = logits.float()
+        attention_mask = tokens["attention_mask"]
+        if not attention_mask.is_cuda:
+            attention_mask = attention_mask.to("cuda")
+        vecs = torch.log1p(torch.relu(logits))
+        vecs = vecs * attention_mask.unsqueeze(-1)  # mask padding
+        vecs = torch.max(vecs, dim=1).values
+        top_w, top_idx = torch.topk(vecs, SPARSE_TOP_K, dim=1)
+
+        top_w_cpu = top_w.cpu().numpy()
+        top_idx_cpu = top_idx.cpu().numpy()
+        results = []
+        skip, id2tok = self._skip_token_ids, self.id_to_token
+        for i in range(top_w_cpu.shape[0]):
+            d = {}
+            for j in range(SPARSE_TOP_K):
+                w = float(top_w_cpu[i, j])
+                if w <= 0.01:
+                    continue
+                idx = int(top_idx_cpu[i, j])
+                if idx in skip:
+                    continue
+                t = id2tok.get(idx)
+                if t:
+                    d[t] = round(w, 4)
+            results.append(d)
+        return results
+
+    def pre_load_next(self, texts):
+        self._tok_queue.append(self._tok_pool.submit(self._tokenize, texts))
+
+
+def _make_onnx_max_length_encoder(N, providers=None, name=None):
+    class _Enc(ONNXEncoder):
+        def __init__(self, model_name, device):
+            super().__init__(model_name, device, max_length=N, providers=providers)
+
+    _Enc.name = name or f"onnx_cuda_max{N}"
+    return _Enc
+
+
+ONNXMax128Encoder = _make_onnx_max_length_encoder(128)
+ONNXMax256Encoder = _make_onnx_max_length_encoder(256)
+ONNXMax384Encoder = _make_onnx_max_length_encoder(384)
+ONNXMax512Encoder = _make_onnx_max_length_encoder(512)
 
 
 # ── Variant: same but force eager attention (control, to isolate SDPA effect) ─
@@ -563,10 +692,14 @@ def main():
         default=["baseline", "fp16_gpu_topk", "fp16_async_tok", "fp16_max384",
                  "fp16_max256", "fp16_async_max256"],
         choices=["baseline", "fp16", "fp16_gpu_topk", "bf16_gpu_topk",
-                 "fp16_max256", "fp16_max384", "fp16_async_tok",
+                 "fp16_max128", "fp16_max256", "fp16_max384",
+                 "fp16_async_tok", "fp16_async_max128",
                  "fp16_async_max256", "fp16_async_max384", "fp16_compile",
-                 "fp16_async_sdpa", "fp16_async_sdpa_max256",
-                 "fp16_async_sdpa_max384", "fp16_async_eager"],
+                 "fp16_async_sdpa", "fp16_async_sdpa_max128",
+                 "fp16_async_sdpa_max256", "fp16_async_sdpa_max384",
+                 "fp16_async_eager",
+                 "onnx_cuda_max128", "onnx_cuda_max256",
+                 "onnx_cuda_max384", "onnx_cuda_max512"],
     )
     parser.add_argument("--larger-batch", type=int, default=None,
                         help="Also re-run the best variant at this batch size (e.g. 128, 192, 256)")
@@ -575,6 +708,9 @@ def main():
     import torch
 
     device = "cuda" if torch.cuda.is_available() else "cpu"
+    if device == "cuda":
+        # Allow TF32 path on the big MLM-head matmul (vocab=30k)
+        torch.set_float32_matmul_precision("high")
     print(f"Device: {device}  ({torch.cuda.get_device_name(0) if device=='cuda' else 'CPU'})")
     print(f"torch: {torch.__version__}")
     print()
@@ -589,16 +725,23 @@ def main():
         "fp16": FP16Encoder,
         "fp16_gpu_topk": FP16GpuTopkEncoder,
         "bf16_gpu_topk": BF16GpuTopkEncoder,
+        "fp16_max128": FP16Short128Encoder,
         "fp16_max256": FP16Short256Encoder,
         "fp16_max384": FP16Short384Encoder,
         "fp16_async_tok": FP16AsyncTokenizeEncoder,
+        "fp16_async_max128": FP16AsyncMax128Encoder,
         "fp16_async_max256": FP16AsyncMax256Encoder,
         "fp16_async_max384": FP16AsyncMax384Encoder,
         "fp16_async_sdpa": FP16AsyncSDPAEncoder,
+        "fp16_async_sdpa_max128": FP16AsyncSDPAMax128Encoder,
         "fp16_async_sdpa_max256": FP16AsyncSDPAMax256Encoder,
         "fp16_async_sdpa_max384": FP16AsyncSDPAMax384Encoder,
         "fp16_async_eager": FP16AsyncEagerEncoder,
         "fp16_compile": FP16CompileEncoder,
+        "onnx_cuda_max128": ONNXMax128Encoder,
+        "onnx_cuda_max256": ONNXMax256Encoder,
+        "onnx_cuda_max384": ONNXMax384Encoder,
+        "onnx_cuda_max512": ONNXMax512Encoder,
     }
 
     baseline_out = None
