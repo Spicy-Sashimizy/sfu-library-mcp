@@ -74,7 +74,9 @@ import logging
 import os
 import signal
 import sys
+import threading
 import time
+from concurrent.futures import ThreadPoolExecutor, Future
 from pathlib import Path
 
 import requests
@@ -813,6 +815,106 @@ def bulk_upsert_opensearch(
     return stats
 
 
+# ── Async bulk uploader ──────────────────────────────────────────────────────
+
+_tls = threading.local()
+
+
+class AsyncBulkUploader:
+    """Overlaps OpenSearch HTTP uploads with GPU encoding via a thread pool.
+
+    Each submit() dispatches a bulk_upsert_opensearch call to the pool and
+    tags it with the doc-index position it covers. drain() waits for all
+    in-flight futures and returns aggregated stats including per-batch
+    outcomes for circuit-breaker evaluation.
+
+    workers=1 runs synchronously (zero threads, original behaviour) — use
+    --async-workers 1 to roll back without touching the code.
+    """
+
+    def __init__(
+        self,
+        template_session: requests.Session,
+        opensearch_url: str,
+        index_name: str,
+        workers: int = 3,
+    ):
+        self.opensearch_url = opensearch_url
+        self.index_name = index_name
+        self.workers = workers
+        self._template = template_session
+        self._pending: list[tuple] = []  # (future_or_done, doc_range_end)
+        self._executor = (
+            ThreadPoolExecutor(max_workers=workers, thread_name_prefix="os_bulk")
+            if workers > 1 else None
+        )
+
+    def _get_session(self) -> requests.Session:
+        """Return a per-thread Session cloned from the template."""
+        if not hasattr(_tls, "session"):
+            s = requests.Session()
+            s.auth = self._template.auth
+            s.headers.update(self._template.headers)
+            s.verify = self._template.verify
+            s.cert = self._template.cert
+            _tls.session = s
+        return _tls.session
+
+    def _upload_in_thread(self, docs: list[dict]) -> dict:
+        return bulk_upsert_opensearch(
+            self._get_session(), self.opensearch_url, self.index_name, docs
+        )
+
+    def submit(self, docs: list[dict], doc_range_end: int) -> None:
+        """Dispatch an upload. doc_range_end is committed_idx after this batch."""
+        if not docs:
+            return
+        if self._executor is None:
+            result = bulk_upsert_opensearch(
+                self._template, self.opensearch_url, self.index_name, docs
+            )
+            class _Done:
+                def result(self_): return result  # noqa: E301
+            self._pending.append((_Done(), doc_range_end))
+            return
+        future = self._executor.submit(self._upload_in_thread, docs)
+        self._pending.append((future, doc_range_end))
+
+    def _drain_one(self) -> tuple[dict, int]:
+        future, doc_range_end = self._pending.pop(0)
+        try:
+            result = future.result()
+        except Exception as e:
+            logger.error("Async bulk upload exception: %s", e)
+            result = {"indexed": 0, "errors": -1, "error_details": [str(e)[:200]]}
+        return result, doc_range_end
+
+    def drain(self) -> dict:
+        """Wait for all in-flight futures. Returns aggregated stats + per_batch list."""
+        stats = {
+            "indexed": 0, "errors": 0, "error_details": [],
+            "new_committed_idx": None, "per_batch": [],
+        }
+        while self._pending:
+            result, new_idx = self._drain_one()
+            stats["per_batch"].append(result)
+            stats["indexed"] += result.get("indexed", 0)
+            stats["errors"] += result.get("errors", 0)
+            stats["error_details"].extend(result.get("error_details", []))
+            if stats["new_committed_idx"] is None or new_idx > stats["new_committed_idx"]:
+                stats["new_committed_idx"] = new_idx
+        return stats
+
+    @property
+    def pending_count(self) -> int:
+        return len(self._pending)
+
+    def close(self) -> None:
+        self.drain()
+        if self._executor:
+            self._executor.shutdown(wait=True)
+
+
 def check_opensearch_health(session: requests.Session, url: str, index: str) -> bool:
     """Verify OpenSearch is reachable and the target index exists."""
     try:
@@ -938,6 +1040,7 @@ def run_indexer(
     dry_run: bool,
     max_length: int = MAX_DOC_LENGTH,
     backend: str = "auto",
+    async_workers: int = 3,
 ) -> dict:
     """Main indexing pipeline. Returns final stats dict."""
     global _shutdown_requested
@@ -985,6 +1088,15 @@ def run_indexer(
         release_pid_lock(lock_path)
         return {"error": "encoder_load_failed", "details": str(e)}
     logger.info("Encoder backend: %s | max_length=%d | batch_size=%d", encoder.backend, max_length, batch_size)
+    logger.info("Async upload workers: %d%s", async_workers,
+                " (synchronous mode)" if async_workers == 1 else "")
+
+    uploader = AsyncBulkUploader(
+        template_session=session,
+        opensearch_url=opensearch_url,
+        index_name=index_name,
+        workers=1 if dry_run else async_workers,
+    )
 
     # ── Load checkpoint ──────────────────────────────────────────────────
     start_file = 0
@@ -1017,6 +1129,30 @@ def run_indexer(
     consecutive_encode_failures = 0
     MAX_CONSECUTIVE_UPLOAD_FAILURES = 5  # halt-and-checkpoint if upload keeps failing
     MAX_CONSECUTIVE_ENCODE_FAILURES = 3  # CUDA likely dead — halt
+    committed_idx = 0  # last doc_idx confirmed uploaded; checkpoint uses this
+
+    def _drain_and_commit() -> dict:
+        """Drain all in-flight uploads, update cumulative stats and committed_idx."""
+        nonlocal committed_idx, consecutive_upload_failures
+        drain_stats = uploader.drain()
+        cumulative["total_indexed"] += drain_stats["indexed"]
+        cumulative["total_errors"] += drain_stats["errors"]
+        if drain_stats["error_details"]:
+            logger.warning("Async bulk errors: %s", drain_stats["error_details"][:2])
+        if drain_stats["new_committed_idx"] is not None:
+            committed_idx = drain_stats["new_committed_idx"]
+        # Per-batch circuit-breaker update (mirrors original logic)
+        for batch_result in drain_stats["per_batch"]:
+            n = batch_result.get("indexed", 0) + batch_result.get("errors", 0)
+            if batch_result.get("indexed") == 0 and batch_result.get("errors", 0) >= n > 0:
+                consecutive_upload_failures += 1
+                logger.warning(
+                    "Bulk upload completely failed (%d/%d consecutive)",
+                    consecutive_upload_failures, MAX_CONSECUTIVE_UPLOAD_FAILURES,
+                )
+            else:
+                consecutive_upload_failures = 0
+        return drain_stats
 
     # ── Process files ────────────────────────────────────────────────────
     for file_idx in range(start_file, total_files):
@@ -1033,14 +1169,16 @@ def run_indexer(
         start_offset = 0  # only applies to first file on resume
 
         doc_idx = len(all_records) - len(records)
+        committed_idx = doc_idx  # reset per-file to resume offset
 
         while doc_idx < total_in_file:
             if _shutdown_requested:
                 logger.info("Shutdown requested — saving checkpoint...")
+                _drain_and_commit()
                 try:
                     save_checkpoint(input_dir, {
                         "file_index": file_idx,
-                        "doc_offset": doc_idx,
+                        "doc_offset": committed_idx,
                         "cumulative": cumulative,
                         "total_indexed": cumulative["total_indexed"],
                         "state": "interrupted",
@@ -1056,14 +1194,16 @@ def run_indexer(
                     "timestamp": time.strftime("%Y-%m-%dT%H:%M:%S"),
                 })
                 logger.info("Checkpoint saved. Run with --resume to continue.")
+                uploader.close()
                 release_pid_lock(lock_path)
                 return {**cumulative, "state": "interrupted"}
 
             # ── Check VRAM reservation ───────────────────────────────────
             def _save_checkpoint_for_pause():
+                _drain_and_commit()
                 save_checkpoint(input_dir, {
                     "file_index": file_idx,
-                    "doc_offset": doc_idx,
+                    "doc_offset": committed_idx,
                     "cumulative": cumulative,
                     "total_indexed": cumulative["total_indexed"],
                     "state": "vram_paused",
@@ -1131,10 +1271,11 @@ def run_indexer(
                         "Encoder appears unrecoverable — saving checkpoint and exiting. "
                         "Restart with --resume after addressing the underlying issue."
                     )
+                    _drain_and_commit()
                     try:
                         save_checkpoint(input_dir, {
                             "file_index": file_idx,
-                            "doc_offset": doc_idx,
+                            "doc_offset": committed_idx,
                             "cumulative": cumulative,
                             "total_indexed": cumulative["total_indexed"],
                             "state": "encoder_failed",
@@ -1142,6 +1283,7 @@ def run_indexer(
                         })
                     except Exception:
                         logger.exception("Failed to save checkpoint on encoder failure")
+                    uploader.close()
                     release_pid_lock(lock_path)
                     return {**cumulative, "state": "encoder_failed", "error": err_str[:500]}
                 # Transient error — skip this batch
@@ -1168,43 +1310,34 @@ def run_indexer(
                 }
                 os_docs.append(os_doc)
 
-            # ── Upsert to OpenSearch ─────────────────────────────────────
+            # ── Upsert to OpenSearch (async) ─────────────────────────────
             if os_docs and not dry_run:
-                upsert_stats = bulk_upsert_opensearch(session, opensearch_url, index_name, os_docs)
-                cumulative["total_indexed"] += upsert_stats["indexed"]
-                cumulative["total_errors"] += upsert_stats["errors"]
-                if upsert_stats["error_details"]:
-                    logger.warning("Bulk errors: %s", upsert_stats["error_details"][:2])
-                # Circuit breaker: if every doc in the batch failed, count it
-                if upsert_stats["indexed"] == 0 and upsert_stats["errors"] >= len(os_docs):
-                    consecutive_upload_failures += 1
-                    logger.warning(
-                        "Bulk upload completely failed (%d/%d consecutive)",
-                        consecutive_upload_failures, MAX_CONSECUTIVE_UPLOAD_FAILURES,
-                    )
+                uploader.submit(os_docs, doc_range_end=doc_idx + actual_batch)
+
+                # Backpressure: if queue is at capacity, drain now so the main
+                # thread doesn't get too far ahead of confirmed uploads.
+                if uploader.pending_count >= async_workers + 1:
+                    _drain_and_commit()
                     if consecutive_upload_failures >= MAX_CONSECUTIVE_UPLOAD_FAILURES:
                         logger.error(
                             "OpenSearch unreachable for %d batches in a row. Halting "
-                            "and saving checkpoint at the LAST DOC BEFORE THIS BATCH "
-                            "so resume re-indexes the failed docs (idempotent via _id).",
+                            "and saving checkpoint so resume re-indexes the failed docs "
+                            "(idempotent via _id).",
                             MAX_CONSECUTIVE_UPLOAD_FAILURES,
                         )
-                        # Don't advance doc_idx for this batch — save checkpoint
-                        # at current doc_idx so resume re-tries it.
                         try:
                             save_checkpoint(input_dir, {
                                 "file_index": file_idx,
-                                "doc_offset": doc_idx,
+                                "doc_offset": committed_idx,
                                 "cumulative": cumulative,
                                 "total_indexed": cumulative["total_indexed"],
                                 "state": "opensearch_unreachable",
                             })
                         except Exception:
                             logger.exception("Failed to save checkpoint on OS failure")
+                        uploader.close()
                         release_pid_lock(lock_path)
                         return {**cumulative, "state": "opensearch_unreachable"}
-                else:
-                    consecutive_upload_failures = 0
             elif os_docs and dry_run:
                 cumulative["total_indexed"] += len(os_docs)
 
@@ -1249,9 +1382,29 @@ def run_indexer(
                     total_files,
                 )
 
+                _drain_and_commit()
+                if consecutive_upload_failures >= MAX_CONSECUTIVE_UPLOAD_FAILURES:
+                    logger.error(
+                        "OpenSearch unreachable for %d batches in a row. Halting.",
+                        MAX_CONSECUTIVE_UPLOAD_FAILURES,
+                    )
+                    try:
+                        save_checkpoint(input_dir, {
+                            "file_index": file_idx,
+                            "doc_offset": committed_idx,
+                            "cumulative": cumulative,
+                            "total_indexed": cumulative["total_indexed"],
+                            "state": "opensearch_unreachable",
+                        })
+                    except Exception:
+                        logger.exception("Failed to save checkpoint on OS failure")
+                    uploader.close()
+                    release_pid_lock(lock_path)
+                    return {**cumulative, "state": "opensearch_unreachable"}
+
                 save_checkpoint(input_dir, {
                     "file_index": file_idx,
-                    "doc_offset": doc_idx,
+                    "doc_offset": committed_idx,
                     "cumulative": cumulative,
                     "total_indexed": cumulative["total_indexed"],
                     "state": "running",
@@ -1288,11 +1441,13 @@ def run_indexer(
                         len(sample),
                         dict(sorted(sample.items(), key=lambda x: -x[1])[:5]),
                     )
+                uploader.close()
                 release_pid_lock(lock_path)
                 return {**cumulative, "state": "dry_run"}
 
         # ── End of file checkpoint ───────────────────────────────────────
         if not _shutdown_requested:
+            _drain_and_commit()
             save_checkpoint(input_dir, {
                 "file_index": file_idx + 1,
                 "doc_offset": 0,
@@ -1316,6 +1471,7 @@ def run_indexer(
     logger.info("Average throughput: %.1f docs/sec", overall_rate)
     logger.info("GPU: %s", encoder.get_gpu_stats())
 
+    _drain_and_commit()
     save_checkpoint(input_dir, {
         "file_index": total_files,
         "doc_offset": 0,
@@ -1335,6 +1491,7 @@ def run_indexer(
         "timestamp": time.strftime("%Y-%m-%dT%H:%M:%S"),
     })
 
+    uploader.close()
     release_pid_lock(lock_path)
     return {**cumulative, "state": "completed"}
 
@@ -1399,6 +1556,14 @@ def main():
         "--dry-run", action="store_true",
         help="Encode 100 docs and report stats without full indexing",
     )
+    parser.add_argument(
+        "--async-workers", type=int, default=3, metavar="N",
+        help=(
+            "Concurrent OpenSearch upload threads (default: 3). "
+            "Set to 1 for fully synchronous operation (original behaviour, zero overhead). "
+            "Higher values increase upload/encode overlap but use more memory."
+        ),
+    )
     args = parser.parse_args()
 
     logger.info("SPLADE Indexer")
@@ -1425,6 +1590,7 @@ def main():
         dry_run=args.dry_run,
         max_length=args.max_length,
         backend=args.backend,
+        async_workers=args.async_workers,
     )
 
     if result.get("state") == "interrupted":
