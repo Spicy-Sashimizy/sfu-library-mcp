@@ -17,16 +17,34 @@ script exits cleanly.
 
 Failsafes
 ─────────
-1. Atomic checkpoint writes — safe against sudden kill / OOM
+1. Atomic checkpoint writes — fsync'd .tmp file + os.replace() + dir fsync,
+   so a power loss leaves either the OLD or NEW checkpoint intact, never
+   a half-written file.
 2. SIGINT / SIGTERM handlers — finishes current batch, saves, exits
 3. Double-signal force exit — second Ctrl-C exits immediately
-4. Batch-level OpenSearch retry with exponential backoff (3 attempts)
-5. Per-doc error isolation — one bad doc doesn't kill the batch
-6. VRAM monitoring — logs GPU memory every checkpoint, warns at >90%
-7. Throughput tracking — docs/sec, ETA, running average
-8. Status file (indexer_status.json) — pollable by external monitors
-9. Heartbeat file — updated every batch so external watchdogs can detect stalls
-10. Dry run mode — encode 100 docs, verify OpenSearch connectivity, exit
+4. PID lock file — refuses to start if another indexer is alive (prevents
+   double-indexing); stale locks (process dead OR heartbeat > 5 min old)
+   are auto-cleared
+5. Atomic ONNX export — writes to .tmp_export dir, sentinel file marks
+   completion; partial exports are detected and re-run on next start
+6. TRT engine cache validation — zero-byte engine files (left by SIGKILL
+   during build) are removed before the encoder loads
+7. Encoder failure recovery — CUDA / device errors save checkpoint and
+   exit cleanly so user can restart with --resume after fixing the GPU.
+   Three consecutive non-CUDA encode failures also halt.
+8. OpenSearch circuit breaker — five consecutive bulk failures halt with
+   a checkpoint at the LAST successful doc, so resume re-tries the failed
+   batch (idempotent thanks to deterministic _id).
+9. Batch-level OpenSearch retry with exponential backoff (3 attempts)
+10. Per-doc error isolation — one bad doc doesn't kill the batch
+11. VRAM monitoring — logs GPU memory every checkpoint, warns at >90%
+12. Throughput tracking — docs/sec, ETA, running average
+13. Status file (indexer_status.json) — pollable by external monitors
+14. Heartbeat file — updated every batch so external watchdogs can detect stalls
+15. Dry run mode — encode 100 docs, verify OpenSearch connectivity, exit
+16. Idempotent re-indexing — every doc is upserted by its OpenAlex _id,
+   so re-indexing the same doc just overwrites; safe to re-run on partial
+   failures.
 
 Usage:
     # Full indexing run
@@ -79,6 +97,8 @@ DEFAULT_CHECKPOINT_INTERVAL = 100_000
 CHECKPOINT_FILE = "indexer_checkpoint.json"
 STATUS_FILE = "indexer_status.json"
 HEARTBEAT_FILE = "indexer_heartbeat"
+PID_LOCK_FILE = "indexer.pid"
+PID_STALE_AFTER_S = 300  # consider lock stale if heartbeat older than 5 min
 VRAM_RESERVE_FILE = Path(__file__).parent.parent / "data" / "vram_reserve.json"
 ONNX_CACHE_DIR = Path(__file__).parent.parent / "models" / "splade_onnx_fp16"
 TRT_ENGINE_CACHE = Path(__file__).parent.parent / "models" / "trt_engine_cache"
@@ -115,9 +135,32 @@ signal.signal(signal.SIGTERM, _signal_handler)
 
 
 def _atomic_write_json(data: dict, path: Path) -> None:
+    """Write JSON atomically: write to .tmp, fsync, then rename.
+
+    The fsync ensures the data is on stable storage before the rename, so a
+    power loss between write and rename leaves the OLD checkpoint intact and
+    a power loss after rename leaves the NEW checkpoint intact. There's no
+    intermediate "half-written checkpoint" state.
+    """
     tmp = path.with_suffix(".tmp")
-    tmp.write_text(json.dumps(data, indent=2))
+    payload = json.dumps(data, indent=2)
+    # Use os.open for explicit fsync control
+    fd = os.open(str(tmp), os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o644)
+    try:
+        os.write(fd, payload.encode("utf-8"))
+        os.fsync(fd)
+    finally:
+        os.close(fd)
     os.replace(str(tmp), str(path))
+    # fsync the directory entry so the rename itself is durable
+    try:
+        dir_fd = os.open(str(path.parent), os.O_RDONLY)
+        try:
+            os.fsync(dir_fd)
+        finally:
+            os.close(dir_fd)
+    except OSError:
+        pass  # some filesystems don't support directory fsync
 
 
 def _touch_heartbeat(path: Path) -> None:
@@ -125,6 +168,98 @@ def _touch_heartbeat(path: Path) -> None:
         path.write_text(str(time.time()))
     except Exception:
         pass
+
+
+def _is_process_alive(pid: int) -> bool:
+    """Check if a PID is still running (POSIX). Returns False on any error."""
+    try:
+        os.kill(pid, 0)
+        return True
+    except (OSError, ProcessLookupError):
+        return False
+
+
+def acquire_pid_lock(input_dir: Path) -> Path:
+    """Refuse to start if another indexer is already running.
+
+    Stale locks (process dead OR heartbeat older than PID_STALE_AFTER_S) are
+    forcibly cleared. Otherwise we exit with a clear message — preventing two
+    indexers from racing on the checkpoint and double-indexing docs.
+    """
+    lock_path = input_dir / PID_LOCK_FILE
+    heartbeat_path = input_dir / HEARTBEAT_FILE
+
+    if lock_path.exists():
+        try:
+            other_pid = int(lock_path.read_text().strip())
+        except Exception:
+            other_pid = -1
+
+        # Heartbeat staleness check (covers both crashed-with-stale-lock and
+        # killed-process-with-recycled-pid)
+        hb_age = float("inf")
+        if heartbeat_path.exists():
+            try:
+                hb_age = time.time() - float(heartbeat_path.read_text().strip())
+            except Exception:
+                pass
+
+        if other_pid > 0 and _is_process_alive(other_pid) and hb_age < PID_STALE_AFTER_S:
+            logger.error(
+                "Another indexer is already running (PID %d, heartbeat %.0fs old). Refusing to start.",
+                other_pid, hb_age,
+            )
+            logger.error(
+                "If you're certain it's dead, remove %s manually and retry.",
+                lock_path,
+            )
+            sys.exit(2)
+
+        logger.warning(
+            "Stale lock found (PID %d, alive=%s, heartbeat=%.0fs old) — clearing",
+            other_pid, _is_process_alive(other_pid), hb_age,
+        )
+
+    try:
+        lock_path.write_text(str(os.getpid()))
+    except Exception as e:
+        logger.error("Could not write PID lock at %s: %s", lock_path, e)
+        sys.exit(1)
+    return lock_path
+
+
+def release_pid_lock(lock_path: Path) -> None:
+    try:
+        if lock_path.exists():
+            # Only remove if it still contains our PID (race-safe)
+            try:
+                contained = int(lock_path.read_text().strip())
+            except Exception:
+                contained = -1
+            if contained == os.getpid():
+                lock_path.unlink()
+    except Exception:
+        pass
+
+
+def validate_trt_cache(cache_dir: Path) -> int:
+    """Return number of cached TRT engine files. Wipe any zero-byte files."""
+    if not cache_dir.exists():
+        return 0
+    removed = 0
+    kept = 0
+    for f in cache_dir.iterdir():
+        try:
+            if f.is_file() and f.stat().st_size == 0:
+                f.unlink()
+                removed += 1
+            else:
+                kept += 1
+        except OSError:
+            pass
+    if removed:
+        logger.warning("Removed %d zero-byte TRT cache files in %s", removed, cache_dir)
+    return kept
 
 
 # ── VRAM reservation ────────────────────────────────────────────────────────
@@ -273,10 +408,33 @@ def check_vram_reservation(
 
 
 def _ensure_onnx_export(model_name: str) -> Path:
-    """Export the SPLADE model to ONNX (FP16) on first use; cache afterwards."""
+    """Export the SPLADE model to ONNX (FP16) on first use; cache afterwards.
+
+    Atomic semantics: writes to a sibling .tmp directory, then renames. If the
+    process is killed mid-export, the .tmp dir is left behind and the canonical
+    location does not exist — next run will retry cleanly.
+
+    Validates the cached file on load. If model.onnx is missing or zero-bytes
+    (e.g., partial write that survived the rename for some reason), wipes and
+    re-exports.
+    """
     onnx_path = ONNX_CACHE_DIR / "model.onnx"
+    sentinel = ONNX_CACHE_DIR / ".export_complete"
+
+    # Validate existing cache
     if onnx_path.exists():
-        return onnx_path
+        try:
+            size = onnx_path.stat().st_size
+        except OSError:
+            size = 0
+        if size > 1_000_000 and sentinel.exists():
+            return onnx_path
+        logger.warning(
+            "ONNX cache at %s appears incomplete (size=%d, sentinel=%s) — re-exporting",
+            ONNX_CACHE_DIR, size, sentinel.exists(),
+        )
+        import shutil as _shutil
+        _shutil.rmtree(ONNX_CACHE_DIR, ignore_errors=True)
 
     logger.info("Exporting %s to ONNX FP16 (one-time, ~1 min)...", model_name)
     import tempfile
@@ -285,15 +443,37 @@ def _ensure_onnx_export(model_name: str) -> Path:
     from transformers import AutoModelForMaskedLM, AutoTokenizer
     from optimum.onnxruntime import ORTModelForMaskedLM
 
-    ONNX_CACHE_DIR.mkdir(parents=True, exist_ok=True)
-    tok = AutoTokenizer.from_pretrained(model_name)
-    model = AutoModelForMaskedLM.from_pretrained(model_name, torch_dtype=torch.float16)
-    with tempfile.TemporaryDirectory() as tmp:
-        model.save_pretrained(tmp)
-        tok.save_pretrained(tmp)
-        ort_model = ORTModelForMaskedLM.from_pretrained(tmp, export=True)
-        ort_model.save_pretrained(str(ONNX_CACHE_DIR))
-    logger.info("ONNX FP16 saved → %s", ONNX_CACHE_DIR)
+    tmp_export = ONNX_CACHE_DIR.with_suffix(".tmp_export")
+    if tmp_export.exists():
+        shutil.rmtree(tmp_export)
+    tmp_export.mkdir(parents=True)
+
+    try:
+        tok = AutoTokenizer.from_pretrained(model_name)
+        model = AutoModelForMaskedLM.from_pretrained(model_name, torch_dtype=torch.float16)
+        with tempfile.TemporaryDirectory() as tmp_pt:
+            model.save_pretrained(tmp_pt)
+            tok.save_pretrained(tmp_pt)
+            ort_model = ORTModelForMaskedLM.from_pretrained(tmp_pt, export=True)
+            ort_model.save_pretrained(str(tmp_export))
+
+        # Sanity-check the export before promoting it
+        exported_onnx = tmp_export / "model.onnx"
+        if not exported_onnx.exists() or exported_onnx.stat().st_size < 1_000_000:
+            raise RuntimeError(f"ONNX export produced bad file at {exported_onnx}")
+
+        # Atomic-ish promotion: rename tmp dir to canonical location
+        if ONNX_CACHE_DIR.exists():
+            shutil.rmtree(ONNX_CACHE_DIR)
+        ONNX_CACHE_DIR.parent.mkdir(parents=True, exist_ok=True)
+        os.rename(str(tmp_export), str(ONNX_CACHE_DIR))
+        # Drop a sentinel file last so partial dirs are detectable
+        sentinel.write_text(time.strftime("%Y-%m-%dT%H:%M:%S"))
+        logger.info("ONNX FP16 saved → %s", ONNX_CACHE_DIR)
+    except Exception:
+        # Leave the .tmp_export dir for inspection but don't pollute the cache
+        logger.exception("ONNX export failed — cache not promoted")
+        raise
     return onnx_path
 
 
@@ -694,25 +874,44 @@ def read_jsonl_gz(path: Path) -> list[dict]:
 # ── Checkpoint management ────────────────────────────────────────────────────
 
 
-def load_checkpoint(input_dir: Path) -> dict | None:
+def load_checkpoint(input_dir: Path, total_files: int | None = None) -> dict | None:
     cp_path = input_dir / CHECKPOINT_FILE
     if not cp_path.exists():
         return None
     try:
-        data = json.loads(cp_path.read_text())
+        text = cp_path.read_text()
+        if not text.strip():
+            logger.warning("Checkpoint file is empty — starting fresh")
+            return None
+        data = json.loads(text)
+        # Sanity-check: file_index must be in range
+        fi = data.get("file_index", 0)
+        if total_files is not None and fi > total_files:
+            logger.warning(
+                "Checkpoint file_index=%d exceeds available files (%d). "
+                "Treating as completed.", fi, total_files,
+            )
         logger.info(
             "Resuming from checkpoint: file_index=%d, doc_offset=%d, total_indexed=%d",
-            data.get("file_index", 0),
+            fi,
             data.get("doc_offset", 0),
             data.get("total_indexed", 0),
         )
         return data
     except Exception as e:
         logger.warning("Could not load checkpoint (%s) — starting fresh", e)
+        # Move the corrupted checkpoint aside so the next save starts clean
+        try:
+            corrupted = cp_path.with_suffix(f".corrupted.{int(time.time())}")
+            cp_path.rename(corrupted)
+            logger.warning("Moved corrupted checkpoint to %s", corrupted)
+        except Exception:
+            pass
         return None
 
 
 def save_checkpoint(input_dir: Path, state: dict) -> None:
+    """Atomic write. Raises on disk-full / permission error so the caller can decide."""
     state["timestamp"] = time.strftime("%Y-%m-%dT%H:%M:%S")
     _atomic_write_json(state, input_dir / CHECKPOINT_FILE)
 
@@ -754,22 +953,37 @@ def run_indexer(
     total_files = len(input_files)
     logger.info("Found %d input files in %s", total_files, input_dir)
 
+    # PID lock — prevent two indexers from racing on the same checkpoint
+    lock_path = acquire_pid_lock(input_dir)
+
+    # Validate the TRT engine cache before model load (catches zero-byte files
+    # left behind by a previous SIGKILL during engine build)
+    n_trt_engines = validate_trt_cache(TRT_ENGINE_CACHE)
+    if n_trt_engines:
+        logger.info("Found %d cached TRT engines in %s", n_trt_engines, TRT_ENGINE_CACHE)
+
     if not dry_run:
         if not check_opensearch_health(session, opensearch_url, index_name):
             logger.error(
                 "OpenSearch pre-flight check failed. Ensure OpenSearch is running at %s",
                 opensearch_url,
             )
+            release_pid_lock(lock_path)
             return {"error": "opensearch_unhealthy"}
 
     # ── Load model ───────────────────────────────────────────────────────
-    encoder = make_encoder(
-        model_name,
-        device=device,
-        max_length=max_length,
-        batch_size=batch_size,
-        backend=backend,
-    )
+    try:
+        encoder = make_encoder(
+            model_name,
+            device=device,
+            max_length=max_length,
+            batch_size=batch_size,
+            backend=backend,
+        )
+    except Exception as e:
+        logger.exception("Failed to load encoder: %s", e)
+        release_pid_lock(lock_path)
+        return {"error": "encoder_load_failed", "details": str(e)}
     logger.info("Encoder backend: %s | max_length=%d | batch_size=%d", encoder.backend, max_length, batch_size)
 
     # ── Load checkpoint ──────────────────────────────────────────────────
@@ -783,11 +997,15 @@ def run_indexer(
     }
 
     if resume:
-        cp = load_checkpoint(input_dir)
+        cp = load_checkpoint(input_dir, total_files=total_files)
         if cp:
-            start_file = cp.get("file_index", 0)
+            start_file = min(cp.get("file_index", 0), total_files)
             start_offset = cp.get("doc_offset", 0)
             cumulative = cp.get("cumulative", cumulative)
+            if start_file >= total_files:
+                logger.info("Checkpoint indicates indexing already complete. Nothing to do.")
+                release_pid_lock(lock_path)
+                return {**cumulative, "state": "completed"}
 
     start_time = time.time()
     docs_since_checkpoint = 0
@@ -795,6 +1013,10 @@ def run_indexer(
     throughput_window: list[float] = []  # recent batch times for moving average
     original_batch_size = batch_size
     active_batch_size = batch_size
+    consecutive_upload_failures = 0
+    consecutive_encode_failures = 0
+    MAX_CONSECUTIVE_UPLOAD_FAILURES = 5  # halt-and-checkpoint if upload keeps failing
+    MAX_CONSECUTIVE_ENCODE_FAILURES = 3  # CUDA likely dead — halt
 
     # ── Process files ────────────────────────────────────────────────────
     for file_idx in range(start_file, total_files):
@@ -815,13 +1037,16 @@ def run_indexer(
         while doc_idx < total_in_file:
             if _shutdown_requested:
                 logger.info("Shutdown requested — saving checkpoint...")
-                save_checkpoint(input_dir, {
-                    "file_index": file_idx,
-                    "doc_offset": doc_idx,
-                    "cumulative": cumulative,
-                    "total_indexed": cumulative["total_indexed"],
-                    "state": "interrupted",
-                })
+                try:
+                    save_checkpoint(input_dir, {
+                        "file_index": file_idx,
+                        "doc_offset": doc_idx,
+                        "cumulative": cumulative,
+                        "total_indexed": cumulative["total_indexed"],
+                        "state": "interrupted",
+                    })
+                except Exception:
+                    logger.exception("Failed to save checkpoint on shutdown")
                 write_status(input_dir, {
                     "state": "interrupted",
                     "file_index": file_idx,
@@ -831,6 +1056,7 @@ def run_indexer(
                     "timestamp": time.strftime("%Y-%m-%dT%H:%M:%S"),
                 })
                 logger.info("Checkpoint saved. Run with --resume to continue.")
+                release_pid_lock(lock_path)
                 return {**cumulative, "state": "interrupted"}
 
             # ── Check VRAM reservation ───────────────────────────────────
@@ -883,8 +1109,42 @@ def run_indexer(
             batch_start = time.time()
             try:
                 sparse_vecs = encoder.encode_batch(texts)
+                consecutive_encode_failures = 0
             except Exception as e:
-                logger.error("SPLADE encoding failed for batch at doc %d: %s", doc_idx, e)
+                consecutive_encode_failures += 1
+                err_str = str(e)
+                # CUDA / device errors invalidate encoder state — must halt.
+                # Any other transient error (e.g., a pathological doc) we skip.
+                is_cuda_error = (
+                    "CUDA" in err_str
+                    or "cudnn" in err_str.lower()
+                    or "device-side" in err_str
+                    or "out of memory" in err_str.lower()
+                    or consecutive_encode_failures >= MAX_CONSECUTIVE_ENCODE_FAILURES
+                )
+                logger.error(
+                    "SPLADE encoding failed for batch at doc %d (failure %d/%d): %s",
+                    doc_idx, consecutive_encode_failures, MAX_CONSECUTIVE_ENCODE_FAILURES, e,
+                )
+                if is_cuda_error:
+                    logger.error(
+                        "Encoder appears unrecoverable — saving checkpoint and exiting. "
+                        "Restart with --resume after addressing the underlying issue."
+                    )
+                    try:
+                        save_checkpoint(input_dir, {
+                            "file_index": file_idx,
+                            "doc_offset": doc_idx,
+                            "cumulative": cumulative,
+                            "total_indexed": cumulative["total_indexed"],
+                            "state": "encoder_failed",
+                            "last_error": err_str[:500],
+                        })
+                    except Exception:
+                        logger.exception("Failed to save checkpoint on encoder failure")
+                    release_pid_lock(lock_path)
+                    return {**cumulative, "state": "encoder_failed", "error": err_str[:500]}
+                # Transient error — skip this batch
                 doc_idx += actual_batch
                 continue
 
@@ -915,6 +1175,36 @@ def run_indexer(
                 cumulative["total_errors"] += upsert_stats["errors"]
                 if upsert_stats["error_details"]:
                     logger.warning("Bulk errors: %s", upsert_stats["error_details"][:2])
+                # Circuit breaker: if every doc in the batch failed, count it
+                if upsert_stats["indexed"] == 0 and upsert_stats["errors"] >= len(os_docs):
+                    consecutive_upload_failures += 1
+                    logger.warning(
+                        "Bulk upload completely failed (%d/%d consecutive)",
+                        consecutive_upload_failures, MAX_CONSECUTIVE_UPLOAD_FAILURES,
+                    )
+                    if consecutive_upload_failures >= MAX_CONSECUTIVE_UPLOAD_FAILURES:
+                        logger.error(
+                            "OpenSearch unreachable for %d batches in a row. Halting "
+                            "and saving checkpoint at the LAST DOC BEFORE THIS BATCH "
+                            "so resume re-indexes the failed docs (idempotent via _id).",
+                            MAX_CONSECUTIVE_UPLOAD_FAILURES,
+                        )
+                        # Don't advance doc_idx for this batch — save checkpoint
+                        # at current doc_idx so resume re-tries it.
+                        try:
+                            save_checkpoint(input_dir, {
+                                "file_index": file_idx,
+                                "doc_offset": doc_idx,
+                                "cumulative": cumulative,
+                                "total_indexed": cumulative["total_indexed"],
+                                "state": "opensearch_unreachable",
+                            })
+                        except Exception:
+                            logger.exception("Failed to save checkpoint on OS failure")
+                        release_pid_lock(lock_path)
+                        return {**cumulative, "state": "opensearch_unreachable"}
+                else:
+                    consecutive_upload_failures = 0
             elif os_docs and dry_run:
                 cumulative["total_indexed"] += len(os_docs)
 
@@ -998,6 +1288,7 @@ def run_indexer(
                         len(sample),
                         dict(sorted(sample.items(), key=lambda x: -x[1])[:5]),
                     )
+                release_pid_lock(lock_path)
                 return {**cumulative, "state": "dry_run"}
 
         # ── End of file checkpoint ───────────────────────────────────────
@@ -1044,6 +1335,7 @@ def run_indexer(
         "timestamp": time.strftime("%Y-%m-%dT%H:%M:%S"),
     })
 
+    release_pid_lock(lock_path)
     return {**cumulative, "state": "completed"}
 
 
