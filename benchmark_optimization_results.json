@@ -1,41 +1,41 @@
 {
-  "timestamp": "2026-05-13T00:58:26",
+  "timestamp": "2026-05-13T01:14:55",
   "device": "NVIDIA GeForce RTX 4070 Ti SUPER",
   "torch_version": "2.6.0+cu124",
   "n_docs": 1920,
   "batch_size": 64,
   "results": [
     {
-      "variant": "onnx_trt_fp16_max128",
-      "docs_per_sec": 283.8,
-      "total_seconds": 6.77,
-      "correctness_vs_baseline": NaN,
-      "avg_terms_per_doc": 122.0,
-      "gpu_gb": 0.0
-    },
-    {
-      "variant": "onnx_trt_fp16_max256",
-      "docs_per_sec": 136.7,
-      "total_seconds": 14.04,
-      "correctness_vs_baseline": NaN,
-      "avg_terms_per_doc": 145.0,
-      "gpu_gb": 0.0
-    },
-    {
       "variant": "fp16_async_sdpa_max128",
-      "docs_per_sec": 1154.9,
-      "total_seconds": 1.66,
+      "docs_per_sec": 1230.3,
+      "total_seconds": 1.56,
       "correctness_vs_baseline": NaN,
       "avg_terms_per_doc": 122.0,
       "gpu_gb": 0.24
     },
     {
       "variant": "fp16_async_sdpa_max256",
-      "docs_per_sec": 709.2,
-      "total_seconds": 2.71,
+      "docs_per_sec": 698.0,
+      "total_seconds": 2.75,
       "correctness_vs_baseline": NaN,
       "avg_terms_per_doc": 145.0,
       "gpu_gb": 0.24
+    },
+    {
+      "variant": "onnx_trt_iob_fp16_max128",
+      "docs_per_sec": 1568.0,
+      "total_seconds": 1.22,
+      "correctness_vs_baseline": NaN,
+      "avg_terms_per_doc": 122.0,
+      "gpu_gb": 1.01
+    },
+    {
+      "variant": "onnx_trt_iob_fp16_max256",
+      "docs_per_sec": 838.5,
+      "total_seconds": 2.29,
+      "correctness_vs_baseline": NaN,
+      "avg_terms_per_doc": 145.0,
+      "gpu_gb": 2.01
     }
   ]
 }

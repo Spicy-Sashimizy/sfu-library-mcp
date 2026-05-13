@@ -673,6 +673,194 @@ ONNXTrtFp16Max256Encoder = _make_onnx_trt_max_length_encoder(256)
 ONNXTrtFp16Max384Encoder = _make_onnx_trt_max_length_encoder(384)
 
 
+# ── Variant: ONNX TRT with zero-copy IO binding (logits stay on GPU) ─────────
+
+
+class ONNXTrtIOBindingEncoder:
+    """TRT EP with explicit IO binding — input + output tensors live on GPU,
+    no numpy round-trip, post-processing operates directly on the GPU buffer.
+
+    This is the version that should match or beat PyTorch SDPA for ONNX/TRT.
+    """
+
+    def __init__(self, model_name, device, max_length=256, batch_size=64, vocab_size=30522, fp16=True):
+        import os
+        import torch
+        import onnxruntime as ort
+        from transformers import AutoTokenizer
+        from concurrent.futures import ThreadPoolExecutor
+        from collections import deque
+        from pathlib import Path
+
+        self.device = device
+        self._max_length = max_length
+        self._batch_size = batch_size
+        self._vocab_size = vocab_size
+        self._fp16 = fp16
+        self.tokenizer = AutoTokenizer.from_pretrained(model_name)
+
+        cache_name = "splade_onnx_fp16" if fp16 else "splade_onnx"
+        cache = Path(f"/workspaces/sfu-library-mcp-training/models/{cache_name}")
+        if not (cache / "model.onnx").exists():
+            raise RuntimeError(
+                f"Run an ONNX export first: {cache}/model.onnx not found. "
+                "Use the onnx_trt_fp16_max* variants once to populate it."
+            )
+
+        os.makedirs("/workspaces/sfu-library-mcp-training/models/trt_engine_cache", exist_ok=True)
+        trt_opts = {
+            "device_id": 0,
+            "trt_max_workspace_size": 4 * 1024 * 1024 * 1024,
+            "trt_fp16_enable": True,
+            "trt_engine_cache_enable": True,
+            "trt_engine_cache_path": "/workspaces/sfu-library-mcp-training/models/trt_engine_cache",
+        }
+
+        sess_opts = ort.SessionOptions()
+        sess_opts.graph_optimization_level = ort.GraphOptimizationLevel.ORT_ENABLE_ALL
+
+        self.session = ort.InferenceSession(
+            str(cache / "model.onnx"),
+            sess_options=sess_opts,
+            providers=[
+                ("TensorrtExecutionProvider", trt_opts),
+                "CUDAExecutionProvider",
+                "CPUExecutionProvider",
+            ],
+        )
+        self._input_names = [i.name for i in self.session.get_inputs()]
+        self._logits_name = self.session.get_outputs()[0].name
+
+        # ONNX output is always FP32 even when weights are FP16 (the model
+        # casts back to fp32 before returning). So output buffer must be FP32.
+        self._out_dtype = torch.float32
+        # Pre-allocate fixed-shape input + output tensors on GPU (reused every batch)
+        self._in_input_ids = torch.zeros(batch_size, max_length, dtype=torch.int64, device="cuda")
+        self._in_attn_mask = torch.zeros(batch_size, max_length, dtype=torch.int64, device="cuda")
+        self._in_token_type = torch.zeros(batch_size, max_length, dtype=torch.int64, device="cuda")
+        self._out_logits = torch.empty(batch_size, max_length, vocab_size, dtype=self._out_dtype, device="cuda")
+
+        self._iobinding = self.session.io_binding()
+        # Bind inputs — note: ORT expects np dtype names, ints map directly
+        import numpy as np
+        for name, tensor in [
+            ("input_ids", self._in_input_ids),
+            ("attention_mask", self._in_attn_mask),
+            ("token_type_ids", self._in_token_type),
+        ]:
+            if name in self._input_names:
+                self._iobinding.bind_input(
+                    name=name,
+                    device_type="cuda",
+                    device_id=0,
+                    element_type=np.int64,
+                    shape=list(tensor.shape),
+                    buffer_ptr=tensor.data_ptr(),
+                )
+        self._iobinding.bind_output(
+            name=self._logits_name,
+            device_type="cuda",
+            device_id=0,
+            element_type=np.float32,
+            shape=list(self._out_logits.shape),
+            buffer_ptr=self._out_logits.data_ptr(),
+        )
+
+        self.id_to_token = {v: k for k, v in self.tokenizer.get_vocab().items()}
+        self._skip_token_ids = {
+            tok_id for tok, tok_id in self.tokenizer.get_vocab().items() if tok.startswith("[")
+        }
+
+        self._tok_pool = ThreadPoolExecutor(max_workers=1)
+        self._tok_queue = deque()
+
+    def _tokenize(self, texts):
+        # Always fixed shape (batch_size, max_length) for the bound buffers
+        toks = self.tokenizer(
+            texts,
+            max_length=self._max_length,
+            padding="max_length",
+            truncation=True,
+            return_tensors="pt",
+        )
+        return toks
+
+    def encode_batch(self, texts):
+        import torch
+
+        if self._tok_queue:
+            tokens = self._tok_queue.popleft().result()
+        else:
+            tokens = self._tokenize(texts)
+
+        # Copy tokenized ids into the bound GPU tensors (in place)
+        actual_b = tokens["input_ids"].shape[0]
+        if actual_b != self._batch_size:
+            # Last partial batch — pad with PAD tokens (id=0) to match bound shape
+            pad_b = self._batch_size - actual_b
+            for k in ("input_ids", "attention_mask", "token_type_ids"):
+                if k in tokens:
+                    pad = torch.zeros(pad_b, self._max_length, dtype=tokens[k].dtype)
+                    tokens[k] = torch.cat([tokens[k], pad], dim=0)
+
+        self._in_input_ids.copy_(tokens["input_ids"], non_blocking=False)
+        self._in_attn_mask.copy_(tokens["attention_mask"], non_blocking=False)
+        if "token_type_ids" in tokens and "token_type_ids" in self._input_names:
+            self._in_token_type.copy_(tokens["token_type_ids"], non_blocking=False)
+        else:
+            self._in_token_type.zero_()
+
+        # Run inference — output already bound to self._out_logits on GPU
+        self.session.run_with_iobinding(self._iobinding)
+
+        # Post-processing operates directly on the GPU buffer (no copy)
+        logits = self._out_logits  # (B, S, V) on GPU
+        if logits.dtype == torch.float16:
+            logits = logits.float()
+        attention_mask = self._in_attn_mask
+        vecs = torch.log1p(torch.relu(logits))
+        vecs = vecs * attention_mask.unsqueeze(-1)  # mask padding
+        vecs = torch.max(vecs, dim=1).values
+        top_w, top_idx = torch.topk(vecs, SPARSE_TOP_K, dim=1)
+
+        # Only sync to CPU at the end — and only for the actual batch (not padded slots)
+        top_w_cpu = top_w[:actual_b].cpu().numpy()
+        top_idx_cpu = top_idx[:actual_b].cpu().numpy()
+        results = []
+        skip, id2tok = self._skip_token_ids, self.id_to_token
+        for i in range(top_w_cpu.shape[0]):
+            d = {}
+            for j in range(SPARSE_TOP_K):
+                w = float(top_w_cpu[i, j])
+                if w <= 0.01:
+                    continue
+                idx = int(top_idx_cpu[i, j])
+                if idx in skip:
+                    continue
+                t = id2tok.get(idx)
+                if t:
+                    d[t] = round(w, 4)
+            results.append(d)
+        return results
+
+    def pre_load_next(self, texts):
+        self._tok_queue.append(self._tok_pool.submit(self._tokenize, texts))
+
+
+def _make_onnx_trt_iobinding_encoder(N, fp16=True, batch_size=64):
+    class _Enc(ONNXTrtIOBindingEncoder):
+        def __init__(self, model_name, device):
+            super().__init__(model_name, device, max_length=N, batch_size=batch_size, fp16=fp16)
+
+    _Enc.name = f"onnx_trt_iob_fp16_max{N}" if fp16 else f"onnx_trt_iob_max{N}"
+    return _Enc
+
+
+ONNXTrtIoBindingFp16Max128Encoder = _make_onnx_trt_iobinding_encoder(128)
+ONNXTrtIoBindingFp16Max256Encoder = _make_onnx_trt_iobinding_encoder(256)
+ONNXTrtIoBindingFp16Max384Encoder = _make_onnx_trt_iobinding_encoder(384)
+
+
 # ── Variant: same but force eager attention (control, to isolate SDPA effect) ─
 
 
@@ -799,7 +987,8 @@ def main():
                  "onnx_cuda_max128", "onnx_cuda_max256",
                  "onnx_cuda_max384", "onnx_cuda_max512",
                  "onnx_cuda_fp16_max128", "onnx_cuda_fp16_max256",
-                 "onnx_trt_fp16_max128", "onnx_trt_fp16_max256", "onnx_trt_fp16_max384"],
+                 "onnx_trt_fp16_max128", "onnx_trt_fp16_max256", "onnx_trt_fp16_max384",
+                 "onnx_trt_iob_fp16_max128", "onnx_trt_iob_fp16_max256", "onnx_trt_iob_fp16_max384"],
     )
     parser.add_argument("--larger-batch", type=int, default=None,
                         help="Also re-run the best variant at this batch size (e.g. 128, 192, 256)")
@@ -847,6 +1036,9 @@ def main():
         "onnx_trt_fp16_max128": ONNXTrtFp16Max128Encoder,
         "onnx_trt_fp16_max256": ONNXTrtFp16Max256Encoder,
         "onnx_trt_fp16_max384": ONNXTrtFp16Max384Encoder,
+        "onnx_trt_iob_fp16_max128": ONNXTrtIoBindingFp16Max128Encoder,
+        "onnx_trt_iob_fp16_max256": ONNXTrtIoBindingFp16Max256Encoder,
+        "onnx_trt_iob_fp16_max384": ONNXTrtIoBindingFp16Max384Encoder,
     }
 
     baseline_out = None
