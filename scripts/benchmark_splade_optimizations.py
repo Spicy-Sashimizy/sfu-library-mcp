@@ -470,9 +470,8 @@ class ONNXEncoder:
 
     name = "onnx_cuda"
 
-    def __init__(self, model_name, device, max_length=256, providers=None):
-        import torch
-        from optimum.onnxruntime import ORTModelForMaskedLM
+    def __init__(self, model_name, device, max_length=256, providers=None, fp16=False):
+        import onnxruntime as ort
         from transformers import AutoTokenizer
         from concurrent.futures import ThreadPoolExecutor
         from collections import deque
@@ -480,25 +479,61 @@ class ONNXEncoder:
 
         self.device = device
         self._max_length = max_length
+        self._fp16 = fp16
         self.tokenizer = AutoTokenizer.from_pretrained(model_name)
 
         # Lazy-export to a local cache dir to avoid re-converting each run
-        cache = Path("/workspaces/sfu-library-mcp-training/models/splade_onnx")
+        cache_name = "splade_onnx_fp16" if fp16 else "splade_onnx"
+        cache = Path(f"/workspaces/sfu-library-mcp-training/models/{cache_name}")
         cache.mkdir(parents=True, exist_ok=True)
 
         if not (cache / "model.onnx").exists():
-            print(f"  Exporting {model_name} to ONNX (one-time, ~1 min)...")
-            tmp_model = ORTModelForMaskedLM.from_pretrained(
-                model_name, export=True, provider="CUDAExecutionProvider"
-            )
+            import torch as _torch
+            from optimum.onnxruntime import ORTModelForMaskedLM
+            from transformers import AutoModelForMaskedLM
+            import tempfile
+            print(f"  Exporting {model_name} to ONNX{' (FP16)' if fp16 else ''} (one-time, ~1 min)...")
+            if fp16:
+                m = AutoModelForMaskedLM.from_pretrained(model_name, torch_dtype=_torch.float16)
+                with tempfile.TemporaryDirectory() as td:
+                    m.save_pretrained(td)
+                    self.tokenizer.save_pretrained(td)
+                    tmp_model = ORTModelForMaskedLM.from_pretrained(td, export=True)
+            else:
+                tmp_model = ORTModelForMaskedLM.from_pretrained(model_name, export=True)
             tmp_model.save_pretrained(str(cache))
             print(f"  Exported → {cache}")
 
-        self.model = ORTModelForMaskedLM.from_pretrained(
-            str(cache),
-            provider=providers[0] if providers else "CUDAExecutionProvider",
-            provider_options=[{"device_id": 0}] if providers and providers[0] == "CUDAExecutionProvider" else None,
-        )
+        # Load with raw ORT InferenceSession (avoids optimum's iobinding which
+        # crashes with cudaErrorIllegalAddress on ORT 1.26 + CUDA 12.4).
+        # We pass numpy arrays via session.run() instead.
+        sess_opts = ort.SessionOptions()
+        sess_opts.graph_optimization_level = ort.GraphOptimizationLevel.ORT_ENABLE_ALL
+
+        # Two ways to pass providers in ORT:
+        #   1. providers=[("Name", {options}), ...] alone (tuple form)
+        #   2. providers=["Name", ...] AND provider_options=[{...}, ...]
+        # If a caller already wrapped (Name, opts) tuples, use form 1.
+        if providers is None:
+            providers = ["CUDAExecutionProvider", "CPUExecutionProvider"]
+
+        if any(isinstance(p, tuple) for p in providers):
+            self.session = ort.InferenceSession(
+                str(cache / "model.onnx"),
+                sess_options=sess_opts,
+                providers=providers,
+            )
+        else:
+            provider_opts = [{"device_id": 0} if p == "CUDAExecutionProvider" else {} for p in providers]
+            self.session = ort.InferenceSession(
+                str(cache / "model.onnx"),
+                sess_options=sess_opts,
+                providers=providers,
+                provider_options=provider_opts,
+            )
+        self._input_names = [i.name for i in self.session.get_inputs()]
+        # Look at output to find the logits tensor name
+        self._logits_name = self.session.get_outputs()[0].name
 
         self.id_to_token = {v: k for k, v in self.tokenizer.get_vocab().items()}
         self._skip_token_ids = {
@@ -510,28 +545,42 @@ class ONNXEncoder:
 
     def _tokenize(self, texts):
         return self.tokenizer(
-            texts, max_length=self._max_length, padding=True, truncation=True, return_tensors="pt"
+            texts, max_length=self._max_length, padding=True, truncation=True, return_tensors="np"
         )
 
     def encode_batch(self, texts):
         import torch
+        import numpy as np
 
         if self._tok_queue:
             tokens = self._tok_queue.popleft().result()
         else:
             tokens = self._tokenize(texts)
 
-        # ORT models accept dict of tensors; logits returned on GPU when CUDA EP is used
-        with torch.inference_mode():
-            output = self.model(**tokens)
+        # Build feed dict for raw ORT — numpy arrays (int64 IDs)
+        feed = {}
+        for name in self._input_names:
+            arr = tokens[name]
+            if arr.dtype != np.int64:
+                arr = arr.astype(np.int64)
+            feed[name] = arr
 
-        logits = output.logits
-        if not logits.is_cuda:
-            logits = logits.to("cuda")
-        logits = logits.float()
-        attention_mask = tokens["attention_mask"]
-        if not attention_mask.is_cuda:
-            attention_mask = attention_mask.to("cuda")
+        # Run on whatever EP loaded successfully (CUDA preferred)
+        outputs = self.session.run([self._logits_name], feed)
+        logits_np = outputs[0]  # (B, S, V) np.float32
+
+        # Move to GPU for the post-processing; if no GPU, do it on CPU
+        if torch.cuda.is_available():
+            logits = torch.from_numpy(logits_np).to("cuda", non_blocking=False)
+            attention_mask = torch.from_numpy(tokens["attention_mask"]).to("cuda")
+        else:
+            logits = torch.from_numpy(logits_np)
+            attention_mask = torch.from_numpy(tokens["attention_mask"])
+
+        # FP16 ONNX returns half-precision logits; up-cast for the SPLADE math
+        if logits.dtype == torch.float16:
+            logits = logits.float()
+
         vecs = torch.log1p(torch.relu(logits))
         vecs = vecs * attention_mask.unsqueeze(-1)  # mask padding
         vecs = torch.max(vecs, dim=1).values
@@ -560,12 +609,12 @@ class ONNXEncoder:
         self._tok_queue.append(self._tok_pool.submit(self._tokenize, texts))
 
 
-def _make_onnx_max_length_encoder(N, providers=None, name=None):
+def _make_onnx_max_length_encoder(N, providers=None, name=None, fp16=False):
     class _Enc(ONNXEncoder):
         def __init__(self, model_name, device):
-            super().__init__(model_name, device, max_length=N, providers=providers)
+            super().__init__(model_name, device, max_length=N, providers=providers, fp16=fp16)
 
-    _Enc.name = name or f"onnx_cuda_max{N}"
+    _Enc.name = name or (f"onnx_cuda_fp16_max{N}" if fp16 else f"onnx_cuda_max{N}")
     return _Enc
 
 
@@ -573,6 +622,55 @@ ONNXMax128Encoder = _make_onnx_max_length_encoder(128)
 ONNXMax256Encoder = _make_onnx_max_length_encoder(256)
 ONNXMax384Encoder = _make_onnx_max_length_encoder(384)
 ONNXMax512Encoder = _make_onnx_max_length_encoder(512)
+ONNXFp16Max128Encoder = _make_onnx_max_length_encoder(128, fp16=True)
+ONNXFp16Max256Encoder = _make_onnx_max_length_encoder(256, fp16=True)
+
+
+def _make_onnx_trt_max_length_encoder(N, fp16=True):
+    """ONNX with TensorRT EP — pads every batch to fixed (batch, N) shape so TRT
+    can reuse the same engine. Without this, TRT rebuilds per new shape combo
+    and throughput collapses.
+
+    First inference builds & caches the TRT engine (30-60s). Subsequent
+    runs use the cached engine and are very fast.
+    """
+
+    class _Enc(ONNXEncoder):
+        name = f"onnx_trt_fp16_max{N}" if fp16 else f"onnx_trt_max{N}"
+
+        def __init__(self, model_name, device):
+            import os
+            os.makedirs("/workspaces/sfu-library-mcp-training/models/trt_engine_cache", exist_ok=True)
+            trt_opts = {
+                "device_id": 0,
+                "trt_max_workspace_size": 4 * 1024 * 1024 * 1024,
+                "trt_fp16_enable": True,
+                "trt_engine_cache_enable": True,
+                "trt_engine_cache_path": "/workspaces/sfu-library-mcp-training/models/trt_engine_cache",
+            }
+            providers = [
+                ("TensorrtExecutionProvider", trt_opts),
+                "CUDAExecutionProvider",
+                "CPUExecutionProvider",
+            ]
+            super().__init__(model_name, device, max_length=N, providers=providers, fp16=fp16)
+
+        def _tokenize(self, texts):
+            # Force every batch to (batch, N) — fixed shape so TRT engine is reused.
+            return self.tokenizer(
+                texts,
+                max_length=self._max_length,
+                padding="max_length",  # ← key difference vs CUDA EP path
+                truncation=True,
+                return_tensors="np",
+            )
+
+    return _Enc
+
+
+ONNXTrtFp16Max128Encoder = _make_onnx_trt_max_length_encoder(128)
+ONNXTrtFp16Max256Encoder = _make_onnx_trt_max_length_encoder(256)
+ONNXTrtFp16Max384Encoder = _make_onnx_trt_max_length_encoder(384)
 
 
 # ── Variant: same but force eager attention (control, to isolate SDPA effect) ─
@@ -699,7 +797,9 @@ def main():
                  "fp16_async_sdpa_max256", "fp16_async_sdpa_max384",
                  "fp16_async_eager",
                  "onnx_cuda_max128", "onnx_cuda_max256",
-                 "onnx_cuda_max384", "onnx_cuda_max512"],
+                 "onnx_cuda_max384", "onnx_cuda_max512",
+                 "onnx_cuda_fp16_max128", "onnx_cuda_fp16_max256",
+                 "onnx_trt_fp16_max128", "onnx_trt_fp16_max256", "onnx_trt_fp16_max384"],
     )
     parser.add_argument("--larger-batch", type=int, default=None,
                         help="Also re-run the best variant at this batch size (e.g. 128, 192, 256)")
@@ -742,6 +842,11 @@ def main():
         "onnx_cuda_max256": ONNXMax256Encoder,
         "onnx_cuda_max384": ONNXMax384Encoder,
         "onnx_cuda_max512": ONNXMax512Encoder,
+        "onnx_cuda_fp16_max128": ONNXFp16Max128Encoder,
+        "onnx_cuda_fp16_max256": ONNXFp16Max256Encoder,
+        "onnx_trt_fp16_max128": ONNXTrtFp16Max128Encoder,
+        "onnx_trt_fp16_max256": ONNXTrtFp16Max256Encoder,
+        "onnx_trt_fp16_max384": ONNXTrtFp16Max384Encoder,
     }
 
     baseline_out = None
