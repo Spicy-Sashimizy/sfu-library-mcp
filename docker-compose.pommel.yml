@@ -41,9 +41,34 @@ services:
         echo "Setting up Ollama proxy..."
         cat > /usr/local/bin/ollama-proxy.py << 'PROXY_EOF'
         #!/usr/bin/env python3
-        """Ollama API proxy for Pommel - handles batch splitting and format transformation."""
+        """Ollama API proxy for Pommel - batch splitting, format transform, zombie prevention."""
         from http.server import HTTPServer, BaseHTTPRequestHandler
-        import urllib.request, urllib.error, json, sys
+        import urllib.request, urllib.error, json, sys, socket, time
+
+        # Cache Ollama reachability to prevent zombie connection accumulation when it's down
+        _ollama_ok = True
+        _ollama_last_check = 0.0
+        _OLLAMA_CHECK_INTERVAL = 15.0
+        _CONNECT_TIMEOUT = 5   # fast TCP connect probe
+        _READ_TIMEOUT = 90     # generous for large embedding batches
+
+        def _check_ollama():
+            global _ollama_ok, _ollama_last_check
+            now = time.time()
+            if now - _ollama_last_check < _OLLAMA_CHECK_INTERVAL:
+                return _ollama_ok
+            try:
+                s = socket.create_connection(('host.docker.internal', 11434), timeout=_CONNECT_TIMEOUT)
+                s.close()
+                if not _ollama_ok:
+                    print("[PROXY] Ollama back online", file=sys.stderr)
+                _ollama_ok = True
+            except Exception:
+                if _ollama_ok:
+                    print("[PROXY] Ollama unreachable — fast-failing until next check", file=sys.stderr)
+                _ollama_ok = False
+            _ollama_last_check = now
+            return _ollama_ok
 
         class OllamaProxyHandler(BaseHTTPRequestHandler):
             OLLAMA_UPSTREAM = "http://host.docker.internal:11434"
@@ -67,7 +92,7 @@ services:
                     req = urllib.request.Request(url, data=json_body, headers=headers, method='POST')
 
                     try:
-                        with urllib.request.urlopen(req, timeout=60) as response:
+                        with urllib.request.urlopen(req, timeout=_READ_TIMEOUT) as response:
                             if response.getcode() != 200:
                                 return response.getcode(), response.read(), response.headers
                             resp_data = json.loads(response.read().decode())
@@ -83,6 +108,9 @@ services:
                 return 200, json.dumps({'embeddings': all_embeddings}).encode(), {}
 
             def _forward_request(self, method, path, data=None):
+                if not _check_ollama():
+                    return 503, json.dumps({'error': 'Ollama unavailable'}).encode(), {}
+
                 url = f"{self.OLLAMA_UPSTREAM}{path}"
                 headers = {'Content-Type': self.headers.get('Content-Type', 'application/json')}
 
@@ -96,7 +124,7 @@ services:
 
                 req = urllib.request.Request(url, data=data, headers=headers, method=method)
                 try:
-                    with urllib.request.urlopen(req, timeout=30) as response:
+                    with urllib.request.urlopen(req, timeout=_READ_TIMEOUT) as response:
                         body = response.read()
                         if 'embed' in path:
                             try:
@@ -116,17 +144,23 @@ services:
 
             def do_GET(self):
                 code, body, headers = self._forward_request('GET', self.path)
-                self.send_response(code)
-                self.end_headers()
-                self.wfile.write(body)
+                try:
+                    self.send_response(code)
+                    self.end_headers()
+                    self.wfile.write(body)
+                except BrokenPipeError:
+                    pass  # client disconnected — not an error
 
             def do_POST(self):
                 content_length = int(self.headers.get('Content-Length', 0))
                 body = self.rfile.read(content_length) if content_length > 0 else None
                 code, resp_body, headers = self._forward_request('POST', self.path, body)
-                self.send_response(code)
-                self.end_headers()
-                self.wfile.write(resp_body)
+                try:
+                    self.send_response(code)
+                    self.end_headers()
+                    self.wfile.write(resp_body)
+                except BrokenPipeError:
+                    pass  # client disconnected — not an error
 
         if __name__ == '__main__':
             print("Ollama proxy starting on port 11434...", file=sys.stderr)
@@ -172,20 +206,29 @@ services:
             pm config set daemon.port 7420
         fi
 
-        # Create .pommelignore
-        cat > /workspace/.pommelignore << 'IGNORE_EOF'
-        node_modules/
-        .git/
-        *.log
-        .claude/
-        __pycache__/
-        *.pyc
-        .pommel/
-        venv/
-        .venv/
-        dist/
-        build/
-        IGNORE_EOF
+        # Always write exclude patterns to config (ensures .venv and site-packages stay excluded)
+        python3 -c "
+import re, os
+cfg = '/pommel-data/.pommel/config.yaml'
+with open(cfg, 'r') as f:
+    content = f.read()
+new_block = '''exclude_patterns:
+    - \\\"**/.venv/**\\\"
+    - \\\"**/venv/**\\\"
+    - \\\"**/node_modules/**\\\"
+    - \\\"**/bin/**\\\"
+    - \\\"**/obj/**\\\"
+    - \\\"**/__pycache__/**\\\"
+    - \\\"**/.git/**\\\"
+    - \\\"**/.pommel/**\\\"
+    - \\\"**/*.egg-info/**\\\"
+    - \\\"**/site-packages/**\\\"
+'''
+content = re.sub(r'exclude_patterns:.*?(?=\ninclude_patterns:)', new_block, content, flags=re.DOTALL)
+with open(cfg, 'w') as f:
+    f.write(content)
+print('exclude_patterns updated')
+" 2>/dev/null || echo "Warning: could not update exclude_patterns"
 
         # Trigger initial reindex
         echo "Triggering initial index..."
