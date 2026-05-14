@@ -346,19 +346,14 @@ def main():
     # Phase 3
     ok, failures = validate_benchmark(benchmark_data)
     if not ok:
-        log.warning("Benchmark below thresholds — NOT starting training:")
+        log.warning("Benchmark below thresholds:")
         for f in failures:
             log.warning("  ✗ %s", f)
-        log.warning("Inspect %s and re-run manually if the index looks correct.", BENCHMARK_OUT)
+        log.warning("Inspect %s and re-run training manually if the index looks correct.", BENCHMARK_OUT)
         sys.exit(1)
 
-    log.info("Benchmark passed all thresholds — proceeding to quality training.")
-    log.info("")
-
-    # Phase 4
-    pid = launch_training()
-    log.info("")
-    log.info("Watchdog done. Training PID %d is running independently.", pid)
+    log.info("Benchmark passed all thresholds.")
+    log.info("Training not started — launch manually when ready.")
     log.info("=" * 70)
 
 
