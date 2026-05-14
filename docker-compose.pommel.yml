@@ -204,31 +204,11 @@ services:
             pm config set embedding.ollama_url http://localhost:11434
             pm config set daemon.host 0.0.0.0
             pm config set daemon.port 7420
+            python3 -c "c=open('/pommel-data/.pommel/config.yaml').read();open('/pommel-data/.pommel/config.yaml','w').write(c.replace(\"- '**/node_modules/**'\",\"- '**/.venv/**'\\n    - '**/venv/**'\\n    - '**/site-packages/**'\\n    - '**/*.egg-info/**'\\n    - '**/node_modules/**'\"))" 2>/dev/null || true
         fi
 
-        # Always write exclude patterns to config (ensures .venv and site-packages stay excluded)
-        python3 -c "
-import re, os
-cfg = '/pommel-data/.pommel/config.yaml'
-with open(cfg, 'r') as f:
-    content = f.read()
-new_block = '''exclude_patterns:
-    - \\\"**/.venv/**\\\"
-    - \\\"**/venv/**\\\"
-    - \\\"**/node_modules/**\\\"
-    - \\\"**/bin/**\\\"
-    - \\\"**/obj/**\\\"
-    - \\\"**/__pycache__/**\\\"
-    - \\\"**/.git/**\\\"
-    - \\\"**/.pommel/**\\\"
-    - \\\"**/*.egg-info/**\\\"
-    - \\\"**/site-packages/**\\\"
-'''
-content = re.sub(r'exclude_patterns:.*?(?=\ninclude_patterns:)', new_block, content, flags=re.DOTALL)
-with open(cfg, 'w') as f:
-    f.write(content)
-print('exclude_patterns updated')
-" 2>/dev/null || echo "Warning: could not update exclude_patterns"
+        # Ensure .venv/site-packages/egg-info are excluded (add if missing)
+        grep -q "\.venv" /pommel-data/.pommel/config.yaml 2>/dev/null || python3 -c "c=open('/pommel-data/.pommel/config.yaml').read();open('/pommel-data/.pommel/config.yaml','w').write(c.replace(\"- '**/node_modules/**'\",\"- '**/.venv/**'\\n    - '**/venv/**'\\n    - '**/site-packages/**'\\n    - '**/*.egg-info/**'\\n    - '**/node_modules/**'\"))" 2>/dev/null || true
 
         # Trigger initial reindex
         echo "Triggering initial index..."
