@@ -55,8 +55,8 @@ class ServerConfig:
         # until the SFU NDCG benchmark confirms it beats single-ranker scoring.
         "rrf_enabled": False,
         # CrossEncoder second-pass reranker on top-20 RRF candidates (~50-100ms).
-        # Ship after confirming latency budget is acceptable (Phase O.2).
-        "crossencoder_enabled": False,
+        # Enabled 2026-05-16 after Q1.4 latency smoke test confirmed acceptable budget.
+        "crossencoder_enabled": True,
         # Structured query log for LambdaMART training data collection (Phase O.3).
         # Writes (query, ranked docs, latency) to query_log_path as JSONL.
         "query_log_enabled": False,
@@ -196,7 +196,7 @@ def load_config() -> ServerConfig:
         "europe_pmc_enabled": False,
         "local_embedding_enabled": True,
         "rrf_enabled": False,
-        "crossencoder_enabled": False,
+        "crossencoder_enabled": True,
         "query_log_enabled": False,
         "local_opensearch_enabled": True,
         "splade_enabled": False,

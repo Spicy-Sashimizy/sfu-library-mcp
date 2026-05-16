@@ -4,7 +4,10 @@ from unittest.mock import patch
 
 import pytest
 
-from lib.reranker import _compute_rrf_scores, _normalize_for_rerank, _EMBEDDING_RRF_K, rerank_results
+from lib.reranker import (
+    _compute_rrf_scores, _normalize_for_rerank, _EMBEDDING_RRF_K,
+    rerank_results, rerank_with_crossencoder,
+)
 
 
 def _make_doc(title="Test", creator="Author", date="2024", doc_type="article",
@@ -422,3 +425,28 @@ class TestRerankerOpenAlexShape:
         result = rerank_results([pnx_doc, oa_doc], "paper", limit=2,
                                 use_embedding=False)
         assert len(result) == 2
+
+
+class TestCrossEncoderReranker:
+    def _flat_doc(self, title: str, abstract: str = "") -> dict:
+        return {"title": title, "abstract": abstract, "date": "2023",
+                "type": "article", "doi": "10.1/x", "authors": ["A"]}
+
+    def test_falls_back_when_crossencoder_unavailable(self, monkeypatch):
+        monkeypatch.setattr("lib.reranker._cross_encoder", False)
+        docs = [self._flat_doc("A"), self._flat_doc("B")]
+        result = rerank_with_crossencoder(docs, "query", limit=2)
+        assert result == docs[:2]
+
+    def test_falls_back_on_model_load_failure(self, monkeypatch):
+        monkeypatch.setattr("lib.reranker._cross_encoder", None)
+        with patch("lib.reranker._get_cross_encoder", return_value=None):
+            docs = [self._flat_doc("A"), self._flat_doc("B")]
+            result = rerank_with_crossencoder(docs, "query", limit=2)
+        assert result == docs[:2]
+
+    def test_respects_limit(self, monkeypatch):
+        monkeypatch.setattr("lib.reranker._cross_encoder", False)
+        docs = [self._flat_doc(f"Doc{i}") for i in range(5)]
+        result = rerank_with_crossencoder(docs, "query", limit=3)
+        assert len(result) == 3
