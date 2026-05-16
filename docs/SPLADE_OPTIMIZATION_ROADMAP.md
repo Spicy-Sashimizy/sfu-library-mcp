@@ -20,9 +20,10 @@
 All of these are parameter or flag changes in existing code. No re-indexing, no new models, no spending.
 
 ### Q1.1 — RRF k-Parameter Tuning
+**Status:** Sweep infrastructure DONE (2026-05-16) — `--k-param` arg added to benchmark. Production constant (`federated_search.py:_RRF_K`) pending sweep result.  
 **Expected gain:** +0.02–0.04 NDCG  
 **Effort:** 2 hours (sweep + benchmark)  
-**File:** `scripts/benchmark_llm_judge.py` → `rrf_fuse()` k parameter; `src/lib/opensearch_retriever.py`
+**File:** `scripts/benchmark_llm_judge.py` → `rrf_fuse()` k parameter; `src/lib/federated_search.py:25` → `_RRF_K`
 
 **The problem:** Current k=60 is the standard default. With only 7.5% overlap between BM25F and SPLADE results, lower k values reward the consensus documents more aggressively. SPLADE alone (0.6534) beats RRF (0.6362) precisely because k=60 is diluting SPLADE's signal.
 
@@ -38,11 +39,11 @@ All of these are parameter or flag changes in existing code. No re-indexing, no 
 ---
 
 ### Q1.2 — BM25F Field Weighting
+**Status:** DONE (2026-05-16)  
 **Expected gain:** +0.01–0.02 on BM25 leg of RRF  
-**Effort:** 30 minutes  
-**File:** `scripts/benchmark_llm_judge.py` → `bm25f_search()`, `src/lib/opensearch_retriever.py`
+**File:** `src/lib/opensearch_retriever.py:120-121`, `scripts/benchmark_llm_judge.py:224`
 
-Switch from `best_fields` (takes max field score) to `most_fields` + `tie_breaker=0.5` (sums field contributions). Better for queries where relevant terms split across title and abstract (Film, Archaeology).
+Switched from `best_fields` (takes max field score) to `most_fields` + `tie_breaker=0.5` (sums field contributions). Better for queries where relevant terms split across title and abstract (Film, Archaeology). Both production retriever and benchmark updated together.
 
 ```python
 # Change in bm25f_search():
@@ -59,11 +60,11 @@ Switch from `best_fields` (takes max field score) to `most_fields` + `tie_breake
 ---
 
 ### Q1.3 — SPLADE Term Expansion Tuning
+**Status:** DONE (2026-05-16) — includes benchmark/production DSL alignment  
 **Expected gain:** +0.01–0.03 NDCG on weak subjects  
-**Effort:** 30 minutes  
-**File:** `scripts/benchmark_llm_judge.py` → `splade_search()` (line ~244), `src/lib/opensearch_retriever.py`
+**File:** `src/lib/opensearch_retriever.py:128-142`, `scripts/benchmark_llm_judge.py:243`
 
-Increase SPLADE's expanded vocabulary from 48 to 64 terms, and raise `scaling_factor` from 1 to 4 to boost rare term weights (as recommended in the original SPLADE paper).
+Increased SPLADE vocabulary 48→64 terms, raised `scaling_factor` 1→4 (SPLADE paper recommendation). **Also fixed a benchmark/production divergence:** production was using `rank_features.linear` (no log scaling) while the benchmark used `bool.should + rank_feature.log.scaling_factor`. Both now use the same DSL — future benchmark numbers directly reflect production behavior.
 
 ```python
 # In splade_search():
@@ -79,9 +80,10 @@ Particularly targets Communication (0.33), History (0.31), Economics (0.29) — 
 ---
 
 ### Q1.4 — Enable Cross-Encoder Reranker
+**Status:** DONE (2026-05-16) — flag flipped; full benchmark pending for NDCG delta + latency gate  
 **Expected gain:** +0.03–0.06 NDCG  
-**Effort:** 15 minutes (flag flip + test)  
-**File:** `src/lib/config.py` → `crossencoder_enabled` flag
+**Rollback:** set `crossencoder_enabled = False` in `src/lib/config.py` lines 59 and 199  
+**File:** `src/lib/config.py` → `crossencoder_enabled = True` (both dataclass default and load_config)
 
 The cross-encoder reranker is already implemented (`src/lib/reranker.py`). It does joint query-document scoring on the top-20 RRF results and re-ranks to top-10. Currently disabled. The high variance in SPLADE results (std 0.46) indicates noisy rank ordering — the reranker fixes this.
 

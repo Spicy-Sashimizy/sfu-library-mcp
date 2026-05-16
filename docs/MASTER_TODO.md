@@ -113,10 +113,10 @@ Previous baseline: `sfu-academic-embed-v4-bge` NDCG@10 = 0.6689 (35-query Phase 
 **DigitalOcean credits available:** 205 (~$42–51 needed for full training path)
 
 ### Q1 — Quick wins (no infra cost):
-- [ ] Q1.1 RRF k-param sweep (k=20-40) — `scripts/benchmark_llm_judge.py`, `src/lib/opensearch_retriever.py`
-- [ ] Q1.2 BM25F most_fields + tie_breaker=0.5 — `src/lib/opensearch_retriever.py`
-- [ ] Q1.3 SPLADE top_k=64 + scaling_factor=4 — `src/lib/opensearch_retriever.py`
-- [ ] Q1.4 Flip cross-encoder ON — `src/lib/config.py` → `crossencoder_enabled = True`
+- [ ] Q1.1 RRF k-param sweep (k=20-40) — `scripts/benchmark_llm_judge.py` now accepts `--k-param`; production constant in `src/lib/federated_search.py:25` pending benchmark sweep result
+- [x] Q1.2 BM25F most_fields + tie_breaker=0.5 — `src/lib/opensearch_retriever.py` + `scripts/benchmark_llm_judge.py` (2026-05-16)
+- [x] Q1.3 SPLADE top_k=64 + scaling_factor=4 — `src/lib/opensearch_retriever.py` + benchmark aligned to same DSL (2026-05-16)
+- [x] Q1.4 Flip cross-encoder ON — `src/lib/config.py` → `crossencoder_enabled = True` (2026-05-16; latency gate: run full benchmark to confirm &lt;500ms overhead)
 
 ### Q2 — Medium effort (no cloud cost):
 - [ ] Q2.1 Zero-coverage subject fallback routing (15 subjects → always LIVE_API)
