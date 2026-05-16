@@ -240,8 +240,8 @@ def bm25f_search(session: requests.Session, query_text: str, k: int = 10) -> lis
 def splade_search(session: requests.Session, sparse_query: dict, k: int = 10) -> list[dict]:
     if not sparse_query:
         return []
-    should = [{"rank_feature": {"field": f"sparse_field.{t}", "boost": w, "log": {"scaling_factor": 1}}}
-              for t, w in sorted(sparse_query.items(), key=lambda x: -x[1])[:48]]
+    should = [{"rank_feature": {"field": f"sparse_field.{t}", "boost": w, "log": {"scaling_factor": 4}}}
+              for t, w in sorted(sparse_query.items(), key=lambda x: -x[1])[:64]]
     body = {"size": k, "query": {"bool": {"should": should}}, "_source": ["openalex_id", "title"]}
     try:
         resp = session.post(f"{OPENSEARCH_URL}/{INDEX}/_search", json=body, timeout=30)

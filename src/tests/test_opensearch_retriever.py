@@ -96,14 +96,25 @@ class TestOpenSearchRetrieverSPLADE:
             splade_model_path="naver/splade-cocondenser-distil",
         )
 
-    def test_splade_query_uses_rank_features(self):
+    def test_splade_query_uses_bool_should(self):
         r = self._retriever()
         fake_sparse = {"quantum": 1.2, "entanglement": 0.8}
         with patch("lib.opensearch_retriever.encode_splade", return_value=fake_sparse):
             body = r._build_splade_query("quantum entanglement", 5)
         assert body["size"] == 5
-        assert "rank_features" in body["query"]
-        assert body["query"]["rank_features"]["field"] == "sparse_field"
+        assert "bool" in body["query"]
+        clauses = body["query"]["bool"]["should"]
+        assert len(clauses) == 2
+        clause = clauses[0]
+        assert "rank_feature" in clause
+        assert clause["rank_feature"]["log"]["scaling_factor"] == 4
+
+    def test_splade_query_respects_max_terms(self):
+        r = self._retriever()
+        fake_sparse = {f"tok{i}": float(100 - i) for i in range(100)}
+        with patch("lib.opensearch_retriever.encode_splade", return_value=fake_sparse):
+            body = r._build_splade_query("query", 10)
+        assert len(body["query"]["bool"]["should"]) == 64
 
     def test_splade_empty_vector_falls_back_to_bm25f(self):
         r = self._retriever()

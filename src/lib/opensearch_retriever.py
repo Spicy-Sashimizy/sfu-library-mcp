@@ -125,19 +125,21 @@ class OpenSearchRetriever:
             "_source": ["doi", "title", "abstract", "publication_year", "type", "is_oa"],
         }
 
-    def _build_splade_query(self, query: str, top_k: int) -> dict:
+    def _build_splade_query(self, query: str, top_k: int, max_terms: int = 64) -> dict:
         sparse = encode_splade(query, self.splade_model_path)
         if not sparse:
             logger.warning("SPLADE encoding produced empty vector; falling back to BM25F")
             return self._build_bm25f_query(query, top_k)
+        # Use bool.should with per-term rank_feature + log scaling (SPLADE paper recommendation).
+        # scaling_factor=4 boosts rare term weights; top max_terms by weight controls latency.
+        should = [
+            {"rank_feature": {"field": f"sparse_field.{t}", "boost": w,
+                              "log": {"scaling_factor": 4}}}
+            for t, w in sorted(sparse.items(), key=lambda x: -x[1])[:max_terms]
+        ]
         return {
             "size": top_k,
-            "query": {
-                "rank_features": {
-                    "field": "sparse_field",
-                    "linear": {"properties": sparse},
-                }
-            },
+            "query": {"bool": {"should": should}},
             "_source": ["doi", "title", "abstract", "publication_year", "type", "is_oa"],
         }
 
