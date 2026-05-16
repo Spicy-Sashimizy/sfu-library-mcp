@@ -118,8 +118,8 @@ class OpenSearchRetriever:
                 "multi_match": {
                     "query": query,
                     "fields": ["title^3", "abstract", "concepts^2"],
-                    "type": "best_fields",
-                    "tie_breaker": 0.3,
+                    "type": "most_fields",
+                    "tie_breaker": 0.5,
                 }
             },
             "_source": ["doi", "title", "abstract", "publication_year", "type", "is_oa"],

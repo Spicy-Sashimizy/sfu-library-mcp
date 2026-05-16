@@ -223,7 +223,7 @@ def fetch_abstracts(session: requests.Session, doc_ids: list[str]) -> dict[str, 
 def bm25f_search(session: requests.Session, query_text: str, k: int = 10) -> list[dict]:
     body = {"size": k, "query": {"multi_match": {"query": query_text,
             "fields": ["title^3", "abstract", "concepts^2"],
-            "type": "best_fields", "tie_breaker": 0.3}},
+            "type": "most_fields", "tie_breaker": 0.5}},
             "_source": ["openalex_id", "title"]}
     try:
         resp = session.post(f"{OPENSEARCH_URL}/{INDEX}/_search", json=body, timeout=15)

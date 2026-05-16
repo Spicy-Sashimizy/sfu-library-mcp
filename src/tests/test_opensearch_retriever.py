@@ -61,9 +61,10 @@ class TestOpenSearchRetrieverBM25F:
         r = self._retriever()
         body = r._build_bm25f_query("machine learning", 10)
         assert body["size"] == 10
-        assert "multi_match" in body["query"]
-        fields = body["query"]["multi_match"]["fields"]
-        assert any("title" in f for f in fields)
+        mm = body["query"]["multi_match"]
+        assert any("title" in f for f in mm["fields"])
+        assert mm["type"] == "most_fields"
+        assert mm["tie_breaker"] == 0.5
 
     def test_is_available_green(self):
         r = self._retriever()
