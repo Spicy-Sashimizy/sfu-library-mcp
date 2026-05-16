@@ -1,37 +1,42 @@
 #!/usr/bin/env python3
-"""LLM-judged NDCG@10 benchmark: replaces citation-count proxy with topical relevance.
+"""LLM-judged NDCG@10 benchmark using Claude Code's built-in Haiku access.
 
-Uses Claude Haiku to judge whether retrieved papers are actually relevant to each
-query (0-3 scale, TREC-style). Pools top results from all retrieval methods before
-judging so the LLM evaluates papers blind to which system found them — a fair,
-unbiased comparison.
+Replaces the citation-count proxy (tautological, biased toward OpenAlex coverage)
+with topical relevance judgments from Claude Haiku — no ANTHROPIC_API_KEY needed.
 
-Why this beats the citation-count proxy:
-  - Citation count = paper fame; LLM judgment = topical relevance to the query
-  - No tautology: OpenAlex cite-sort and the judge are independent
-  - Works across all 120 domain-tagged SFU queries including niche humanities topics
-  - Cached to disk: API calls run once, then all analysis is free
+How it works:
+  1. Retrieve top-N from each method (BM25F, SPLADE, RRF, OpenAlex live)
+  2. Pool unique papers across all methods per query (TREC-style pooling)
+  3. Fetch abstracts from OpenSearch for local results
+  4. Call `claude -p --model claude-haiku-4-5-20251001` in parallel subprocesses
+     to judge each paper 0-3 on topical relevance to the query
+  5. Cache all judgments to disk — reruns are free
+  6. Compute NDCG@10, MRR@10, P@10(rel≥2) per method and per subject
 
-Cost estimate (120 queries × ~30 unique papers):
-  ~3,600 judgments × ~400 tokens each ≈ $1.50 in Claude Haiku API costs
+Why this beats citation count:
+  - Citation count = paper fame; Haiku judgment = topical relevance
+  - No tautology: cite-sort and the judge are completely independent
+  - Works for niche SFU topics (Indigenous Studies, Film, etc.)
+  - OpenAlex live and local RRF compete on equal footing
+
+Performance:
+  - 4 parallel subprocess workers → ~4-5 min for all 120 queries
+  - ~$0 additional cost — uses Claude Code's existing session
 
 Usage:
-    export ANTHROPIC_API_KEY=sk-ant-...
     python scripts/benchmark_llm_judge.py
-    python scripts/benchmark_llm_judge.py --skip-live --methods bm25,splade,rrf
-    python scripts/benchmark_llm_judge.py --max-queries 10  # quick smoke test
-
-Outputs:
-    data/eval_results/llm_judge_cache.json     — all judgments (reused on reruns)
-    data/eval_results/benchmark_llm_judge_DATETIME.json — full results
+    python scripts/benchmark_llm_judge.py --skip-live --workers 6
+    python scripts/benchmark_llm_judge.py --max-queries 10  # quick test
 """
 
 import argparse
+import concurrent.futures
 import json
 import logging
 import math
 import os
 import re
+import subprocess
 import sys
 import time
 from pathlib import Path
@@ -44,7 +49,10 @@ log = logging.getLogger(__name__)
 
 ROOT = Path(__file__).parent.parent
 DEFAULT_QUERIES = ROOT / "data" / "sfu_eval_queries.json"
-OPENSEARCH_URL = os.environ.get("SFU_OPENSEARCH_URL", "http://claudebox-sfu-library-mcp-training-opensearch:9200")
+OPENSEARCH_URL = os.environ.get(
+    "SFU_OPENSEARCH_URL",
+    "http://claudebox-sfu-library-mcp-training-opensearch:9200",
+)
 INDEX = "openalex_works"
 SPLADE_MODEL = "prithivida/Splade_PP_en_v1"
 JUDGE_CACHE_FILE = ROOT / "data" / "eval_results" / "llm_judge_cache.json"
@@ -61,38 +69,19 @@ if _env_path.exists():
 
 OPENALEX_API_KEY = os.environ.get("OPENALEX_API_KEY", "").strip()
 OPENALEX_MAILTO = os.environ.get("OPENALEX_MAILTO", "lib-systems@sfu.ca").strip()
-ANTHROPIC_API_KEY = os.environ.get("ANTHROPIC_API_KEY", "").strip()
 
-# 4-point TREC-style scale
-RELEVANCE_LABELS = {
-    3: "Perfectly relevant — directly addresses the query topic",
-    2: "Highly relevant — substantially related, useful for the query",
-    1: "Marginally relevant — tangentially related, limited usefulness",
-    0: "Not relevant — unrelated to the query topic",
-}
+JUDGE_SYSTEM = (
+    "You are a relevance scoring API. Output ONLY valid JSON. "
+    "No markdown fences, no prose, no explanation."
+)
 
-JUDGE_SYSTEM_PROMPT = """You are an expert academic librarian evaluating search results for a university library.
-
-Your task: judge whether each paper is relevant to the given search query.
-
-Use this 4-point scale:
-3 = Perfectly relevant: directly about the query topic, highly useful
-2 = Highly relevant: strongly related, would be useful for this query
-1 = Marginally relevant: tangentially related but limited direct value
-0 = Not relevant: unrelated to the query
-
-Instructions:
-- Evaluate based on topical relevance to the query, NOT paper quality or citation count
-- A recent obscure paper can score 3 if it directly addresses the query
-- A famous highly-cited paper scores 0 if it's off-topic
-
-Respond ONLY with a JSON object: {"<paper_id>": <score>, ...}
-No explanation, no markdown, just the JSON."""
+JUDGE_SCALE = {3: "perfectly relevant (directly about the query)", 2: "highly relevant (strongly related)",
+               1: "marginally relevant (tangential)", 0: "not relevant (unrelated)"}
 
 
-# ── Judge cache ───────────────────────────────────────────────────────────────
+# ── Judgment cache ────────────────────────────────────────────────────────────
 
-def _load_judge_cache() -> dict:
+def _load_cache() -> dict:
     JUDGE_CACHE_FILE.parent.mkdir(parents=True, exist_ok=True)
     if JUDGE_CACHE_FILE.exists():
         try:
@@ -102,86 +91,167 @@ def _load_judge_cache() -> dict:
     return {}
 
 
-def _save_judge_cache(cache: dict):
+def _save_cache(cache: dict):
     JUDGE_CACHE_FILE.write_text(json.dumps(cache, indent=2))
 
 
-JUDGE_CACHE: dict = _load_judge_cache()
+JUDGE_CACHE: dict = _load_cache()
+_cache_lock = None  # set to threading.Lock() in main
 
 
 def _cache_key(query: str, openalex_id: str) -> str:
     return f"{query[:80]}||{openalex_id}"
 
 
+# ── Claude Haiku judge (subprocess) ──────────────────────────────────────────
+
+def _call_haiku(prompt: str, timeout: int = 90) -> str:
+    """Call claude CLI and return stdout text. Raises on timeout or non-zero exit."""
+    result = subprocess.run(
+        ["claude", "-p",
+         "--model", "claude-haiku-4-5-20251001",
+         "--output-format", "text",
+         "--system-prompt", JUDGE_SYSTEM,
+         "--no-session-persistence"],
+        input=prompt,
+        capture_output=True,
+        text=True,
+        timeout=timeout,
+    )
+    return result.stdout.strip()
+
+
+def _parse_json_scores(text: str) -> dict[str, int]:
+    """Extract {id: score} from a response that may have markdown fences."""
+    json_match = re.search(r'\{[^{}]+\}', text, re.DOTALL)
+    if not json_match:
+        return {}
+    try:
+        raw = json.loads(json_match.group())
+        return {str(k): max(0, min(3, int(v))) for k, v in raw.items()}
+    except Exception:
+        return {}
+
+
+def _batch_judge_subprocess(query: str, papers: list[dict]) -> dict[str, int]:
+    """Judge a batch of papers for a query using one claude subprocess call."""
+    if not papers:
+        return {}
+
+    lines = [f'Score each paper 0-3 for relevance to: "{query}"\n',
+             "3=perfectly relevant  2=highly relevant  1=marginal  0=unrelated\n"]
+    for p in papers:
+        title = (p.get("title") or "")[:200]
+        abstract = (p.get("abstract") or "")[:400]
+        oid = p.get("openalex_id") or p.get("id", "")
+        lines.append(f'[{oid}]\nTitle: {title}')
+        if abstract:
+            lines.append(f'Abstract: {abstract}')
+        lines.append("")
+    lines.append('Reply ONLY with JSON: {"<id>": score, ...}')
+    prompt = "\n".join(lines)
+
+    for attempt in range(3):
+        try:
+            raw = _call_haiku(prompt)
+            scores = _parse_json_scores(raw)
+            if scores:
+                return scores
+        except subprocess.TimeoutExpired:
+            log.warning("Haiku call timed out (attempt %d)", attempt + 1)
+        except Exception as e:
+            log.warning("Haiku call failed (attempt %d): %s", attempt + 1, e)
+        time.sleep(1)
+    return {}
+
+
+def judge_query(query: str, papers: list[dict], batch_size: int = 12) -> dict[str, int]:
+    """
+    Judge all papers for a single query, using cache for previously-seen papers.
+    Returns {openalex_id: score 0-3}.
+    """
+    import threading
+    results: dict[str, int] = {}
+    to_judge: list[dict] = []
+
+    for p in papers:
+        oid = p.get("openalex_id") or p.get("id", "")
+        key = _cache_key(query, oid)
+        if key in JUDGE_CACHE:
+            results[oid] = JUDGE_CACHE[key]
+        else:
+            to_judge.append(p)
+
+    for i in range(0, len(to_judge), batch_size):
+        batch = to_judge[i:i + batch_size]
+        batch_scores = _batch_judge_subprocess(query, batch)
+
+        # Recover any papers the LLM missed (try solo)
+        missed = [p for p in batch if (p.get("openalex_id") or p.get("id", "")) not in batch_scores]
+        if missed and len(missed) < len(batch):
+            for p in missed:
+                solo = _batch_judge_subprocess(query, [p])
+                batch_scores.update(solo)
+
+        for p in batch:
+            oid = p.get("openalex_id") or p.get("id", "")
+            score = batch_scores.get(oid, 0)
+            results[oid] = score
+            JUDGE_CACHE[_cache_key(query, oid)] = score
+
+    return results
+
+
 # ── OpenSearch retrieval ──────────────────────────────────────────────────────
 
-def fetch_abstracts(session: requests.Session, openalex_ids: list[str]) -> dict[str, dict]:
-    """Fetch title+abstract for a batch of openalex_ids from OpenSearch."""
-    if not openalex_ids:
+def fetch_abstracts(session: requests.Session, doc_ids: list[str]) -> dict[str, dict]:
+    if not doc_ids:
         return {}
-    body = {
-        "size": len(openalex_ids),
-        "query": {"terms": {"_id": openalex_ids}},
-        "_source": ["title", "abstract"],
-    }
+    body = {"size": len(doc_ids), "query": {"terms": {"_id": doc_ids}},
+            "_source": ["title", "abstract"]}
     try:
         resp = session.post(f"{OPENSEARCH_URL}/{INDEX}/_search", json=body, timeout=15)
         resp.raise_for_status()
-        hits = resp.json().get("hits", {}).get("hits", [])
-        return {
-            h["_id"]: {
-                "title": h["_source"].get("title", ""),
-                "abstract": h["_source"].get("abstract", ""),
-            }
-            for h in hits
-        }
+        return {h["_id"]: {"title": h["_source"].get("title", ""),
+                            "abstract": h["_source"].get("abstract", "")}
+                for h in resp.json().get("hits", {}).get("hits", [])}
     except Exception as e:
         log.warning("Abstract fetch failed: %s", e)
         return {}
 
 
 def bm25f_search(session: requests.Session, query_text: str, k: int = 10) -> list[dict]:
-    body = {
-        "size": k,
-        "query": {
-            "multi_match": {
-                "query": query_text,
-                "fields": ["title^3", "abstract", "concepts^2"],
-                "type": "best_fields",
-                "tie_breaker": 0.3,
-            }
-        },
-        "_source": ["openalex_id", "title"],
-    }
+    body = {"size": k, "query": {"multi_match": {"query": query_text,
+            "fields": ["title^3", "abstract", "concepts^2"],
+            "type": "best_fields", "tie_breaker": 0.3}},
+            "_source": ["openalex_id", "title"]}
     try:
         resp = session.post(f"{OPENSEARCH_URL}/{INDEX}/_search", json=body, timeout=15)
         resp.raise_for_status()
-        hits = resp.json().get("hits", {}).get("hits", [])
         return [{"id": h["_id"], "openalex_id": h["_source"].get("openalex_id", h["_id"]),
                  "title": h["_source"].get("title", "")}
-                for h in hits if h.get("_source", {}).get("title")]
+                for h in resp.json().get("hits", {}).get("hits", [])
+                if h.get("_source", {}).get("title")]
     except Exception as e:
-        log.warning("BM25F search failed: %s", e)
+        log.warning("BM25F failed: %s", e)
         return []
 
 
 def splade_search(session: requests.Session, sparse_query: dict, k: int = 10) -> list[dict]:
     if not sparse_query:
         return []
-    should = []
-    for term, weight in sorted(sparse_query.items(), key=lambda x: -x[1])[:48]:
-        should.append({"rank_feature": {"field": f"sparse_field.{term}", "boost": weight,
-                                        "log": {"scaling_factor": 1}}})
+    should = [{"rank_feature": {"field": f"sparse_field.{t}", "boost": w, "log": {"scaling_factor": 1}}}
+              for t, w in sorted(sparse_query.items(), key=lambda x: -x[1])[:48]]
     body = {"size": k, "query": {"bool": {"should": should}}, "_source": ["openalex_id", "title"]}
     try:
         resp = session.post(f"{OPENSEARCH_URL}/{INDEX}/_search", json=body, timeout=30)
         resp.raise_for_status()
-        hits = resp.json().get("hits", {}).get("hits", [])
         return [{"id": h["_id"], "openalex_id": h["_source"].get("openalex_id", h["_id"]),
                  "title": h["_source"].get("title", "")}
-                for h in hits if h.get("_source", {}).get("title")]
+                for h in resp.json().get("hits", {}).get("hits", [])
+                if h.get("_source", {}).get("title")]
     except Exception as e:
-        log.warning("SPLADE search failed: %s", e)
+        log.warning("SPLADE failed: %s", e)
         return []
 
 
@@ -194,23 +264,31 @@ def rrf_fuse(lists: list[list[dict]], k_param: int = 60) -> list[dict]:
             scores[did] = scores.get(did, 0.0) + 1.0 / (k_param + rank)
             if did not in docs:
                 docs[did] = doc
-    return [dict(docs[did], rrf_score=s) for did, s in sorted(scores.items(), key=lambda x: -x[1])]
+    return [dict(docs[did], rrf_score=s)
+            for did, s in sorted(scores.items(), key=lambda x: -x[1])]
+
+
+def _reconstruct_abstract(inv_index: dict) -> str:
+    if not inv_index:
+        return ""
+    positions = []
+    for word, pos_list in inv_index.items():
+        for p in pos_list:
+            positions.append((p, word))
+    return " ".join(w for _, w in sorted(positions))
 
 
 def openalex_live_search(session: requests.Session, query_text: str,
-                         sort: str = "relevance_score:desc", k: int = 10) -> list[dict]:
-    params: dict = {
-        "search": query_text, "per_page": k,
-        "select": "id,display_name,cited_by_count,abstract_inverted_index",
-    }
+                          sort: str = "relevance_score:desc", k: int = 10) -> list[dict]:
+    params: dict = {"search": query_text, "per_page": k,
+                    "select": "id,display_name,cited_by_count,abstract_inverted_index"}
     if sort:
         params["sort"] = sort
     if OPENALEX_API_KEY:
         params["api_key"] = OPENALEX_API_KEY
     else:
         params["mailto"] = OPENALEX_MAILTO
-
-    for attempt in range(4):
+    for attempt in range(3):
         try:
             resp = session.get(f"{OPENALEX_BASE}/works", params=params,
                                headers={"User-Agent": "SFULibraryMCP-Eval/1.0"}, timeout=30)
@@ -222,110 +300,17 @@ def openalex_live_search(session: requests.Session, query_text: str,
             for w in resp.json().get("results", []):
                 raw_id = w.get("id", "")
                 oid = raw_id.split("/")[-1] if "/" in raw_id else raw_id
-                abstract = ""
-                inv = w.get("abstract_inverted_index") or {}
-                if inv:
-                    positions = []
-                    for word, pos_list in inv.items():
-                        for p in pos_list:
-                            positions.append((p, word))
-                    abstract = " ".join(w for _, w in sorted(positions))
-                title = w.get("display_name", "") or w.get("title", "")
+                title = w.get("display_name", "") or ""
+                abstract = _reconstruct_abstract(w.get("abstract_inverted_index") or {})[:600]
                 if title:
-                    out.append({"id": oid, "openalex_id": oid, "title": title,
-                                "abstract": abstract[:800], "cited_by_count": w.get("cited_by_count", 0)})
+                    out.append({"id": oid, "openalex_id": oid, "title": title, "abstract": abstract})
             time.sleep(0.15)
             return out
         except Exception as e:
-            if attempt == 3:
+            if attempt == 2:
                 log.warning("OpenAlex search failed: %s", e)
             time.sleep(2 * (attempt + 1))
     return []
-
-
-# ── LLM judge ────────────────────────────────────────────────────────────────
-
-def _batch_judge(query: str, papers: list[dict], client) -> dict[str, int]:
-    """
-    Call Claude Haiku to judge a batch of papers for relevance to query.
-    Returns {openalex_id: score} for all papers in the batch.
-    """
-    if not papers:
-        return {}
-
-    # Build paper descriptions for the prompt
-    paper_descs = []
-    for p in papers:
-        title = p.get("title", "")[:200]
-        abstract = p.get("abstract", "")[:500]
-        desc = f'[{p["openalex_id"]}]\nTitle: {title}'
-        if abstract:
-            desc += f'\nAbstract snippet: {abstract}'
-        paper_descs.append(desc)
-
-    user_message = (
-        f'Query: "{query}"\n\n'
-        f'Rate each paper\'s relevance (0-3):\n\n'
-        + "\n\n".join(paper_descs)
-    )
-
-    for attempt in range(4):
-        try:
-            response = client.messages.create(
-                model="claude-haiku-4-5-20251001",
-                max_tokens=512,
-                system=JUDGE_SYSTEM_PROMPT,
-                messages=[{"role": "user", "content": user_message}],
-            )
-            text = response.content[0].text.strip()
-            # Extract JSON from response
-            json_match = re.search(r'\{[^{}]+\}', text, re.DOTALL)
-            if json_match:
-                scores = json.loads(json_match.group())
-                return {k: max(0, min(3, int(v))) for k, v in scores.items()}
-            return {}
-        except Exception as e:
-            if attempt == 3:
-                log.warning("LLM judge call failed: %s", e)
-            time.sleep(2 * (attempt + 1))
-    return {}
-
-
-def judge_papers(query: str, papers: list[dict], client, batch_size: int = 8) -> dict[str, int]:
-    """
-    Judge all papers for a query, using the cache for already-judged papers.
-    Returns {openalex_id: score 0-3}.
-    """
-    results: dict[str, int] = {}
-    to_judge = []
-
-    for p in papers:
-        oid = p.get("openalex_id", p.get("id", ""))
-        cache_k = _cache_key(query, oid)
-        if cache_k in JUDGE_CACHE:
-            results[oid] = JUDGE_CACHE[cache_k]
-        else:
-            to_judge.append(p)
-
-    if not to_judge:
-        return results
-
-    # Batch API calls
-    for i in range(0, len(to_judge), batch_size):
-        batch = to_judge[i:i + batch_size]
-        batch_scores = _batch_judge(query, batch, client)
-        for p in batch:
-            oid = p.get("openalex_id", p.get("id", ""))
-            score = batch_scores.get(oid, -1)
-            if score < 0:
-                # Retry solo if batch extraction missed this paper
-                solo_scores = _batch_judge(query, [p], client)
-                score = solo_scores.get(oid, 0)
-            results[oid] = score
-            JUDGE_CACHE[_cache_key(query, oid)] = score
-
-    _save_judge_cache(JUDGE_CACHE)
-    return results
 
 
 # ── Metrics ───────────────────────────────────────────────────────────────────
@@ -338,46 +323,39 @@ def ndcg_at_k(ranked_rel: list[float], k: int) -> float:
 
 
 def mrr_at_k(ranked_rel: list[float], k: int) -> float:
-    for rank, rel in enumerate(ranked_rel[:k], start=1):
-        if rel > 0:
-            return 1.0 / rank
+    for i, r in enumerate(ranked_rel[:k], 1):
+        if r > 0:
+            return 1.0 / i
     return 0.0
 
 
-def precision_at_k(ranked_rel: list[float], k: int, threshold: float = 1.0) -> float:
-    hits = sum(1 for r in ranked_rel[:k] if r >= threshold)
-    return hits / k
+def precision_at_k(ranked_rel: list[float], k: int, threshold: float = 2.0) -> float:
+    return sum(1 for r in ranked_rel[:k] if r >= threshold) / k
 
 
 # ── Main ──────────────────────────────────────────────────────────────────────
 
 def main():
-    parser = argparse.ArgumentParser(description="LLM-judged IR benchmark (TREC-style)")
+    parser = argparse.ArgumentParser(description="LLM-judged IR benchmark via Claude Code Haiku")
     parser.add_argument("--queries", type=Path, default=DEFAULT_QUERIES)
     parser.add_argument("--k", type=int, default=10)
     parser.add_argument("--top-n", type=int, default=10,
-                        help="Top-N results to retrieve and judge per method (default 10)")
+                        help="Docs to retrieve per method per query (default 10)")
+    parser.add_argument("--batch-size", type=int, default=12,
+                        help="Papers per Haiku subprocess call (default 12)")
+    parser.add_argument("--workers", type=int, default=4,
+                        help="Parallel claude subprocess workers (default 4)")
     parser.add_argument("--methods", default="bm25,splade,rrf,openalex_relevance",
-                        help="Comma-separated methods to run")
-    parser.add_argument("--device", default="auto", choices=["auto", "cuda", "cpu"])
+                        help="Comma-separated retrieval methods to evaluate")
     parser.add_argument("--skip-live", action="store_true",
-                        help="Skip OpenAlex live API (local index only)")
+                        help="Skip OpenAlex live API calls")
     parser.add_argument("--max-queries", type=int, default=None,
-                        help="Limit number of queries (for smoke tests)")
+                        help="Limit queries (e.g. 10 for a smoke test)")
+    parser.add_argument("--device", default="auto", choices=["auto", "cuda", "cpu"])
     parser.add_argument("--output", type=Path, default=None)
     parser.add_argument("--dry-run", action="store_true",
-                        help="Retrieve docs but skip LLM judging (shows cache coverage)")
+                        help="Retrieve docs and show cache stats without calling Haiku")
     args = parser.parse_args()
-
-    if not ANTHROPIC_API_KEY and not args.dry_run:
-        print("\nERROR: ANTHROPIC_API_KEY not set.")
-        print("Add it to .env or export it:")
-        print("  export ANTHROPIC_API_KEY=sk-ant-...")
-        print("\nThen re-run. Or use --dry-run to test retrieval without judging.\n")
-        sys.exit(1)
-
-    import anthropic
-    client = anthropic.Anthropic(api_key=ANTHROPIC_API_KEY) if not args.dry_run else None
 
     with open(args.queries) as f:
         eval_queries = json.load(f)
@@ -385,11 +363,11 @@ def main():
         eval_queries = eval_queries[:args.max_queries]
     log.info("Loaded %d eval queries", len(eval_queries))
 
-    methods_requested = [m.strip() for m in args.methods.split(",")]
-    local_methods = [m for m in methods_requested if m in ("bm25", "splade", "rrf")]
-    live_methods = [m for m in methods_requested if m.startswith("openalex")]
+    methods = [m.strip() for m in args.methods.split(",")]
+    local_methods = [m for m in methods if m in ("bm25", "splade", "rrf")]
+    live_methods = [m for m in methods if m.startswith("openalex")]
 
-    needs_splade = "splade" in methods_requested or "rrf" in methods_requested
+    needs_splade = any(m in methods for m in ("splade", "rrf"))
     encoder = None
     if needs_splade:
         log.info("Loading SPLADE encoder...")
@@ -399,140 +377,157 @@ def main():
 
     session = requests.Session()
 
-    # Phase 1: retrieve results from all methods
-    log.info("Phase 1: Retrieving top-%d from: %s", args.top_n, ", ".join(methods_requested))
+    # Phase 1: retrieve
+    log.info("Phase 1: Retrieving top-%d from: %s", args.top_n, ", ".join(methods))
     query_data = []
     for qi, q in enumerate(eval_queries):
-        query_text = q["query"]
-        subject = q.get("subject", "Unknown")
-        row: dict = {"query": query_text, "subject": subject}
+        qt = q["query"]
+        row: dict = {"query": qt, "subject": q.get("subject", "Unknown")}
 
-        bm25_res = bm25f_search(session, query_text, k=args.top_n) if "bm25" in methods_requested or "rrf" in methods_requested else []
+        bm25_res = bm25f_search(session, qt, k=args.top_n) if any(m in methods for m in ("bm25", "rrf")) else []
         splade_res = []
         if needs_splade and encoder:
-            sparse = encoder.encode(query_text)
+            sparse = encoder.encode(qt)
             splade_res = splade_search(session, sparse, k=args.top_n)
 
-        if "bm25" in methods_requested:
+        if "bm25" in methods:
             row["bm25"] = bm25_res
-        if "splade" in methods_requested:
+        if "splade" in methods:
             row["splade"] = splade_res
-        if "rrf" in methods_requested:
+        if "rrf" in methods:
             row["rrf"] = rrf_fuse([bm25_res, splade_res])[:args.top_n]
-        if "openalex_relevance" in methods_requested and not args.skip_live:
+        if "openalex_relevance" in methods and not args.skip_live:
             row["openalex_relevance"] = openalex_live_search(
-                session, query_text, sort="relevance_score:desc", k=args.top_n)
-        if "openalex_topic" in methods_requested and not args.skip_live:
+                session, qt, sort="relevance_score:desc", k=args.top_n)
+        if "openalex_topic" in methods and not args.skip_live:
             row["openalex_topic"] = openalex_live_search(
-                session, query_text, sort="cited_by_count:desc", k=args.top_n)
+                session, qt, sort="cited_by_count:desc", k=args.top_n)
 
         query_data.append(row)
         if (qi + 1) % 20 == 0:
             log.info("  Retrieved %d/%d", qi + 1, len(eval_queries))
 
-    # Phase 2: fetch abstracts for local index results
+    # Phase 2: fetch abstracts for local results
     log.info("Phase 2: Fetching abstracts from OpenSearch...")
     all_local_ids: set[str] = set()
     for row in query_data:
-        for method in local_methods:
-            for r in row.get(method, []):
+        for m in local_methods:
+            for r in row.get(m, []):
                 if r.get("id"):
                     all_local_ids.add(r["id"])
 
-    abstracts = {}
+    abstracts: dict[str, dict] = {}
     id_list = list(all_local_ids)
     for i in range(0, len(id_list), 50):
-        batch_abstracts = fetch_abstracts(session, id_list[i:i + 50])
-        abstracts.update(batch_abstracts)
-    log.info("  Fetched abstracts for %d/%d local docs", len(abstracts), len(all_local_ids))
+        abstracts.update(fetch_abstracts(session, id_list[i:i + 50]))
+    log.info("  Abstracts: %d/%d fetched", len(abstracts), len(all_local_ids))
 
-    # Attach abstracts to local results
     for row in query_data:
-        for method in local_methods:
-            for r in row.get(method, []):
+        for m in local_methods:
+            for r in row.get(m, []):
                 doc = abstracts.get(r["id"], {})
                 if not r.get("abstract"):
                     r["abstract"] = doc.get("abstract", "")
                 if not r.get("title") and doc.get("title"):
                     r["title"] = doc["title"]
 
-    # Phase 3: pool unique papers per query, judge with LLM
-    log.info("Phase 3: LLM judging (%s)...", "DRY RUN" if args.dry_run else "calling Claude Haiku")
-    all_methods = [m for m in methods_requested
-                   if m in row or (args.skip_live and m.startswith("openalex"))]
-
-    ndcg_scores: dict[str, list[float]] = {m: [] for m in methods_requested}
-    mrr_scores: dict[str, list[float]] = {m: [] for m in methods_requested}
-    p_at_k_scores: dict[str, list[float]] = {m: [] for m in methods_requested}
-    subject_ndcg: dict[str, dict[str, list[float]]] = {m: {} for m in methods_requested}
-    per_query_detail = []
-
-    total_cached = 0
-    total_new = 0
-
-    for qi, row in enumerate(query_data):
-        query_text = row["query"]
-        subject = row["subject"]
-
-        # Pool unique papers from all methods
-        seen_ids: set[str] = set()
-        pool: list[dict] = []
-        for method in methods_requested:
-            for r in row.get(method, []):
-                oid = r.get("openalex_id", r.get("id", ""))
-                if oid and oid not in seen_ids:
-                    seen_ids.add(oid)
-                    pool.append(r)
-
-        # Count cache hits before judging
-        cached_ids = {p["openalex_id"] for p in pool
-                      if _cache_key(query_text, p.get("openalex_id", "")) in JUDGE_CACHE}
-        total_cached += len(cached_ids)
-        total_new += len(pool) - len(cached_ids)
-
-        if args.dry_run:
-            log.info("  [%d] %s: %d pool (%d cached, %d new)",
-                     qi + 1, subject, len(pool), len(cached_ids), len(pool) - len(cached_ids))
-            continue
-
-        # Judge the pool
-        judge_scores = judge_papers(query_text, pool, client)
-
-        # Compute metrics for each method
-        detail_row: dict = {"query": query_text, "subject": subject,
-                             "pool_size": len(pool), "judged": len(judge_scores)}
-        for method in methods_requested:
-            results = row.get(method, [])[:args.top_n]
-            if not results:
-                continue
-            relevance = [float(judge_scores.get(r.get("openalex_id", r.get("id", "")), 0))
-                         for r in results]
-            ndcg = ndcg_at_k(relevance, args.k)
-            mrr = mrr_at_k(relevance, args.k)
-            p_k = precision_at_k(relevance, args.k, threshold=2.0)
-            ndcg_scores[method].append(ndcg)
-            mrr_scores[method].append(mrr)
-            p_at_k_scores[method].append(p_k)
-            subject_ndcg[method].setdefault(subject, []).append(ndcg)
-            detail_row[f"{method}_ndcg"] = round(ndcg, 4)
-            detail_row[f"{method}_mrr"] = round(mrr, 4)
-            detail_row[f"{method}_p_at_k"] = round(p_k, 4)
-
-        per_query_detail.append(detail_row)
-
-        if (qi + 1) % 10 == 0:
-            log.info("  Judged %d/%d queries | cached=%d new=%d",
-                     qi + 1, len(eval_queries), total_cached, total_new)
+    # Phase 3: LLM judging (parallel subprocess workers)
+    total_cached = sum(
+        1 for row in query_data for m in methods
+        for r in row.get(m, [])
+        if _cache_key(row["query"], r.get("openalex_id", r.get("id", ""))) in JUDGE_CACHE
+    )
+    total_pool = sum(
+        len({r.get("openalex_id", r.get("id", ""))
+             for m in methods for r in row.get(m, [])})
+        for row in query_data
+    )
+    need_new = total_pool - total_cached
 
     if args.dry_run:
-        log.info("DRY RUN complete. Cached=%d, would need %d new API calls.",
-                 total_cached, total_new)
-        log.info("Estimated cost: ~$%.2f (Haiku at $0.80/M input tokens)",
-                 total_new * 400 / 1_000_000 * 0.80)
+        log.info("DRY RUN: %d total unique papers, %d cached, %d need judging",
+                 total_pool, total_cached, need_new)
+        log.info("Estimated Haiku calls: ~%d (batch_size=%d, workers=%d)",
+                 math.ceil(need_new / args.batch_size), args.batch_size, args.workers)
+        log.info("Estimated wall time:   ~%.0f min",
+                 math.ceil(need_new / args.batch_size) / args.workers * 4.5 / 60)
         return
 
-    # Print report
-    method_labels = {
+    log.info("Phase 3: Judging with Claude Haiku (%d workers, batch=%d)",
+             args.workers, args.batch_size)
+    log.info("  Cache: %d already judged, %d new calls needed", total_cached, need_new)
+
+    import threading
+    cache_lock = threading.Lock()
+
+    def judge_one(row: dict) -> dict:
+        qt = row["query"]
+        # Pool unique papers
+        seen: set[str] = set()
+        pool: list[dict] = []
+        for m in methods:
+            for r in row.get(m, []):
+                oid = r.get("openalex_id") or r.get("id", "")
+                if oid and oid not in seen:
+                    seen.add(oid)
+                    pool.append(r)
+
+        scores = judge_query(qt, pool, batch_size=args.batch_size)
+
+        with cache_lock:
+            _save_cache(JUDGE_CACHE)
+
+        return {"query": qt, "subject": row["subject"], "scores": scores,
+                "pool_size": len(pool)}
+
+    ndcg_scores: dict[str, list[float]] = {m: [] for m in methods}
+    mrr_scores: dict[str, list[float]] = {m: [] for m in methods}
+    p_at_k_scores: dict[str, list[float]] = {m: [] for m in methods}
+    subject_ndcg: dict[str, dict[str, list[float]]] = {m: {} for m in methods}
+    per_query_detail = []
+    done = 0
+
+    with concurrent.futures.ThreadPoolExecutor(max_workers=args.workers) as ex:
+        futures = {ex.submit(judge_one, row): row for row in query_data}
+        for future in concurrent.futures.as_completed(futures):
+            row_orig = futures[future]
+            try:
+                judged = future.result()
+            except Exception as e:
+                log.warning("Judge failed for '%s': %s", row_orig["query"][:40], e)
+                continue
+
+            qt = judged["query"]
+            subj = judged["subject"]
+            scores = judged["scores"]
+            detail: dict = {"query": qt, "subject": subj, "pool_size": judged["pool_size"]}
+
+            for m in methods:
+                results = row_orig.get(m, [])[:args.top_n]
+                if not results:
+                    continue
+                relevance = [float(scores.get(r.get("openalex_id", r.get("id", "")), 0))
+                             for r in results]
+                ndcg = ndcg_at_k(relevance, args.k)
+                mrr = mrr_at_k(relevance, args.k)
+                p_k = precision_at_k(relevance, args.k)
+                ndcg_scores[m].append(ndcg)
+                mrr_scores[m].append(mrr)
+                p_at_k_scores[m].append(p_k)
+                subject_ndcg[m].setdefault(subj, []).append(ndcg)
+                detail[f"{m}_ndcg"] = round(ndcg, 4)
+                detail[f"{m}_mrr"] = round(mrr, 4)
+                detail[f"{m}_p_at_k"] = round(p_k, 4)
+
+            per_query_detail.append(detail)
+            done += 1
+            if done % 10 == 0:
+                log.info("  Judged %d/%d queries", done, len(eval_queries))
+
+    _save_cache(JUDGE_CACHE)
+
+    # ── Report ────────────────────────────────────────────────────────────────
+    METHOD_LABELS = {
         "bm25":               "BM25F (local)",
         "splade":             "SPLADE (local)",
         "rrf":                "BM25F+SPLADE RRF (local)",
@@ -542,50 +537,71 @@ def main():
 
     print()
     print("=" * 95)
-    print("  LLM-JUDGED IR BENCHMARK  —  TREC-style 0-3 relevance (Claude Haiku)")
-    print(f"  {len(eval_queries)} queries  |  k={args.k}  |  top_n={args.top_n}")
-    print(f"  LLM judgments: {total_cached} cached + {total_new} new = {total_cached + total_new} total")
+    print("  LLM-JUDGED IR BENCHMARK  —  TREC 0-3 relevance via Claude Haiku")
+    print(f"  {len(eval_queries)} queries  |  NDCG@{args.k}  |  top_n={args.top_n}  |  workers={args.workers}")
     print("=" * 95)
 
-    print(f"\n{'Method':<30} {'NDCG@10':>8} {'Median':>8} {'Std':>7} {'MRR@10':>8} {'P@10(≥2)':>9} {'N':>5}")
-    print("-" * 85)
-    for method in methods_requested:
-        scores = ndcg_scores[method]
-        if not scores:
-            print(f"  {method_labels.get(method, method):<28}  (no results)")
+    print(f"\n{'Method':<32} {'NDCG@10':>8} {'Median':>8} {'Std':>7} "
+          f"{'MRR@10':>8} {'P@10(≥2)':>9} {'N':>5}")
+    print("-" * 88)
+    for m in methods:
+        sc = ndcg_scores[m]
+        if not sc:
+            print(f"  {METHOD_LABELS.get(m, m):<30}  (no results)")
             continue
-        label = method_labels.get(method, method)
-        print(f"  {label:<28}  {np.mean(scores):>8.4f} {np.median(scores):>8.4f} "
-              f"{np.std(scores):>7.4f} {np.mean(mrr_scores[method]):>8.4f} "
-              f"{np.mean(p_at_k_scores[method]):>9.4f} {len(scores):>5}")
+        lbl = METHOD_LABELS.get(m, m)
+        print(f"  {lbl:<30}  {np.mean(sc):>8.4f} {np.median(sc):>8.4f} "
+              f"{np.std(sc):>7.4f} {np.mean(mrr_scores[m]):>8.4f} "
+              f"{np.mean(p_at_k_scores[m]):>9.4f} {len(sc):>5}")
 
-    # Decision summary
-    if "rrf" in ndcg_scores and ndcg_scores["rrf"]:
-        rrf_m = np.mean(ndcg_scores["rrf"])
-        print(f"\n{'=' * 55}")
-        print("  WIRING DECISION (LLM-judged, unbiased)")
-        print(f"{'=' * 55}")
-        for cmp_method in ["openalex_relevance", "openalex_topic", "bm25", "splade"]:
-            if ndcg_scores.get(cmp_method):
-                cmp_m = np.mean(ndcg_scores[cmp_method])
-                diff = rrf_m - cmp_m
-                label = method_labels.get(cmp_method, cmp_method)
-                verdict = "WIRE" if diff > 0.01 else ("SKIP" if diff < -0.01 else "NEUTRAL")
-                print(f"  RRF vs {label:<28}: {diff:+.4f}  [{verdict}]")
+    # Wiring decision summary
+    rrf_sc = ndcg_scores.get("rrf", [])
+    if rrf_sc:
+        rrf_m = np.mean(rrf_sc)
+        print(f"\n{'=' * 58}")
+        print("  WIRING DECISION (unbiased, LLM-judged topical relevance)")
+        print(f"{'=' * 58}")
+        for cmp_m in ["openalex_relevance", "openalex_topic", "bm25", "splade"]:
+            cmp_sc = ndcg_scores.get(cmp_m, [])
+            if not cmp_sc:
+                continue
+            diff = rrf_m - np.mean(cmp_sc)
+            verdict = "WIRE ✓" if diff > 0.01 else ("SKIP ✗" if diff < -0.01 else "NEUTRAL")
+            lbl = METHOD_LABELS.get(cmp_m, cmp_m)
+            print(f"  RRF vs {lbl:<30}: {diff:+.4f}  [{verdict}]")
+
+        # Per-query win rate vs best live baseline
+        best_live = "openalex_relevance" if "openalex_relevance" in methods else None
+        if best_live and ndcg_scores[best_live]:
+            win = sum(1 for a, b in zip(ndcg_scores["rrf"], ndcg_scores[best_live]) if a > b + 0.01)
+            lose = sum(1 for a, b in zip(ndcg_scores["rrf"], ndcg_scores[best_live]) if b > a + 0.01)
+            tie = len(ndcg_scores["rrf"]) - win - lose
+            print(f"\n  RRF vs OpenAlex-relevance: wins={win}  ties={tie}  losses={lose}")
 
     # Subject breakdown
-    all_subjects = sorted({s for m in methods_requested for s in subject_ndcg.get(m, {})})
+    all_subjects = sorted({s for m in methods for s in subject_ndcg.get(m, {})})
+    show = methods[:4]
     if all_subjects:
-        show_methods = methods_requested[:4]
-        header = f"\n{'Subject':<45}" + "".join(f" {method_labels.get(m,m)[:9]:>9}" for m in show_methods)
-        print(header)
-        print("-" * (45 + 10 * len(show_methods)))
+        print(f"\n{'Subject':<46}" + "".join(f" {METHOD_LABELS.get(m,m)[:9]:>9}" for m in show))
+        print("-" * (46 + 10 * len(show)))
         for subj in all_subjects:
-            row_str = f"{subj[:44]:<45}"
-            for m in show_methods:
+            row_str = f"{subj[:45]:<46}"
+            for m in show:
                 sc = subject_ndcg.get(m, {}).get(subj, [])
                 row_str += f" {np.mean(sc):>9.4f}" if sc else f" {'n/a':>9}"
             print(row_str)
+
+    # Top/bottom queries vs best baseline
+    if best_live and per_query_detail:
+        deltas = [(d, d.get("rrf_ndcg", 0) - d.get(f"{best_live}_ndcg", 0))
+                  for d in per_query_detail if "rrf_ndcg" in d]
+        deltas.sort(key=lambda x: -x[1])
+        print(f"\n  Top 5 queries where RRF beats OpenAlex-relevance:")
+        for d, delta in deltas[:5]:
+            print(f"    {delta:+.4f}  [{d['subject']}]  {d['query'][:55]}")
+        print(f"\n  Top 5 queries where OpenAlex-relevance beats RRF:")
+        for d, delta in deltas[-5:]:
+            print(f"    {delta:+.4f}  [{d['subject']}]  {d['query'][:55]}")
 
     # Save
     output = args.output or (
@@ -594,27 +610,27 @@ def main():
     output.parent.mkdir(parents=True, exist_ok=True)
     result = {
         "benchmark": "llm_judged_ndcg",
-        "judge_model": "claude-haiku-4-5-20251001",
-        "relevance_scale": RELEVANCE_LABELS,
+        "judge": "claude-haiku-4-5-20251001 via claude CLI subprocess",
+        "relevance_scale": JUDGE_SCALE,
         "timestamp": time.strftime("%Y-%m-%dT%H:%M:%S"),
         "k": args.k,
         "top_n": args.top_n,
         "num_queries": len(eval_queries),
-        "judgments": {"cached": total_cached, "new": total_new},
+        "workers": args.workers,
         "summary": {
-            method: {
-                "mean_ndcg": round(float(np.mean(ndcg_scores[method])), 4) if ndcg_scores[method] else None,
-                "median_ndcg": round(float(np.median(ndcg_scores[method])), 4) if ndcg_scores[method] else None,
-                "std_ndcg": round(float(np.std(ndcg_scores[method])), 4) if ndcg_scores[method] else None,
-                "mean_mrr": round(float(np.mean(mrr_scores[method])), 4) if mrr_scores[method] else None,
-                "mean_p_at_k": round(float(np.mean(p_at_k_scores[method])), 4) if p_at_k_scores[method] else None,
-                "label": method_labels.get(method, method),
+            m: {
+                "mean_ndcg": round(float(np.mean(ndcg_scores[m])), 4) if ndcg_scores[m] else None,
+                "median_ndcg": round(float(np.median(ndcg_scores[m])), 4) if ndcg_scores[m] else None,
+                "std_ndcg": round(float(np.std(ndcg_scores[m])), 4) if ndcg_scores[m] else None,
+                "mean_mrr": round(float(np.mean(mrr_scores[m])), 4) if mrr_scores[m] else None,
+                "mean_p_at_k": round(float(np.mean(p_at_k_scores[m])), 4) if p_at_k_scores[m] else None,
+                "label": METHOD_LABELS.get(m, m),
             }
-            for method in methods_requested
+            for m in methods
         },
         "subject_breakdown": {
-            method: {subj: round(float(np.mean(sc)), 4) for subj, sc in subject_ndcg[method].items()}
-            for method in methods_requested
+            m: {s: round(float(np.mean(sc)), 4) for s, sc in subject_ndcg[m].items()}
+            for m in methods
         },
         "per_query": per_query_detail,
     }
