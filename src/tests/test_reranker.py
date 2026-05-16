@@ -4,7 +4,7 @@ from unittest.mock import patch
 
 import pytest
 
-from lib.reranker import _compute_rrf_scores, _normalize_for_rerank, _RRF_K, rerank_results
+from lib.reranker import _compute_rrf_scores, _normalize_for_rerank, _EMBEDDING_RRF_K, rerank_results
 
 
 def _make_doc(title="Test", creator="Author", date="2024", doc_type="article",
@@ -130,7 +130,7 @@ class TestRRFScoring:
 
     def test_rrf_constant_is_60(self):
         """k=60 is the literature default; document the choice."""
-        assert _RRF_K == 60
+        assert _EMBEDDING_RRF_K == 60
 
     def test_rrf_disabled_uses_raw_cosine(self):
         """When use_rrf=False, semantic scoring uses raw cosine (existing behaviour)."""

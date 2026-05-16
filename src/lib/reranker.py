@@ -207,7 +207,9 @@ def _compute_semantic_scores(query: str, docs: list[dict], model_path: str | Non
     return scores
 
 
-_RRF_K = 60  # Reciprocal Rank Fusion constant; standard literature default
+# RRF k for Primo-position + embedding fusion (distinct from OpenSearch BM25F+SPLADE RRF
+# in federated_search.py which uses its own _RRF_K tuned separately via Q1.1 sweep).
+_EMBEDDING_RRF_K = 60
 
 
 def _compute_rrf_scores(semantic_scores: list[float], n_docs: int) -> list[float]:
@@ -230,10 +232,10 @@ def _compute_rrf_scores(semantic_scores: list[float], n_docs: int) -> list[float
         embed_rank[idx] = rank
 
     scores = [
-        1.0 / (_RRF_K + i) + 1.0 / (_RRF_K + embed_rank[i])
+        1.0 / (_EMBEDDING_RRF_K + i) + 1.0 / (_EMBEDDING_RRF_K + embed_rank[i])
         for i in range(n_docs)
     ]
-    max_possible = 2.0 / _RRF_K  # both rankings put doc at position 0
+    max_possible = 2.0 / _EMBEDDING_RRF_K  # both rankings put doc at position 0
     return [s / max_possible for s in scores]
 
 
@@ -321,7 +323,7 @@ def rerank_results(
     semantic_signal = semantic_scores
     if use_rrf and semantic_scores:
         semantic_signal = _compute_rrf_scores(semantic_scores, len(docs))
-        logger.debug("RRF fusion active (k=%d)", _RRF_K)
+        logger.debug("RRF fusion active (k=%d)", _EMBEDDING_RRF_K)
 
     weights = _WEIGHTS_WITH_EMBEDDING if semantic_signal else _WEIGHTS_NO_EMBEDDING
 

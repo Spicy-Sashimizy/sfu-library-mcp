@@ -355,6 +355,8 @@ def main():
     parser.add_argument("--output", type=Path, default=None)
     parser.add_argument("--dry-run", action="store_true",
                         help="Retrieve docs and show cache stats without calling Haiku")
+    parser.add_argument("--k-param", type=int, default=60,
+                        help="RRF k constant for BM25F+SPLADE fusion sweep (default 60)")
     args = parser.parse_args()
 
     with open(args.queries) as f:
@@ -395,7 +397,7 @@ def main():
         if "splade" in methods:
             row["splade"] = splade_res
         if "rrf" in methods:
-            row["rrf"] = rrf_fuse([bm25_res, splade_res])[:args.top_n]
+            row["rrf"] = rrf_fuse([bm25_res, splade_res], k_param=args.k_param)[:args.top_n]
         if "openalex_relevance" in methods and not args.skip_live:
             row["openalex_relevance"] = openalex_live_search(
                 session, qt, sort="relevance_score:desc", k=args.top_n)
