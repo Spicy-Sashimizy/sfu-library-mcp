@@ -69,10 +69,12 @@ def test_rrf_merge_higher_rank_wins():
 
 # ── Routing logic ─────────────────────────────────────────────────────────────
 
-def _make_router(recency_days=30):
+def _make_router(recency_days=30, local_rrf_enabled=True):
     oa = MagicMock()
     os_ = MagicMock()
-    return FederatedSearchRouter(oa, os_, recency_days=recency_days)
+    return FederatedSearchRouter(
+        oa, os_, recency_days=recency_days, local_rrf_enabled=local_rrf_enabled
+    )
 
 
 def test_route_recent_date_filter_goes_to_live():
@@ -81,8 +83,14 @@ def test_route_recent_date_filter_goes_to_live():
     assert router.route("anything", {"from_publication_date": recent}) == SearchSource.LIVE_API
 
 
-def test_route_old_date_filter_goes_to_local():
+def test_route_old_date_filter_goes_to_local_rrf_by_default():
     router = _make_router()
+    old = "2018-01-01"
+    assert router.route("machine learning", {"from_publication_date": old}) == SearchSource.LOCAL_RRF
+
+
+def test_route_old_date_filter_goes_to_local_index_when_rrf_disabled():
+    router = _make_router(local_rrf_enabled=False)
     old = "2018-01-01"
     assert router.route("machine learning", {"from_publication_date": old}) == SearchSource.LOCAL_INDEX
 
@@ -97,14 +105,14 @@ def test_route_temporal_cue_2025_goes_to_live():
     assert router.route("AI papers 2025", {}) == SearchSource.LIVE_API
 
 
-def test_route_historical_query_goes_to_local():
+def test_route_historical_query_goes_to_local_rrf():
     router = _make_router()
-    assert router.route("effects of climate change on salmon", {}) == SearchSource.LOCAL_INDEX
+    assert router.route("effects of climate change on salmon", {}) == SearchSource.LOCAL_RRF
 
 
-def test_route_no_filters_goes_to_local():
+def test_route_no_filters_goes_to_local_rrf():
     router = _make_router()
-    assert router.route("Indigenous land rights", {}) == SearchSource.LOCAL_INDEX
+    assert router.route("Indigenous land rights", {}) == SearchSource.LOCAL_RRF
 
 
 # ── Search dispatch ───────────────────────────────────────────────────────────
@@ -155,6 +163,41 @@ def test_search_local_exception_returns_empty():
     os_.search.side_effect = RuntimeError("down")
     results = router.search("query", {}, top_k=10, force_source=SearchSource.LOCAL_INDEX)
     assert results == []
+
+
+def test_search_local_rrf_calls_both_modes_and_merges():
+    oa = MagicMock()
+    os_ = MagicMock()
+    os_.search.side_effect = lambda query, top_k, mode: (
+        [_doc("10.1/a", "BMa"), _doc("10.1/shared", "BMshared")]
+        if mode == "bm25f"
+        else [_doc("10.1/shared", "SPshared"), _doc("10.1/b", "SPb")]
+    )
+    router = FederatedSearchRouter(oa, os_, recency_days=30)
+    results = router.search("q", {}, top_k=10, force_source=SearchSource.LOCAL_RRF)
+    oa.search_works.assert_not_called()
+    assert os_.search.call_count == 2
+    modes = [c.kwargs.get("mode") for c in os_.search.call_args_list]
+    assert set(modes) == {"bm25f", "splade"}
+    dois = [d["doi"] for d in results]
+    assert dois.count("10.1/shared") == 1
+    assert dois[0] == "10.1/shared"  # appears in both → highest RRF score
+
+
+def test_search_local_rrf_resilient_to_one_mode_failing():
+    oa = MagicMock()
+    os_ = MagicMock()
+
+    def _maybe_raise(query, top_k, mode):
+        if mode == "splade":
+            raise RuntimeError("SPLADE model unavailable")
+        return [_doc("10.1/bm", "BM")]
+
+    os_.search.side_effect = _maybe_raise
+    router = FederatedSearchRouter(oa, os_, recency_days=30)
+    results = router.search("q", {}, top_k=10, force_source=SearchSource.LOCAL_RRF)
+    dois = {d["doi"] for d in results}
+    assert "10.1/bm" in dois
 
 
 def test_search_doi_dedup_in_both_mode():

@@ -62,12 +62,20 @@ class ServerConfig:
         "query_log_enabled": False,
         # Phase P: OpenSearch / SPLADE feature flags.
         # Master switch — OpenSearch path (P.1 container must be running).
-        "local_opensearch_enabled": False,
-        # Use SPLADE sparse encoding instead of BM25F on OpenSearch queries.
-        # Requires splade_model_path and GPU/CPU torch stack.
+        # Default-on as of 2026-05-16 after the 120-query Phase P.11 eval; the
+        # federated router falls back gracefully on connection failure.
+        "local_opensearch_enabled": True,
+        # Single-mode SPLADE on OpenSearch queries (BM25F otherwise). Retained
+        # for diagnostics; production traffic goes through local_rrf_enabled
+        # which dispatches both modes and RRF-fuses (+5.1% NDCG@10 vs BM25).
         "splade_enabled": False,
         # Route queries through FederatedSearchRouter (live API + local index).
-        "federated_search_enabled": False,
+        # Default-on as of 2026-05-16; falls through to live API on failure.
+        "federated_search_enabled": True,
+        # Dispatch BM25F + SPLADE on the local index and RRF-fuse.
+        # Eval (2026-05-15, 120 queries): NDCG@10 0.2723 vs BM25 0.259 / SPLADE 0.2586.
+        # Avg overlap BM25↔SPLADE = 7.5% — they retrieve near-orthogonal sets.
+        "local_rrf_enabled": True,
     })
 
     # Local embedding model
@@ -190,9 +198,10 @@ def load_config() -> ServerConfig:
         "rrf_enabled": False,
         "crossencoder_enabled": False,
         "query_log_enabled": False,
-        "local_opensearch_enabled": False,
+        "local_opensearch_enabled": True,
         "splade_enabled": False,
-        "federated_search_enabled": False,
+        "federated_search_enabled": True,
+        "local_rrf_enabled": True,
     }
     for key in default_features:
         env_key = f"SFU_FEATURE_{key.upper()}"

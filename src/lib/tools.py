@@ -183,6 +183,7 @@ def _get_federated_router() -> "FederatedSearchRouter":
             openalex_client=_get_openalex(),
             opensearch_retriever=retriever,
             recency_days=cfg.federated_recency_days,
+            local_rrf_enabled=cfg.features.get("local_rrf_enabled", True),
         )
     return _federated_router
 

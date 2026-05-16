@@ -28,7 +28,8 @@ _RRF_K = 60
 class SearchSource(str, Enum):
     LIVE_API = "live_api"
     LOCAL_INDEX = "local_index"
-    BOTH = "both"
+    LOCAL_RRF = "local_rrf"  # BM25F + SPLADE on local OpenSearch, fused via RRF
+    BOTH = "both"  # live API + local (RRF if local_rrf_enabled else single-mode)
 
 
 def _normalize_doi(doi: str) -> str:
@@ -90,10 +91,15 @@ class FederatedSearchRouter:
         openalex_client: Any,
         opensearch_retriever: Any,
         recency_days: int = 30,
+        local_rrf_enabled: bool = True,
     ):
         self._openalex = openalex_client
         self._opensearch = opensearch_retriever
         self.recency_days = recency_days
+        # When True, historical queries dispatch BM25F + SPLADE on the local
+        # index and RRF-fuse. The 120-query Phase P.11 eval showed RRF beats
+        # either retriever alone (+5.1% NDCG@10 vs BM25, avg overlap only 7.5%).
+        self.local_rrf_enabled = local_rrf_enabled
 
     def route(self, query: str, filters: dict) -> SearchSource:
         """Determine which backend(s) to query.
@@ -101,7 +107,7 @@ class FederatedSearchRouter:
         Rules (evaluated in order):
         1. from_publication_date within recency_days → LIVE_API
         2. Temporal cue words in query → LIVE_API
-        3. Everything else → LOCAL_INDEX
+        3. Everything else → LOCAL_RRF (when local_rrf_enabled) else LOCAL_INDEX
         """
         from_date_str = filters.get("from_publication_date", "")
         if from_date_str:
@@ -116,7 +122,7 @@ class FederatedSearchRouter:
         if _TEMPORAL_CUES.search(query):
             return SearchSource.LIVE_API
 
-        return SearchSource.LOCAL_INDEX
+        return SearchSource.LOCAL_RRF if self.local_rrf_enabled else SearchSource.LOCAL_INDEX
 
     def search(
         self,
@@ -153,10 +159,23 @@ class FederatedSearchRouter:
             except Exception:
                 logger.exception("FederatedSearchRouter: local OpenSearch search failed")
 
+        if source == SearchSource.LOCAL_RRF:
+            bm25f_results: list[dict] = []
+            splade_results: list[dict] = []
+            try:
+                bm25f_results = self._opensearch.search(query, top_k=top_k, mode="bm25f")
+            except Exception:
+                logger.exception("FederatedSearchRouter: BM25F search failed")
+            try:
+                splade_results = self._opensearch.search(query, top_k=top_k, mode="splade")
+            except Exception:
+                logger.exception("FederatedSearchRouter: SPLADE search failed")
+            return _rrf_merge(bm25f_results, splade_results, top_k)
+
         if source == SearchSource.LIVE_API:
             return live_results[:top_k]
         if source == SearchSource.LOCAL_INDEX:
             return local_results[:top_k]
 
-        # BOTH — RRF merge
+        # BOTH — RRF merge of live + local
         return _rrf_merge(live_results, local_results, top_k)

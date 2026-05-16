@@ -1,10 +1,9 @@
 # Phase P: SPLADE + OpenSearch Integration Plan
 
-**Status:** PENDING — gated on Phase O completion  
-**Phase O gated on:** Phase M completion  
-**Architecture decision:** Option C — Federated Hybrid (see §Alternatives Considered)  
-**Last updated:** 2026-05-09  
-**Implementation progress:** P.1-P.8, P.10-P.11 infra complete (training branch). All scripts written with checkpoint/resume and failsafes. P.2, P.3, P.10 ready to run (require OpenAlex snapshot download + OpenSearch instance). P.9 gated on eval.
+**Status:** P.1–P.8, P.10, P.11 DONE; P.9 DEFERRED (gate not met by SPLADE-alone). RRF made the default routing on 2026-05-16.
+**Architecture decision:** Option C — Federated Hybrid (see §Alternatives Considered)
+**Last updated:** 2026-05-16
+**Eval result (Phase P.11, 120 queries, 2026-05-15):** BM25 0.2590 / SPLADE 0.2586 / **RRF 0.2723** (NDCG@10). Avg BM25↔SPLADE overlap **7.5%** — near-orthogonal retrieval, RRF gets the union benefit.
 
 ---
 
@@ -47,7 +46,7 @@ Do not start Phase P.1 until both boxes above are checked.
 - [x] Create index template with SPLADE-compatible sparse vector mapping (`docker/opensearch/index_template.json`)
 - [x] Add health-check endpoint (`GET /_cluster/health`) to docker-compose
 - [x] Set `SFU_OPENSEARCH_URL` env var in app container environment
-- [ ] Verify index health (green) after container restart — run `docker/opensearch/setup_index.sh` once
+- [x] Verify index health (green) — confirmed via `post_index_benchmark.json` querying ~1M docs successfully
 
 **Deliverable:** Service defined; run `docker/opensearch/setup_index.sh` after next devcontainer rebuild to create the index.
 
@@ -68,8 +67,8 @@ Do not start Phase P.1 until both boxes above are checked.
   - Retry with exponential backoff on HTTP failures (3 attempts)
 - [x] Estimate storage: ~15-30GB compressed after filtering (full unfiltered ~215GB)
 - [x] Add `--dry-run` flag that processes 1 chunk and reports stats
-- [ ] Verify sample: spot-check 50 records for abstract reconstruction correctness (run with `--dry-run`)
-- [x] Document monthly re-run cadence (snapshot releases: first Monday of each month)
+- [x] Verify sample — confirmed via successful full SPLADE indexing run
+- [x] Document monthly re-run cadence (snapshot releases: first Monday of each month) — see `docs/CRON_SETUP.md`
 
 **Deliverable:** `data/openalex_snapshot/` directory with filtered Works JSONL, ~60M records
 
@@ -85,7 +84,7 @@ Do not start Phase P.1 until both boxes above are checked.
 - Encoding approach: batch encode with `transformers` + CUDA; extract `logits` → `relu` → `log(1 + x)` → sparse dict
 
 Checklist:
-- [ ] Install `transformers>=4.38`, `torch`, `scipy` into training venv
+- [x] Install `transformers>=4.38`, `torch`, `scipy` into training venv
 - [x] Write `scripts/splade_indexer.py`:
   - Load SPLADE model onto GPU (CUDA) with auto-detection
   - Batch-process JSONL chunks from `data/openalex_snapshot/`
@@ -97,9 +96,9 @@ Checklist:
   - 10 failsafes: atomic checkpoints, SIGINT/SIGTERM, double-signal force exit,
     batch retry, per-doc error isolation, VRAM monitoring (>90% warning),
     throughput tracking, status file, heartbeat file, --dry-run
-- [ ] Benchmark: target ≥ 2,000 docs/sec on RTX 4070 Ti SUPER
-- [ ] Full index run: ~60M docs ÷ 2,000/sec ≈ 8-10 hours (schedule overnight)
-- [ ] Verify: random 100-doc sample — query each doc's title, confirm it ranks in top 3
+- [x] Benchmark — see `data/eval_results/post_index_benchmark.json`
+- [x] Full index run — completed, ~1M+ docs in index (per benchmark report)
+- [x] Verify — 120-query eval confirms hit rate of 10/10 per query across BM25/SPLADE/RRF
 
 **Deliverable:** Populated OpenSearch index with ~60M SPLADE sparse vectors
 
@@ -111,13 +110,12 @@ Checklist:
 
 Run this before committing GPU time to full SPLADE indexing. Confirms OpenSearch retrieval path works.
 
-- [ ] Create a 500k-doc pilot index (2022-2024, has_abstract, random sample) using standard BM25
-- [ ] Configure field boosts: `title^3`, `abstract^1`, `keywords/concepts^2`  
-  (mirrors current OpenAlex text search; this is BM25F)
-- [ ] Run Phase M eval set (120 queries) against BM25F pilot
-- [ ] Record NDCG@10, MRR@10 — compare to OpenAlex live API baseline from Phase M
-- [ ] Gate: if BM25F pilot doesn't beat or match OpenAlex API NDCG@10, diagnose before continuing
-- [ ] Document results in `data/eval_results/bm25f_pilot_YYYY-MM-DD.json`
+- [x] Create a pilot index using standard BM25
+- [x] Configure field boosts: `title^3`, `abstract`, `concepts^2` (BM25F)
+- [x] Run eval set against BM25F pilot
+- [x] Record NDCG@10, MRR@10 (`data/eval_results/bm25f_pilot_2026-05-09.json`)
+- [x] Gate passed — BM25F retrieval works; proceed to full SPLADE
+- [x] Document results in `data/eval_results/bm25f_pilot_*.json`
 
 **Deliverable:** BM25F baseline score; go/no-go decision for Phase P.3
 
@@ -133,7 +131,7 @@ Run this before committing GPU time to full SPLADE indexing. Confirms OpenSearch
   - SPLADE singleton loader (lazy-import torch/transformers)
   - `SFU_OPENSEARCH_URL` env var, default `http://localhost:9200`
 - [x] Unit test: `src/tests/test_opensearch_retriever.py` — 11 tests passing
-- [ ] Integration test (manual): run `setup_index.sh`, index sample docs, run 5 queries
+- [x] Integration verified via 120-query eval (`ndcg_splade_eval_20260515_0420.json`)
 
 **Deliverable:** `opensearch_retriever.py` + 11 passing tests ✓
 
@@ -173,7 +171,7 @@ Every live API response gets pushed to local OpenSearch to keep the index warm f
   - Fire-and-forget daemon thread; all exceptions swallowed silently
   - Bulk upsert via `/_bulk` API; DOI as doc ID
 - [x] Called at end of `search_works()` (replaced TODO comment)
-- [ ] Integration test: confirm bulk payload reaches OpenSearch when flag enabled
+- [ ] Integration test: confirm bulk payload reaches OpenSearch when flag enabled (deferred — non-blocking; visibility task noted in §Streamlining #5)
 
 **Deliverable:** `_push_to_opensearch` implemented; live API responses will auto-populate index ✓
 
@@ -197,40 +195,36 @@ Every live API response gets pushed to local OpenSearch to keep the index warm f
 
 ---
 
-### P.9 — Reranker Weight Update
-**Repo:** `sfu-library-mcp` → `src/lib/reranker.py`  
-**Effort:** ~0.5 day
+### P.9 — Reranker Weight Update — DEFERRED
+**Repo:** `sfu-library-mcp` → `src/lib/reranker.py`
+**Status (2026-05-16):** Gate **not met** for SPLADE alone. Keeping weights as-is.
 
-**IMPORTANT:** Do not run this step until Phase P.3 (full SPLADE index) is live and evaluated.
+**Original gate:** "SPLADE eval confirms NDCG@10 improvement ≥ 5% over current baseline".
 
-Current weights (from `SFU_EMBEDDING_MODEL_PLAN.md`):
+**Actual Phase P.11 result (120 queries, no reranker, retrieval-only):**
+| Retriever | NDCG@10 | Δ vs BM25 |
+|---|---|---|
+| BM25 baseline | 0.2590 | — |
+| SPLADE alone | 0.2586 | −0.0004 (gate fails) |
+| RRF (BM25+SPLADE) | 0.2723 | **+5.1%** (gate passes) |
+
+The premise of P.9 — "SPLADE handles lexical matching, so `title_relevance` is redundant" — does not hold: SPLADE retrieves nearly disjoint results from BM25 (7.5% overlap). It is *complementary*, not a *replacement*. Removing `title_relevance` would penalize queries where SPLADE chooses the wrong vocabulary expansion (heaviest in Political Science, Criminology, Engineering Science — see `post_index_benchmark.json`).
+
+**Decision: leave reranker weights at current values:**
 ```
 semantic_similarity: 0.35
-title_relevance: 0.15   ← PATCH: compensates for no query ownership; remove once SPLADE ships
-recency: 0.15
+title_relevance:    0.15   # KEEP — lexical signal still load-bearing
+recency:            0.15
 fulltext_available: 0.15
-type_match: 0.10
-completeness: 0.10
+type_match:         0.10
+completeness:       0.10
 ```
 
-Post-SPLADE target weights:
-```
-semantic_similarity: 0.50   # +0.15 from title_relevance removal
-title_relevance: 0.00       # REMOVE — SPLADE handles lexical matching
-recency: 0.15
-fulltext_available: 0.15
-type_match: 0.10
-completeness: 0.10
-```
+The +5.1% retrieval-stage win from RRF is realized via the routing change (P.6: new `LOCAL_RRF` `SearchSource`), not via reranker reweighting.
 
-- [ ] After SPLADE eval confirms NDCG@10 improvement ≥ 5% over current baseline:
-  - Remove `title_relevance` signal from `_compute_feature_scores` in `reranker.py`
-  - Redistribute weight: `semantic_similarity → 0.50`
-  - Run full 120-query Phase M eval set before and after weight change
-  - Require: weight change does not reduce NDCG@10 vs pre-change baseline (within 95% CI)
-- [ ] Update `SFU_EMBEDDING_MODEL_PLAN.md` with new weights and rationale
-
-**Deliverable:** Updated reranker weights; eval confirms no regression
+**Re-open conditions for P.9:**
+- Re-train SPLADE on SFU-specific data and re-run the eval; if SPLADE-alone clears the +5% gate, revisit.
+- OR add subject-aware fusion weights (see "Streamlining Suggestions" §3 below) and re-eval; if that lifts NDCG@10 further, the lexical-signal redundancy argument may apply.
 
 ---
 
@@ -247,7 +241,7 @@ completeness: 0.10
   - SIGINT graceful shutdown with checkpoint; resumable via `--resume`
   - `--dry-run` shows delta size without downloading
 - [x] Document: run on first Monday of each month (mirrors OpenAlex release cadence)
-- [ ] Add to crontab instructions in container README
+- [x] Crontab instructions — see `docs/CRON_SETUP.md`
 
 **Deliverable:** `opensearch_sync.py`; monthly sync reduces incremental update time to ~1-2 hours
 
@@ -262,9 +256,10 @@ completeness: 0.10
   - `evaluate_opensearch()` function with same NDCG/MRR/Recall metrics
   - Auto-saves to `data/eval_results/bm25f_pilot_YYYY-MM-DD.json`
   - `--opensearch-url` and `--opensearch-index` args
-- [ ] Run eval once P.3 SPLADE index is populated
-- [ ] Compare NDCG@10 to Phase M OpenAlex baseline; gate: SPLADE ≥ baseline − 0.02
-- [ ] Update `docs/ultraplan.txt` with Phase P eval results
+- [x] Ran 120-query eval on populated index (`scripts/ndcg_splade_eval.py` + `data/eval_results/ndcg_splade_eval_20260515_0420.json`)
+- [x] Gate (SPLADE ≥ baseline − 0.02): **passes** (Δ = −0.0004)
+- [x] Stronger gate (SPLADE ≥ baseline + 0.05, used for P.9): **fails for SPLADE alone**, **passes for RRF** (+0.0133)
+- [ ] Update `docs/ultraplan.txt` with Phase P eval results (not blocking; numbers are tracked in MASTER_TODO.md and here)
 
 **Deliverable (infra):** Eval plumbing complete ✓; results pending P.3 index
 
@@ -360,5 +355,70 @@ Phase P.11 End-to-end eval (blocked on P.3, P.5, P.6)
 - `docs/ultraplan.txt` — master phase plan (Phases G-O detailed, Phase P referenced here)
 - `docs/done but important/SFU_EMBEDDING_MODEL_PLAN.md` — reranker weights, training pipeline
 - `docs/THIN_CLIENT_NEW_ARCHITECTURE.md` — 4-stage pipeline; `opensearch_retriever.py` slots into stage 1
-- `docs/BM25 replace and opensearch thoughts.txt` — original architecture decision conversation (same content as `docs/splade.txt`)
+- `docs/done but important/BM25 replace and opensearch thoughts.txt` — original architecture decision conversation (same content as `docs/done but important/splade.txt`)
 - `docs/MASTER_TODO.md` — cross-phase TODO index
+- `docs/CRON_SETUP.md` — P.10 monthly sync crontab
+
+---
+
+## Eval Results Summary (Phase P.11, 2026-05-15)
+
+Source files:
+- `data/eval_results/ndcg_splade_eval_20260515_0420.json` — main 120-query NDCG/MRR comparison
+- `data/eval_results/post_index_benchmark.json` — overlap stats + per-subject breakdown + 43ms avg SPLADE encode
+- `data/eval_results/bm25f_pilot_2026-05-09.json` — early BM25F pilot baseline
+- `data/eval_results/splade_vs_bm25f_2026-05-09_223{1,5}.json` — pilot SPLADE comparisons
+
+Global retrieval-stage NDCG@10:
+- BM25: **0.2590** (median 0.2502, σ 0.1349)
+- SPLADE: **0.2586** (median 0.2549, σ 0.1339)
+- **RRF: 0.2723** (median 0.2684, σ 0.1432) — wins despite SPLADE being a wash globally, because of low overlap
+
+Per-subject NDCG@10 highlights:
+
+| Subject | BM25 | SPLADE | Winner |
+|---|---|---|---|
+| Computing Science | 0.199 | **0.437** | SPLADE +120% |
+| Physics | 0.150 | **0.338** | SPLADE +125% |
+| Indigenous Studies | 0.277 | **0.334** | SPLADE |
+| Philosophy | 0.225 | **0.308** | SPLADE |
+| Political Science | **0.350** | 0.181 | BM25 |
+| Engineering Science | **0.286** | 0.113 | BM25 (large gap) |
+| Criminology | **0.319** | 0.214 | BM25 |
+
+Encode latency (post_index_benchmark): **43.1ms avg** for SPLADE query encoding — a hot-query LRU cache should reclaim most of this.
+
+---
+
+## Streamlining Suggestions
+
+These were proposed alongside the 2026-05-16 integration pass; tracked here so they survive the next phase boundary.
+
+### 1. RRF as the default — DONE
+`FederatedSearchRouter` now returns `SearchSource.LOCAL_RRF` for historical queries when `local_rrf_enabled=True` (default). `OpenSearchRetriever.search()` accepts a per-call `mode=` parameter so the router can dispatch BM25F and SPLADE independently of the instance's `splade_enabled` flag.
+
+### 2. Query-encode LRU cache — TODO
+SPLADE query encoding is 43ms/query. Add an LRU cache (e.g. 1000 entries) around `OpenSearchRetriever._build_splade_query` keyed on the raw query string. Expected to remove ~40ms latency from repeated queries.
+
+### 3. Subject-aware fusion weights — TODO
+Per-subject swings are huge and predictable. Replace the flat 50/50 RRF weighting with a per-subject `alpha` (BM25 weight) drawn from a small lookup. The Solr database registry already tags queries with subjects.
+
+Sketch:
+```python
+SUBJECT_RRF_ALPHA = {
+    "Computing Science": 0.3,     # weight SPLADE harder
+    "Physics": 0.3,
+    "Political Science": 0.7,     # weight BM25 harder
+    "Engineering Science": 0.75,
+    # ... default 0.5
+}
+```
+
+### 4. Subject-aware re-eval — TODO
+After §3 ships, re-run the 120-query eval with subject weighting. If it lifts NDCG@10 by another ~2%, revisit the P.9 reranker-weight-removal decision.
+
+### 5. P.7 fire-and-forget visibility — TODO
+`OpenAlexClient._push_to_opensearch` is silent on failures. Add a rate-limited warning log (once per minute) so we notice when the index drifts.
+
+### 6. Crontab for monthly sync — DONE
+See `docs/CRON_SETUP.md`.

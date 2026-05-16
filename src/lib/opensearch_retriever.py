@@ -141,12 +141,25 @@ class OpenSearchRetriever:
             "_source": ["doi", "title", "abstract", "publication_year", "type", "is_oa"],
         }
 
-    def search(self, query: str, top_k: int = 50) -> list[dict]:
+    def search(self, query: str, top_k: int = 50, mode: str | None = None) -> list[dict]:
         """Run a search and return normalized result dicts.
+
+        Args:
+            query: raw user query
+            top_k: max hits to return
+            mode: "bm25f" or "splade" to force a mode for this call.
+                None (default) uses self.splade_enabled. Per-call selection lets
+                FederatedSearchRouter run both modes for RRF fusion regardless of
+                the instance flag.
 
         Returns: list of {doi, title, abstract, year, score, source, type, is_oa}
         """
-        if self.splade_enabled:
+        if mode is None:
+            use_splade = self.splade_enabled
+        else:
+            use_splade = mode == "splade"
+
+        if use_splade:
             body = self._build_splade_query(query, top_k)
         else:
             body = self._build_bm25f_query(query, top_k)
