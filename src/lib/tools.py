@@ -1022,6 +1022,21 @@ async def _handle_search_by_topic(args: dict) -> list[TextContent]:
     if args.get("open_access_only"):
         filters["open_access.is_oa"] = "true"
 
+    # Phase P: route through FederatedSearchRouter (BM25F+SPLADE RRF) when enabled.
+    if _get_features().get("federated_search_enabled"):
+        async with _request_semaphore:
+            results = await asyncio.get_event_loop().run_in_executor(
+                None,
+                lambda: _get_federated_router().search(topic, filters, top_k=limit),
+            )
+        t0 = time.monotonic()
+        if results:
+            _cache_works(results)
+            results = _maybe_rerank(results, topic, limit)
+        _log_query(topic, results, (time.monotonic() - t0) * 1000, "search_by_topic_federated")
+        data = {"results": results, "meta": {"count": len(results)}}
+        return [TextContent(type="text", text=format_openalex_results(data, topic))]
+
     async with _request_semaphore:
         data = await asyncio.get_event_loop().run_in_executor(
             None,
@@ -1529,18 +1544,27 @@ async def _handle_export_search(args: dict) -> list[TextContent]:
     export_format = args.get("format", "bibtex").lower()
     limit = min(args.get("limit", 10), 50)
 
-    async with _request_semaphore:
-        data = await asyncio.get_event_loop().run_in_executor(
-            None,
-            lambda: _get_openalex().search_works(query, per_page=limit),
-        )
+    # Phase P: route through FederatedSearchRouter (BM25F+SPLADE RRF) when enabled.
+    if _get_features().get("federated_search_enabled"):
+        async with _request_semaphore:
+            works = await asyncio.get_event_loop().run_in_executor(
+                None,
+                lambda: _get_federated_router().search(query, {}, top_k=limit),
+            )
+        total = len(works)
+    else:
+        async with _request_semaphore:
+            data = await asyncio.get_event_loop().run_in_executor(
+                None,
+                lambda: _get_openalex().search_works(query, per_page=limit),
+            )
+        works = data.get("results", [])
+        total = data.get("meta", {}).get("count", len(works))
 
-    works = data.get("results", [])
     if not works:
         return [TextContent(type="text", text="No results found.")]
 
     _cache_works(works)
-    total = data.get("meta", {}).get("count", len(works))
 
     if export_format == "json":
         export_data = [
