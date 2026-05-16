@@ -20,21 +20,16 @@
 All of these are parameter or flag changes in existing code. No re-indexing, no new models, no spending.
 
 ### Q1.1 — RRF k-Parameter Tuning
-**Status:** Sweep infrastructure DONE (2026-05-16) — `--k-param` arg added to benchmark. Production constant (`federated_search.py:_RRF_K`) pending sweep result.  
-**Expected gain:** +0.02–0.04 NDCG  
-**Effort:** 2 hours (sweep + benchmark)  
-**File:** `scripts/benchmark_llm_judge.py` → `rrf_fuse()` k parameter; `src/lib/federated_search.py:25` → `_RRF_K`
+**Status:** DONE / CLOSED — swept 2026-05-16; k has no effect at this overlap level. k=60 kept.
 
-**The problem:** Current k=60 is the standard default. With only 7.5% overlap between BM25F and SPLADE results, lower k values reward the consensus documents more aggressively. SPLADE alone (0.6534) beats RRF (0.6362) precisely because k=60 is diluting SPLADE's signal.
+**Sweep result (k=20/30/40/50/60, 20-query holdout):**  
+All k values produced identical RRF NDCG = 0.9514 — rank ordering was fully stable.
 
-**Steps:**
-1. Add `--k-param` argument to `benchmark_llm_judge.py`
-2. Run on 20-query holdout: `python scripts/benchmark_llm_judge.py --skip-live --max-queries 20 --k-param 20`
-3. Repeat for k = 20, 30, 40, 50
-4. Set winner in `opensearch_retriever.py` RRF call
-5. Re-run full 120-query benchmark to confirm gain
+**Why k doesn't matter here:** Mean BM25F/SPLADE overlap = 10% (1.0/10 docs per query). With ≤1 overlap doc, the RRF math guarantees the overlap doc always ranks #1 regardless of k (`2/(k+r)` always beats `1/(k+r')`), and non-overlap docs keep their original method order. k only scales score magnitudes, not rank positions.
 
-**Hypothesis:** k=30-40 will make RRF outperform pure SPLADE outright (target: RRF NDCG > 0.6534).
+**Root cause of RRF < SPLADE:** With 10% overlap, RRF averages a weaker retriever (BM25F 0.90) into a stronger one (SPLADE 0.98), which structurally hurts. No k value fixes this dilution problem.
+
+**Actual fix:** Cross-encoder reranker (Q1.4, already enabled) — re-scores the merged top-20 by joint query-document relevance, recovering SPLADE's best docs regardless of BM25F dilution. If asymmetric fusion weights are needed later, that's a Q2 item.
 
 ---
 
