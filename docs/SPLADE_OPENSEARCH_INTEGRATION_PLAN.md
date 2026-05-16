@@ -28,8 +28,8 @@ This plan introduces SPLADE (Sparse Lexical and Expansion Model) as a learned sp
 ## Gate Conditions
 
 Phase P is blocked until:
-- [ ] Phase M complete: 120-query eval set, MRR@10/Recall@10, stat-significance gate (95% CI excludes zero)
-- [ ] Phase O complete: v4-bge deployed in production, CrossEncoder Tier 1.5 live, query-log feedback loop running
+- [x] Phase M complete: 120-query eval set, MRR@10/Recall@10, stat-significance gate (95% CI excludes zero) — DONE 2026-05-16
+- [ ] Phase O complete: v4-bge deployed in production, CrossEncoder Tier 1.5 live, query-log feedback loop running — PENDING (Phase P proceeded in parallel, see MASTER_TODO.md)
 
 Do not start Phase P.1 until both boxes above are checked.
 

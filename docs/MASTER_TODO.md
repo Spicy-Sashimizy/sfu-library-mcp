@@ -35,7 +35,7 @@ Key finding: citation-count proxy was understating local index quality by 2.5×.
 
 ## Phase O — Production Deploy
 
-**Plan:** `docs/ultraplan.txt` (search: "Phase O")  
+**Plan:** `docs/done but important/ultraplan.txt` (search: "Phase O")  
 **Files to touch (`sfu-library-mcp` repo):**
 - [ ] `src/lib/config.py` — flip `crossencoder_enabled = True`
 - [ ] `src/lib/reranker.py` — CrossEncoder Tier 1.5 wiring (`cross-encoder/ms-marco-MiniLM-L-6-v2`)
