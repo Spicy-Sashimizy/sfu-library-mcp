@@ -1,30 +1,32 @@
 #!/usr/bin/env python3
-"""LLM-judged NDCG@10 benchmark using Claude Code's built-in Haiku access.
+"""LLM-judged NDCG@10 benchmark — Claude Haiku or local Ollama judge.
 
 Replaces the citation-count proxy (tautological, biased toward OpenAlex coverage)
-with topical relevance judgments from Claude Haiku — no ANTHROPIC_API_KEY needed.
+with topical relevance judgments — no ANTHROPIC_API_KEY needed.
 
 How it works:
   1. Retrieve top-N from each method (BM25F, SPLADE, RRF, OpenAlex live)
   2. Pool unique papers across all methods per query (TREC-style pooling)
   3. Fetch abstracts from OpenSearch for local results
-  4. Call `claude -p --model claude-haiku-4-5-20251001` in parallel subprocesses
-     to judge each paper 0-3 on topical relevance to the query
+  4. Call the judge (Claude Haiku subprocess or local Ollama) in parallel
+     to score each paper 0-3 on topical relevance to the query
   5. Cache all judgments to disk — reruns are free
   6. Compute NDCG@10, MRR@10, P@10(rel≥2) per method and per subject
 
 Why this beats citation count:
-  - Citation count = paper fame; Haiku judgment = topical relevance
+  - Citation count = paper fame; LLM judgment = topical relevance
   - No tautology: cite-sort and the judge are completely independent
   - Works for niche SFU topics (Indigenous Studies, Film, etc.)
   - OpenAlex live and local RRF compete on equal footing
 
 Performance:
-  - 4 parallel subprocess workers → ~4-5 min for all 120 queries
-  - ~$0 additional cost — uses Claude Code's existing session
+  - 4 parallel workers → ~4-5 min for all 120 queries
+  - Cache covers all 120 queries — reruns are instant and free
 
 Usage:
-    python scripts/benchmark_llm_judge.py
+    python scripts/benchmark_llm_judge.py                        # Claude Haiku (default)
+    python scripts/benchmark_llm_judge.py --judge ollama         # local Ollama (free)
+    python scripts/benchmark_llm_judge.py --judge ollama --ollama-model qwen3:1.7b
     python scripts/benchmark_llm_judge.py --skip-live --workers 6
     python scripts/benchmark_llm_judge.py --max-queries 10  # quick test
 """
@@ -98,15 +100,20 @@ def _save_cache(cache: dict):
 JUDGE_CACHE: dict = _load_cache()
 _cache_lock = None  # set to threading.Lock() in main
 
+# Set by main() before workers start — avoids threading an args object everywhere
+_JUDGE_BACKEND: str = "claude"       # "claude" | "ollama"
+_OLLAMA_MODEL: str = "qwen3:1.7b"
+_OLLAMA_URL: str = "http://localhost:11434"
+
 
 def _cache_key(query: str, openalex_id: str) -> str:
     return f"{query[:80]}||{openalex_id}"
 
 
-# ── Claude Haiku judge (subprocess) ──────────────────────────────────────────
+# ── Judge backends ────────────────────────────────────────────────────────────
 
 def _call_haiku(prompt: str, timeout: int = 90) -> str:
-    """Call claude CLI and return stdout text. Raises on timeout or non-zero exit."""
+    """Call claude CLI subprocess. Raises on timeout or non-zero exit."""
     result = subprocess.run(
         ["claude", "-p",
          "--model", "claude-haiku-4-5-20251001",
@@ -119,6 +126,31 @@ def _call_haiku(prompt: str, timeout: int = 90) -> str:
         timeout=timeout,
     )
     return result.stdout.strip()
+
+
+def _call_ollama(prompt: str, timeout: int = 120) -> str:
+    """Call local Ollama REST API. Returns response text."""
+    resp = requests.post(
+        f"{_OLLAMA_URL}/api/generate",
+        json={
+            "model": _OLLAMA_MODEL,
+            "prompt": prompt,
+            "system": JUDGE_SYSTEM,
+            "stream": False,
+            "think": False,
+            "options": {"temperature": 0},
+        },
+        timeout=timeout,
+    )
+    resp.raise_for_status()
+    return resp.json().get("response", "").strip()
+
+
+def _call_judge(prompt: str, timeout: int = 120) -> str:
+    """Dispatch to the active judge backend."""
+    if _JUDGE_BACKEND == "ollama":
+        return _call_ollama(prompt, timeout=timeout)
+    return _call_haiku(prompt, timeout=min(timeout, 90))
 
 
 def _parse_json_scores(text: str) -> dict[str, int]:
@@ -153,14 +185,14 @@ def _batch_judge_subprocess(query: str, papers: list[dict]) -> dict[str, int]:
 
     for attempt in range(3):
         try:
-            raw = _call_haiku(prompt)
+            raw = _call_judge(prompt)
             scores = _parse_json_scores(raw)
             if scores:
                 return scores
         except subprocess.TimeoutExpired:
-            log.warning("Haiku call timed out (attempt %d)", attempt + 1)
+            log.warning("Judge call timed out (attempt %d)", attempt + 1)
         except Exception as e:
-            log.warning("Haiku call failed (attempt %d): %s", attempt + 1, e)
+            log.warning("Judge call failed (attempt %d): %s", attempt + 1, e)
         time.sleep(1)
     return {}
 
@@ -336,15 +368,21 @@ def precision_at_k(ranked_rel: list[float], k: int, threshold: float = 2.0) -> f
 # ── Main ──────────────────────────────────────────────────────────────────────
 
 def main():
-    parser = argparse.ArgumentParser(description="LLM-judged IR benchmark via Claude Code Haiku")
+    parser = argparse.ArgumentParser(description="LLM-judged IR benchmark — Claude Haiku or local Ollama")
     parser.add_argument("--queries", type=Path, default=DEFAULT_QUERIES)
     parser.add_argument("--k", type=int, default=10)
     parser.add_argument("--top-n", type=int, default=10,
                         help="Docs to retrieve per method per query (default 10)")
     parser.add_argument("--batch-size", type=int, default=12,
-                        help="Papers per Haiku subprocess call (default 12)")
+                        help="Papers per judge call (default 12)")
     parser.add_argument("--workers", type=int, default=4,
-                        help="Parallel claude subprocess workers (default 4)")
+                        help="Parallel judge workers (default 4)")
+    parser.add_argument("--judge", default="claude", choices=["claude", "ollama"],
+                        help="Judge backend: 'claude' (Haiku subprocess) or 'ollama' (local, free)")
+    parser.add_argument("--ollama-model", default="qwen3:1.7b",
+                        help="Ollama model name (default: qwen3:1.7b)")
+    parser.add_argument("--ollama-url", default="http://localhost:11434",
+                        help="Ollama base URL (default: http://localhost:11434)")
     parser.add_argument("--methods", default="bm25,splade,rrf,openalex_relevance",
                         help="Comma-separated retrieval methods to evaluate")
     parser.add_argument("--skip-live", action="store_true",
@@ -358,6 +396,13 @@ def main():
     parser.add_argument("--k-param", type=int, default=60,
                         help="RRF k constant for BM25F+SPLADE fusion sweep (default 60)")
     args = parser.parse_args()
+
+    global _JUDGE_BACKEND, _OLLAMA_MODEL, _OLLAMA_URL
+    _JUDGE_BACKEND = args.judge
+    _OLLAMA_MODEL = args.ollama_model
+    _OLLAMA_URL = args.ollama_url
+    log.info("Judge backend: %s%s", _JUDGE_BACKEND,
+             f" ({_OLLAMA_MODEL} @ {_OLLAMA_URL})" if _JUDGE_BACKEND == "ollama" else "")
 
     with open(args.queries) as f:
         eval_queries = json.load(f)
@@ -455,8 +500,8 @@ def main():
                  math.ceil(need_new / args.batch_size) / args.workers * 4.5 / 60)
         return
 
-    log.info("Phase 3: Judging with Claude Haiku (%d workers, batch=%d)",
-             args.workers, args.batch_size)
+    log.info("Phase 3: Judging with %s (%d workers, batch=%d)",
+             judge_label, args.workers, args.batch_size)
     log.info("  Cache: %d already judged, %d new calls needed", total_cached, need_new)
 
     import threading
@@ -538,8 +583,9 @@ def main():
     }
 
     print()
+    judge_label = f"Ollama/{_OLLAMA_MODEL}" if _JUDGE_BACKEND == "ollama" else "Claude Haiku"
     print("=" * 95)
-    print("  LLM-JUDGED IR BENCHMARK  —  TREC 0-3 relevance via Claude Haiku")
+    print(f"  LLM-JUDGED IR BENCHMARK  —  TREC 0-3 relevance via {judge_label}")
     print(f"  {len(eval_queries)} queries  |  NDCG@{args.k}  |  top_n={args.top_n}  |  workers={args.workers}")
     print("=" * 95)
 
@@ -612,7 +658,7 @@ def main():
     output.parent.mkdir(parents=True, exist_ok=True)
     result = {
         "benchmark": "llm_judged_ndcg",
-        "judge": "claude-haiku-4-5-20251001 via claude CLI subprocess",
+        "judge": f"ollama/{_OLLAMA_MODEL}" if _JUDGE_BACKEND == "ollama" else "claude-haiku-4-5-20251001 via claude CLI subprocess",
         "relevance_scale": JUDGE_SCALE,
         "timestamp": time.strftime("%Y-%m-%dT%H:%M:%S"),
         "k": args.k,
