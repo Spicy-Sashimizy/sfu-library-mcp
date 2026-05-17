@@ -1,8 +1,9 @@
 # SPLADE Optimization Roadmap
 
-**Last updated:** 2026-05-16  
+**Last updated:** 2026-05-17  
 **Baseline:** LLM-judged 120-query benchmark, 2026-05-16 (see `docs/LLM_BENCHMARK_RESULTS_2026-05-16.md`)  
-**Current scores:** SPLADE 0.6534 | RRF 0.6362 | BM25F 0.6249 | OpenAlex 0.5391 (mean NDCG@10)
+**Pre-Q1 scores:** SPLADE 0.6534 | RRF 0.6362 | BM25F 0.6249 | OpenAlex 0.5391 (mean NDCG@10)  
+**Post-Q1 scores (2026-05-16 23:41):** SPLADE 0.8245 | RRF 0.7229 | BM25F 0.6627 (mean NDCG@10)
 
 ---
 
@@ -75,7 +76,7 @@ Particularly targets Communication (0.33), History (0.31), Economics (0.29) — 
 ---
 
 ### Q1.4 — Enable Cross-Encoder Reranker
-**Status:** DONE (2026-05-16) — flag flipped; full benchmark pending for NDCG delta + latency gate  
+**Status:** DONE (2026-05-16) — flag flipped; full benchmark confirmed 2026-05-17 (SPLADE +0.171, RRF +0.087 vs pre-Q1 baseline)  
 **Expected gain:** +0.03–0.06 NDCG  
 **Rollback:** set `crossencoder_enabled = False` in `src/lib/config.py` lines 59 and 199  
 **File:** `src/lib/config.py` → `crossencoder_enabled = True` (both dataclass default and load_config)

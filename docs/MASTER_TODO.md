@@ -1,7 +1,7 @@
 # Master TODO Index
 
 Cross-phase status tracker. See individual plan docs for full checklists.  
-Last updated: 2026-05-16
+Last updated: 2026-05-17
 
 ---
 
@@ -97,13 +97,15 @@ Key finding: citation-count proxy was understating local index quality by 2.5×.
 
 ## Current Best Model
 
-RRF (BM25F + SPLADE, local OpenSearch index):  
-**NDCG@10 = 0.6534 (SPLADE alone) / 0.6362 (RRF)** — 120-query LLM-judged, 2026-05-16  
-vs OpenAlex relevance sort: **0.5391** (+0.097 delta for RRF)
+RRF (BM25F + SPLADE, local OpenSearch index) with cross-encoder reranker:  
+**NDCG@10 = 0.8245 (SPLADE alone) / 0.7229 (RRF)** — 120-query LLM-judged, 2026-05-17 (post-Q1)  
+vs pre-Q1 baseline: SPLADE +0.171, RRF +0.087, BM25F +0.038  
+vs OpenAlex relevance sort: **0.5391** (RRF delta +0.184)
 
-Previous baseline: `sfu-academic-embed-v4-bge` NDCG@10 = 0.6689 (35-query Phase L eval, 2026-05-04) — this was on a different eval set and metric; not directly comparable.
+Previous pre-Q1 baseline: SPLADE 0.6534 / RRF 0.6362 / BM25F 0.6249 (2026-05-16)  
+Previous model baseline: `sfu-academic-embed-v4-bge` NDCG@10 = 0.6689 (35-query Phase L eval, 2026-05-04) — different eval set, not directly comparable.
 
-**Next milestone (Phase Q):** RRF NDCG@10 > 0.6700 via k-param tuning + cross-encoder reranker.
+**Q1 milestone cleared.** Next milestone (Phase Q2): RRF NDCG@10 > 0.7500 via subject routing + model swap.
 
 ---
 
@@ -116,7 +118,7 @@ Previous baseline: `sfu-academic-embed-v4-bge` NDCG@10 = 0.6689 (35-query Phase 
 - [x] Q1.1 RRF k-param sweep — SWEPT 2026-05-16; k has **no effect** when BM25F/SPLADE overlap is ≤10%. k=60 kept. Root cause of RRF < SPLADE is BM25F quality dilution, not k — fixed by cross-encoder (Q1.4).
 - [x] Q1.2 BM25F most_fields + tie_breaker=0.5 — `src/lib/opensearch_retriever.py` + `scripts/benchmark_llm_judge.py` (2026-05-16)
 - [x] Q1.3 SPLADE top_k=64 + scaling_factor=4 — `src/lib/opensearch_retriever.py` + benchmark aligned to same DSL (2026-05-16)
-- [x] Q1.4 Flip cross-encoder ON — `src/lib/config.py` → `crossencoder_enabled = True` (2026-05-16; latency gate: run full benchmark to confirm &lt;500ms overhead)
+- [x] Q1.4 Flip cross-encoder ON — `src/lib/config.py` → `crossencoder_enabled = True` (2026-05-16; full benchmark confirmed 2026-05-17: SPLADE 0.8245, RRF 0.7229)
 
 ### Q2 — Medium effort (no cloud cost):
 - [ ] Q2.1 Zero-coverage subject fallback routing (15 subjects → always LIVE_API)
