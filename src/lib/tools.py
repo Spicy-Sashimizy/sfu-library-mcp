@@ -1002,7 +1002,7 @@ async def _handle_search_by_author(args: dict) -> list[TextContent]:
     author = args.get("author", "").strip()
     if not author:
         return [TextContent(type="text", text="No author name provided.")]
-    limit = min(args.get("limit", 10), 50)
+    limit = max(1, min(args.get("limit", 10), 50))
 
     async with _request_semaphore:
         data = await asyncio.get_event_loop().run_in_executor(
@@ -1053,7 +1053,7 @@ async def _handle_search_by_topic(args: dict) -> list[TextContent]:
     topic = args.get("topic", "").strip()
     if not topic:
         return [TextContent(type="text", text="No topic provided.")]
-    limit = min(args.get("limit", 10), 50)
+    limit = max(1, min(args.get("limit", 10), 50))
 
     # Pre-flight check: route to S2 immediately if OpenAlex is unavailable
     unavailable = _openalex_unavailable_reason()
@@ -1096,7 +1096,7 @@ async def _handle_get_citations(args: dict) -> list[TextContent]:
     doi = args.get("doi", "").strip()
     if not doi:
         return [TextContent(type="text", text="No DOI provided.")]
-    limit = min(args.get("limit", 20), 100)
+    limit = max(1, min(args.get("limit", 20), 100))
 
     async with _request_semaphore:
         papers = await asyncio.get_event_loop().run_in_executor(
@@ -1113,7 +1113,7 @@ async def _handle_get_references(args: dict) -> list[TextContent]:
     doi = args.get("doi", "").strip()
     if not doi:
         return [TextContent(type="text", text="No DOI provided.")]
-    limit = min(args.get("limit", 20), 100)
+    limit = max(1, min(args.get("limit", 20), 100))
 
     async with _request_semaphore:
         papers = await asyncio.get_event_loop().run_in_executor(
@@ -1258,7 +1258,7 @@ async def _handle_browse_sfu_databases(args: dict) -> list[TextContent]:
     subject = args.get("subject", "")
     content_type = args.get("content_type", "")
     free_only = args.get("free_only", False)
-    limit = min(args.get("limit", 20), 100)
+    limit = max(1, min(args.get("limit", 20), 100))
 
     registry = _get_registry()
     async with _request_semaphore:
@@ -1318,7 +1318,7 @@ async def _handle_search_biomedical(args: dict) -> list[TextContent]:
     query = args.get("query", "").strip()
     if not query:
         return [TextContent(type="text", text="No query provided.")]
-    limit = min(args.get("limit", 10), 25)
+    limit = max(1, min(args.get("limit", 10), 25))
 
     async with _request_semaphore:
         data = await asyncio.get_event_loop().run_in_executor(
@@ -1338,10 +1338,11 @@ def _fetch_europe_pmc(query: str, limit: int) -> str:
             timeout=20,
         )
         resp.raise_for_status()
-        results = resp.json().get("resultList", {}).get("result", [])
+        payload = resp.json()  # parse once (item #11)
+        results = payload.get("resultList", {}).get("result", [])
         if not results:
             return "No results found in Europe PMC."
-        total = resp.json().get("hitCount", len(results))
+        total = payload.get("hitCount", len(results))
         lines = [f"Europe PMC: {total:,} results for '{query}'\n", "=" * 60 + "\n"]
         for i, r in enumerate(results, 1):
             title = r.get("title", "No title")
@@ -1569,7 +1570,7 @@ async def _handle_batch_citations(args: dict) -> list[TextContent]:
 async def _handle_export_search(args: dict) -> list[TextContent]:
     query = sanitize_search_query(args.get("query", ""))
     export_format = args.get("format", "bibtex").lower()
-    limit = min(args.get("limit", 10), 50)
+    limit = max(1, min(args.get("limit", 10), 50))
 
     async with _request_semaphore:
         data = await asyncio.get_event_loop().run_in_executor(
@@ -1609,7 +1610,9 @@ async def _handle_export_search(args: dict) -> list[TextContent]:
         for w in works:
             def esc(v):
                 v = str(v or "").replace('"', '""')
-                return f'"{v}"' if "," in v or '"' in v else v
+                # RFC 4180: quote on comma, quote, or CR/LF so an embedded
+                # newline (e.g. in a title) stays inside one CSV field.
+                return f'"{v}"' if any(c in v for c in (",", '"', "\n", "\r")) else v
             lines.append(",".join([
                 esc(w.get("doi", "")), esc(w.get("title", "")),
                 esc("; ".join(w.get("authors", []))),
@@ -1771,7 +1774,7 @@ async def _handle_search_zotero(args: dict) -> list[TextContent]:
     if auth_err:
         return auth_err
     query = args.get("query", "")
-    limit = min(args.get("limit", 20), 100)
+    limit = max(1, min(args.get("limit", 20), 100))
     if not query:
         return [TextContent(type="text", text="No search query provided.")]
     try:
@@ -1792,7 +1795,7 @@ async def _handle_get_zotero_collection_items(args: dict) -> list[TextContent]:
     if auth_err:
         return auth_err
     collection_name = args.get("collection_name", "")
-    limit = min(args.get("limit", 50), 100)
+    limit = max(1, min(args.get("limit", 50), 100))
     if not collection_name:
         return [TextContent(type="text", text="No collection name provided.")]
     zot = _get_zotero_client()

@@ -10,9 +10,9 @@
       "properties": {
         "doi": { "type": "keyword" },
         "openalex_id": { "type": "keyword" },
-        "title": { "type": "text", "boost": 3 },
+        "title": { "type": "text" },
         "abstract": { "type": "text" },
-        "concepts": { "type": "text", "boost": 2 },
+        "concepts": { "type": "text" },
         "publication_year": { "type": "integer" },
         "type": { "type": "keyword" },
         "is_oa": { "type": "boolean" },
