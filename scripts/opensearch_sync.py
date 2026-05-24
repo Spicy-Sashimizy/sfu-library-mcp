@@ -64,6 +64,12 @@ logger = logging.getLogger(__name__)
 # ── Constants ────────────────────────────────────────────────────────────────
 
 DEFAULT_DATA_DIR = Path(__file__).parent.parent / "data" / "openalex_snapshot"
+# IMPORTANT (Item 6 — train/serve skew): the delta indexer MUST encode with
+# the SAME SPLADE model the index was originally built with, otherwise the
+# sparse vectors written by the monthly sync are incompatible with the
+# existing corpus and with what the serving leg expects. The canonical
+# index-build model is splade_indexer.DEFAULT_MODEL; keep this in lockstep.
+# A mismatch is warned about at runtime in run_sync().
 DEFAULT_MODEL = "prithivida/Splade_PP_en_v1"
 DEFAULT_OPENSEARCH_URL = "http://localhost:9200"
 DEFAULT_INDEX = "openalex_works"
@@ -130,16 +136,52 @@ def load_last_sync(data_dir: Path) -> dict | None:
         return None
 
 
+def part_identity(url: str) -> str:
+    """Stable identity for an OpenAlex snapshot part, independent of host/URL.
+
+    OpenAlex re-publishes the FULL snapshot every month under new dated URLs,
+    but each part lives under an `updated_date=YYYY-MM-DD/<filename>` partition
+    that reflects the records' update date. Diffing by the raw URL therefore
+    treats every part as "new" on each republish and re-indexes all ~150M docs.
+
+    We instead key on the `updated_date=.../<filename>` suffix so a part whose
+    records have not changed is recognised as already synced even if its URL
+    (bucket host, query string, signing params) differs.
+
+    Falls back to the trailing path segment if no updated_date partition is
+    present (e.g. the S3-listing fallback manifest).
+    """
+    if not url:
+        return ""
+    # Drop any query string / signing params.
+    path = url.split("?", 1)[0]
+    marker = "updated_date="
+    idx = path.find(marker)
+    if idx != -1:
+        return path[idx:]  # e.g. "updated_date=2024-01-15/part_000.gz"
+    return path.rsplit("/", 1)[-1]  # filename fallback
+
+
 def compute_delta(current_entries: list[dict], last_sync: dict | None) -> list[dict]:
     """Find parts in current manifest not present in last sync.
 
-    Compares by URL — if a part URL is new or changed, it's in the delta.
+    Compares by *part identity* (the stable updated_date partition + filename),
+    NOT the raw URL — see part_identity(). This prevents OpenAlex's monthly
+    full-snapshot republish (which mints new URLs for unchanged data) from
+    looking like an all-new delta and re-indexing the entire corpus.
     """
     if not last_sync:
         return current_entries
 
-    synced_urls = set(last_sync.get("synced_urls", []))
-    delta = [e for e in current_entries if e.get("url", "") not in synced_urls]
+    # Backward-compatible: derive identities from previously stored URLs as
+    # well as any explicitly stored synced_ids.
+    synced_ids = set(last_sync.get("synced_ids", []))
+    synced_ids.update(part_identity(u) for u in last_sync.get("synced_urls", []))
+
+    delta = [
+        e for e in current_entries
+        if part_identity(e.get("url", "")) not in synced_ids
+    ]
     return delta
 
 
@@ -344,7 +386,22 @@ def run_sync(
                 pass
 
     # ── Pre-flight check ─────────────────────────────────────────────────
-    from scripts.splade_indexer import SpladeEncoder, check_opensearch_health
+    from scripts.splade_indexer import (
+        DEFAULT_MODEL as INDEXER_MODEL,
+        SpladeEncoder,
+        check_opensearch_health,
+    )
+
+    # Item 6 — guard against train/serve skew: the model used to encode the
+    # delta MUST match the model the index was built with. Diverging models
+    # produce incompatible sparse vectors and silently degrade retrieval.
+    if model_name != INDEXER_MODEL:
+        logger.warning(
+            "SPLADE model mismatch: sync is using %r but the index was built "
+            "with %r (splade_indexer.DEFAULT_MODEL). Sparse vectors may be "
+            "incompatible — pass --model %s to match.",
+            model_name, INDEXER_MODEL, INDEXER_MODEL,
+        )
 
     if not check_opensearch_health(session, opensearch_url, index_name):
         return {"error": "opensearch_unhealthy"}
@@ -401,10 +458,14 @@ def run_sync(
 
     # ── Update last_sync.json ────────────────────────────────────────────
     all_synced = list(synced_urls)
+    # Persist stable part identities so future republishes (new URLs, same
+    # data) are correctly recognised as already synced — see part_identity().
+    all_synced_ids = sorted({part_identity(u) for u in all_synced})
     _atomic_write_json({
         "manifest_hash": manifest["hash"],
         "synced_urls": all_synced,
-        "total_synced_parts": len(all_synced),
+        "synced_ids": all_synced_ids,
+        "total_synced_parts": len(all_synced_ids),
         "last_delta_indexed": cumulative["indexed"],
         "last_delta_errors": cumulative["errors"],
         "timestamp": time.strftime("%Y-%m-%dT%H:%M:%S"),
