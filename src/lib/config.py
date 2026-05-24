@@ -10,6 +10,13 @@ SERVER_VERSION = "1.1.0-phase-g"
 
 logger = logging.getLogger("sfu_library_mcp")
 
+# Repo root = .../sfu-library-mcp(-training); this file is at src/lib/config.py.
+_REPO_ROOT = Path(__file__).resolve().parents[2]
+# Local SPLADE ONNX export produced by the indexer. Loading this offline via
+# onnxruntime reproduces the indexed sparse weights exactly; the previous default
+# (a bare HF hub id) could not be fetched in the air-gapped serving container.
+_DEFAULT_SPLADE_MODEL_PATH = str(_REPO_ROOT / "models" / "splade_onnx")
+
 
 @dataclass
 class ServerConfig:
@@ -103,8 +110,9 @@ class ServerConfig:
     # OpenSearch / SPLADE (Phase P)
     opensearch_url: str = "http://localhost:9200"
     opensearch_index: str = "openalex_works"
-    # HuggingFace model ID or local path; used when splade_enabled = True
-    splade_model_path: str = "naver/splade-cocondenser-distil"
+    # Local SPLADE ONNX export dir (default) or a HF model id; used when
+    # splade_enabled = True. The default loads offline via onnxruntime.
+    splade_model_path: str = _DEFAULT_SPLADE_MODEL_PATH
     # Queries within this many days of today route to the live API (federated router)
     federated_recency_days: int = 30
 
@@ -252,7 +260,7 @@ def load_config() -> ServerConfig:
         opensearch_url=os.environ.get("SFU_OPENSEARCH_URL", "http://localhost:9200"),
         opensearch_index=os.environ.get("SFU_OPENSEARCH_INDEX", "openalex_works"),
         splade_model_path=os.environ.get(
-            "SFU_SPLADE_MODEL_PATH", "naver/splade-cocondenser-distil"
+            "SFU_SPLADE_MODEL_PATH", _DEFAULT_SPLADE_MODEL_PATH
         ),
         federated_recency_days=int(os.environ.get("SFU_FEDERATED_RECENCY_DAYS", "30")),
     )

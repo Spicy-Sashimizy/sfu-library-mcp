@@ -11,64 +11,147 @@ Index schema is defined in docker/opensearch/index_template.json.
 import logging
 import os
 import threading
+from pathlib import Path
 from typing import Any
 
 logger = logging.getLogger("sfu_library_mcp")
 
-_SPLADE_MODEL: Any = None
+_SPLADE_SESSION: Any = None  # onnxruntime.InferenceSession
 _SPLADE_TOKENIZER: Any = None
+_SPLADE_ID_TO_TOKEN: dict[int, str] | None = None
 _SPLADE_LOCK = threading.Lock()
+
+# Repo root = .../sfu-library-mcp(-training); this file is at src/lib/.
+_REPO_ROOT = Path(__file__).resolve().parents[2]
+# The SPLADE ONNX export carries the exact indexer weights. The matching
+# bert-base-uncased WordPiece tokenizer (30522 lowercase tokens) lives in the
+# model dir itself or in any of the SFU embed model dirs (identical vocab).
+# This mirrors scripts/mine_hard_negatives.py::SpladeOnnxEncoder, which was
+# verified to reproduce indexed sparse_field weights.
+_TOKENIZER_FALLBACK_DIRS = [
+    _REPO_ROOT / "models" / "sfu-academic-embed-v1",
+    _REPO_ROOT / "models" / "sfu-academic-embed-v4-bge",
+    _REPO_ROOT / "models" / "sfu-academic-embed-v4-mini",
+]
+
+
+def _resolve_onnx_path(model_path: str) -> Path:
+    """Resolve model_path (a dir or a direct .onnx file) to the ONNX file.
+
+    Raises a clear error for a bare HF hub id (e.g. "naver/splade-...") which
+    cannot be loaded offline in the serving container.
+    """
+    p = Path(model_path)
+    if p.is_file() and p.suffix == ".onnx":
+        return p
+    if p.is_dir():
+        candidate = p / "model.onnx"
+        if candidate.is_file():
+            return candidate
+        raise FileNotFoundError(
+            f"No model.onnx found in SPLADE model dir {p}. "
+            "Point splade_model_path at the local ONNX export "
+            "(e.g. models/splade_onnx)."
+        )
+    # Looks like a bare hub id or a missing path — can't load offline.
+    raise FileNotFoundError(
+        f"SPLADE model path {model_path!r} is not a local ONNX export dir/file. "
+        "Offline serving requires the local ONNX model (e.g. models/splade_onnx); "
+        "bare HuggingFace hub ids cannot be downloaded in the serving container."
+    )
+
+
+def _resolve_tokenizer_dir(model_path: str) -> Path:
+    """Find a bert-base-uncased tokenizer dir (model dir first, then fallbacks)."""
+    p = Path(model_path)
+    search = []
+    if p.is_dir():
+        search.append(p)
+    elif p.is_file():
+        search.append(p.parent)
+    search.extend(_TOKENIZER_FALLBACK_DIRS)
+    for d in search:
+        if (d / "tokenizer.json").is_file() or (d / "tokenizer_config.json").is_file():
+            return d
+    raise FileNotFoundError(
+        "No local bert-base-uncased tokenizer found for SPLADE. Tried: "
+        + ", ".join(str(d) for d in search)
+    )
 
 
 def _get_splade_model(model_path: str):
-    """Load SPLADE model + tokenizer once (singleton, thread-safe)."""
-    global _SPLADE_MODEL, _SPLADE_TOKENIZER
+    """Load SPLADE ONNX session + tokenizer once (singleton, thread-safe).
+
+    Returns (session, tokenizer, id_to_token). Loads the local ONNX export via
+    onnxruntime (CPU) — no torch, no network — matching the indexer's weights.
+    """
+    global _SPLADE_SESSION, _SPLADE_TOKENIZER, _SPLADE_ID_TO_TOKEN
     with _SPLADE_LOCK:
-        if _SPLADE_MODEL is None:
+        if _SPLADE_SESSION is None:
             try:
-                import torch
-                from transformers import AutoModelForMaskedLM, AutoTokenizer
+                import onnxruntime as ort
+                from transformers import AutoTokenizer
             except ImportError as exc:
                 raise ImportError(
-                    "transformers and torch are required for SPLADE encoding. "
+                    "onnxruntime and transformers are required for SPLADE encoding. "
                     "Install them or disable splade_enabled."
                 ) from exc
-            logger.info("Loading SPLADE model from %s", model_path)
-            _SPLADE_TOKENIZER = AutoTokenizer.from_pretrained(model_path)
-            _SPLADE_MODEL = AutoModelForMaskedLM.from_pretrained(model_path)
-            device = "cuda" if torch.cuda.is_available() else "cpu"
-            _SPLADE_MODEL = _SPLADE_MODEL.to(device)
-            _SPLADE_MODEL.eval()
-            logger.info("SPLADE model loaded on %s", device)
-        return _SPLADE_MODEL, _SPLADE_TOKENIZER
+
+            onnx_path = _resolve_onnx_path(model_path)
+            tok_dir = _resolve_tokenizer_dir(model_path)
+            logger.info("Loading SPLADE ONNX model from %s (tokenizer %s)",
+                        onnx_path, tok_dir.name)
+            tokenizer = AutoTokenizer.from_pretrained(str(tok_dir))
+            vocab = tokenizer.get_vocab()
+            if len(vocab) != 30522:
+                logger.warning(
+                    "SPLADE tokenizer vocab size %d != 30522 (expected bert-base-uncased)",
+                    len(vocab),
+                )
+            _SPLADE_TOKENIZER = tokenizer
+            _SPLADE_ID_TO_TOKEN = {v: k for k, v in vocab.items()}
+            _SPLADE_SESSION = ort.InferenceSession(
+                str(onnx_path), providers=["CPUExecutionProvider"]
+            )
+            logger.info("SPLADE ONNX model loaded (CPU)")
+        return _SPLADE_SESSION, _SPLADE_TOKENIZER, _SPLADE_ID_TO_TOKEN
 
 
 def encode_splade(text: str, model_path: str) -> dict[str, float]:
-    """Encode text to a sparse SPLADE term-weight dict."""
-    import torch
+    """Encode text to a sparse SPLADE term-weight dict via the local ONNX model.
 
-    model, tokenizer = _get_splade_model(model_path)
-    device = next(model.parameters()).device
-    inputs = tokenizer(
-        text,
-        return_tensors="pt",
-        truncation=True,
-        max_length=512,
-        padding=True,
-    ).to(device)
-    with torch.no_grad():
-        logits = model(**inputs).logits
-    # ReLU + log(1 + x) → sparse weights; max-pool over sequence dim
-    sparse = torch.log1p(torch.relu(logits)).max(dim=1).values.squeeze(0)
-    vocab = tokenizer.get_vocab()
-    id_to_token = {v: k for k, v in vocab.items()}
+    log1p(relu(logits)) max-pooled over the sequence dim — identical to the
+    indexer and to scripts/mine_hard_negatives.py::SpladeOnnxEncoder. Special
+    "[...]" tokens are dropped so they never become rank_feature fields.
+    """
+    import numpy as np
+
+    session, tokenizer, id_to_token = _get_splade_model(model_path)
+    enc = tokenizer(
+        [text], max_length=512, truncation=True, padding=True, return_tensors="np"
+    )
+    input_ids = enc["input_ids"].astype(np.int64)
+    feeds = {
+        "input_ids": input_ids,
+        "attention_mask": enc["attention_mask"].astype(np.int64),
+        "token_type_ids": enc.get("token_type_ids", np.zeros_like(input_ids)).astype(np.int64),
+    }
+    logits = session.run(["logits"], feeds)[0][0]  # (seq, vocab)
+    vec = np.log1p(np.maximum(logits, 0.0)).max(axis=0)  # (vocab,)
+
+    nonzero = np.nonzero(vec)[0]
+    if nonzero.size == 0:
+        return {}
+    order = nonzero[np.argsort(-vec[nonzero])]
     sparse_dict: dict[str, float] = {}
-    nonzero = sparse.nonzero(as_tuple=True)[0].tolist()
-    for idx in nonzero:
-        weight = sparse[idx].item()
-        if weight > 0:
-            token = id_to_token.get(idx, f"__unk_{idx}__")
-            sparse_dict[token] = weight
+    for idx in order:
+        token = id_to_token.get(int(idx), "")
+        weight = float(vec[int(idx)])
+        if not token or token.startswith("["):
+            continue
+        if weight <= 0.0:
+            continue
+        sparse_dict[token] = round(weight, 4)
     return sparse_dict
 
 
@@ -84,9 +167,13 @@ class OpenSearchRetriever:
         url: str = "",
         index: str = "openalex_works",
         splade_enabled: bool = False,
-        splade_model_path: str = "naver/splade-cocondenser-distil",
+        splade_model_path: str = "",
         timeout: int = 10,
     ):
+        # Empty → local ONNX export (offline-loadable). Bare HF hub ids no longer
+        # work in the serving container, so we no longer default to one.
+        if not splade_model_path:
+            splade_model_path = str(_REPO_ROOT / "models" / "splade_onnx")
         self.url = url or os.environ.get("SFU_OPENSEARCH_URL", "http://localhost:9200")
         self.index = index
         self.splade_enabled = splade_enabled
