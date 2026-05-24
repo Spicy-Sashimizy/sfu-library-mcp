@@ -150,3 +150,7 @@ logs/
 # OpenAlex API response cache (regenerated on demand)
 data/openalex_eval_cache.json
 
+# Q3.1 mined hard negatives (large, regeneratable via scripts/mine_hard_negatives.py
+# + scripts/merge_negatives.py against the local OpenSearch index)
+data/training/
+
