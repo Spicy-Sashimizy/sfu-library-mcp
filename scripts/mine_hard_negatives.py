@@ -231,11 +231,14 @@ def run_local_mining(
         encoder = SpladeOnnxEncoder()
 
     output_path.parent.mkdir(parents=True, exist_ok=True)
+    tmp_path = output_path.with_name(output_path.name + ".tmp")
     total_records = 0
     queries_with_hits = 0
     empty_queries = []
 
-    with output_path.open("w") as out:
+    # Atomic write: stream to a .tmp sibling, fsync, then atomic os.replace so the
+    # final output is never left partially written if the run crashes mid-mine.
+    with tmp_path.open("w") as out:
         for i, q in enumerate(queries):
             query_text = q.get("query", "").strip()
             subject = q.get("subject", "")
@@ -279,6 +282,10 @@ def run_local_mining(
                 logger.info("  [%d/%d] queries processed, %d candidates so far",
                             i + 1, len(queries), total_records)
 
+        out.flush()
+        os.fsync(out.fileno())
+
+    os.replace(tmp_path, output_path)
     stats = {
         "retriever": retriever,
         "top_k": top_k,

@@ -30,6 +30,7 @@ Usage:
 import argparse
 import json
 import logging
+import os
 from collections import Counter, defaultdict
 from pathlib import Path
 
@@ -132,9 +133,14 @@ def merge(
         kept.append(entry)
 
     output_path.parent.mkdir(parents=True, exist_ok=True)
-    with output_path.open("w") as out:
+    tmp_path = output_path.with_name(output_path.name + ".tmp")
+    # Atomic write: temp sibling -> fsync -> atomic os.replace (never a partial pool file).
+    with tmp_path.open("w") as out:
         for entry in kept:
             out.write(json.dumps(entry) + "\n")
+        out.flush()
+        os.fsync(out.fileno())
+    os.replace(tmp_path, output_path)
 
     return {
         "per_leg_loaded": dict(per_leg_loaded),
