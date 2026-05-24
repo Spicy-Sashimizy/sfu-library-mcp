@@ -47,6 +47,59 @@ SOFT_LIVE_SUBJECTS = {
     "Anthropology",
 }
 
+# Q2.3 — Lightweight query→subject heuristic.
+#
+# A full subject classifier is out of scope for this fix (no model/training data
+# wired into the serving path). Instead we map a small set of high-signal keyword
+# phrases to the subjects that actually matter for routing — i.e. the entries in
+# ALWAYS_LIVE_SUBJECTS / SOFT_LIVE_SUBJECTS. Only those subjects change routing;
+# detecting any other subject would route LOCAL anyway, so we don't bother.
+#
+# Matching is substring/word based and case-insensitive. Longer/more specific
+# phrases are listed first per subject so the most decisive cue wins. This is a
+# pragmatic heuristic, NOT a classifier: it will miss paraphrases and only covers
+# the routing-relevant subjects. Returns "" when nothing matches (default LOCAL).
+_SUBJECT_KEYWORDS: list[tuple[str, tuple[str, ...]]] = [
+    ("Theatre", ("theatre", "theater", "playwright", "stagecraft", "dramaturgy", "scenography")),
+    ("Music", ("music", "musical", "composer", "symphony", "orchestra", "string quartet", "opera", "ethnomusicology")),
+    ("Urban Studies", ("urban studies", "urban planning", "city planning", "gentrification", "urbanism")),
+    ("Applied Legal Studies", ("legal studies", "paralegal", "law and society", "access to justice")),
+    ("Publishing", ("publishing industry", "book publishing", "scholarly publishing", "editorial workflow")),
+    ("Management & Organizational Studies", ("organizational behavior", "organisational behaviour", "management studies", "organizational studies", "human resource management")),
+    ("Accounting", ("accounting", "auditing", "financial reporting", "bookkeeping", "gaap")),
+    ("Forensics", ("forensic", "forensics", "criminalistics")),
+    ("Statistics & Actuarial Science", ("actuarial", "actuarial science", "biostatistics")),
+    ("Sustainable Energy Engineering (SEE)", ("sustainable energy engineering", "renewable energy engineering", "photovoltaic engineering")),
+    ("Sustainable Community Development", ("sustainable community development", "community development", "sustainable communities")),
+    ("Visual Arts", ("visual arts", "painting", "sculpture", "printmaking", "studio art")),
+    ("Public Policy", ("public policy", "policy analysis", "policy evaluation", "governance policy")),
+    ("Molecular Biology & Biochemistry", ("molecular biology", "biochemistry", "enzyme kinetics", "protein folding", "gene expression")),
+    ("Global Health", ("global health", "public health", "epidemiology", "health systems")),
+    ("Anthropology", ("anthropology", "anthropological", "ethnography", "kinship", "zooarchaeology", "ethnographic")),
+]
+
+
+def detect_subject(query: str) -> str:
+    """Heuristically map a raw query to a routing-relevant SFU subject name.
+
+    Returns the matched subject (one of ALWAYS_LIVE_SUBJECTS / SOFT_LIVE_SUBJECTS)
+    or "" if no high-signal keyword matched. This is intentionally conservative:
+    it exists only to wake the subject-aware routing rules (Q2.1/Q2.2) for the
+    zero-coverage and soft-live subjects, not to classify every query.
+    """
+    if not query:
+        return ""
+    lowered = query.lower()
+    for subject, keywords in _SUBJECT_KEYWORDS:
+        for kw in keywords:
+            # word-ish boundary check for short tokens to avoid e.g. "law" in "flaw"
+            if " " in kw:
+                if kw in lowered:
+                    return subject
+            elif re.search(rf"\b{re.escape(kw)}\b", lowered):
+                return subject
+    return ""
+
 
 class SearchSource(str, Enum):
     LIVE_API = "live_api"
@@ -123,6 +176,9 @@ class FederatedSearchRouter:
         # index and RRF-fuse. The 120-query Phase P.11 eval showed RRF beats
         # either retriever alone (+5.1% NDCG@10 vs BM25, avg overlap only 7.5%).
         self.local_rrf_enabled = local_rrf_enabled
+        # Set by search() when the local cluster fails on every leg attempted;
+        # the handler reads this to emit a degradation notice (Q-LOW item #6).
+        self.last_degraded = False
 
     def route(
         self,
@@ -201,6 +257,10 @@ class FederatedSearchRouter:
 
         live_results: list[dict] = []
         local_results: list[dict] = []
+        # Track local-leg failures so we can surface a degradation notice rather
+        # than silently returning "no results" when the cluster is down. Mirrors
+        # the S2-fallback notice pattern in tools._s2_fallback.
+        self.last_degraded = False
 
         if source in (SearchSource.LIVE_API, SearchSource.BOTH):
             try:
@@ -209,25 +269,42 @@ class FederatedSearchRouter:
                 )
                 live_results = data.get("results", [])
             except Exception:
+                # The router coordinates two independent backends and must never
+                # crash the calling handler; the underlying clients already narrow
+                # their own exceptions (see opensearch_retriever._http).
                 logger.exception("FederatedSearchRouter: live API search failed")
 
         if source in (SearchSource.LOCAL_INDEX, SearchSource.BOTH):
             try:
-                local_results = self._opensearch.search(query, top_k=top_k)
+                local_results = self._opensearch.search(
+                    query, top_k=top_k, filters=filters
+                )
             except Exception:
                 logger.exception("FederatedSearchRouter: local OpenSearch search failed")
+                if source == SearchSource.LOCAL_INDEX:
+                    self.last_degraded = True
 
         if source == SearchSource.LOCAL_RRF:
             bm25f_results: list[dict] = []
             splade_results: list[dict] = []
+            bm25f_ok = splade_ok = False
             try:
-                bm25f_results = self._opensearch.search(query, top_k=top_k, mode="bm25f")
+                bm25f_results = self._opensearch.search(
+                    query, top_k=top_k, mode="bm25f", filters=filters
+                )
+                bm25f_ok = True
             except Exception:
                 logger.exception("FederatedSearchRouter: BM25F search failed")
             try:
-                splade_results = self._opensearch.search(query, top_k=top_k, mode="splade")
+                splade_results = self._opensearch.search(
+                    query, top_k=top_k, mode="splade", filters=filters
+                )
+                splade_ok = True
             except Exception:
                 logger.exception("FederatedSearchRouter: SPLADE search failed")
+            # Both local legs errored → the local cluster is degraded.
+            if not bm25f_ok and not splade_ok:
+                self.last_degraded = True
             return _rrf_merge(bm25f_results, splade_results, top_k)
 
         if source == SearchSource.LIVE_API:

@@ -898,7 +898,7 @@ async def _handle_search_academic(args: dict) -> list[TextContent]:
     query = sanitize_search_query(args.get("query", ""))
     if not query:
         return [TextContent(type="text", text="Empty search query.")]
-    limit = min(args.get("limit", 10), 50)
+    limit = max(1, min(args.get("limit", 10), 50))
     page = max(args.get("page", 1), 1)
 
     filters: dict[str, str] = {}
@@ -918,18 +918,36 @@ async def _handle_search_academic(args: dict) -> list[TextContent]:
 
     # Phase P.6: route through FederatedSearchRouter when enabled.
     if _get_features().get("federated_search_enabled"):
+        # Q2.3: detect a routing-relevant subject so the Q2.1/Q2.2 subject rules
+        # actually fire (previously subject_hint was never passed → dead-wired).
+        from lib.federated_search import detect_subject
+        subject_hint = detect_subject(query)
+        prefer_local = bool(args.get("prefer_local"))
+        # Start the latency clock BEFORE the router call so retrieval time is
+        # included in the logged latency (item #10).
+        t0 = time.monotonic()
+        router = _get_federated_router()
         async with _request_semaphore:
             results = await asyncio.get_event_loop().run_in_executor(
                 None,
-                lambda: _get_federated_router().search(query, filters, top_k=limit),
+                lambda: router.search(
+                    query, filters, top_k=limit,
+                    subject_hint=subject_hint, prefer_local=prefer_local,
+                ),
             )
-        t0 = time.monotonic()
         if results:
             _cache_works(results)
             results = _maybe_rerank(results, query, limit)
         _log_query(query, results, (time.monotonic() - t0) * 1000, "search_academic_federated")
         data = {"results": results, "meta": {"count": len(results)}}
-        return [TextContent(type="text", text=format_openalex_results(data, query))]
+        text = format_openalex_results(data, query)
+        # Item #6: surface cluster degradation instead of a silent empty result.
+        if getattr(router, "last_degraded", False):
+            text = (
+                "[Note: the local search index is currently unavailable; "
+                "results may be incomplete.]\n\n" + text
+            )
+        return [TextContent(type="text", text=text)]
 
     # Default path: direct OpenAlex live API (federated_search_enabled = False).
     unavailable = _openalex_unavailable_reason()

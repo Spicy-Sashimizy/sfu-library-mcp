@@ -184,7 +184,7 @@ def test_search_local_exception_returns_empty():
 def test_search_local_rrf_calls_both_modes_and_merges():
     oa = MagicMock()
     os_ = MagicMock()
-    os_.search.side_effect = lambda query, top_k, mode: (
+    os_.search.side_effect = lambda query, top_k, mode, filters=None: (
         [_doc("10.1/a", "BMa"), _doc("10.1/shared", "BMshared")]
         if mode == "bm25f"
         else [_doc("10.1/shared", "SPshared"), _doc("10.1/b", "SPb")]
@@ -204,7 +204,7 @@ def test_search_local_rrf_resilient_to_one_mode_failing():
     oa = MagicMock()
     os_ = MagicMock()
 
-    def _maybe_raise(query, top_k, mode):
+    def _maybe_raise(query, top_k, mode, filters=None):
         if mode == "splade":
             raise RuntimeError("SPLADE model unavailable")
         return [_doc("10.1/bm", "BM")]
@@ -337,3 +337,107 @@ def test_search_anthropology_default_calls_only_openalex():
     oa.search_works.assert_called_once()
     os_.search.assert_not_called()
     assert results[0]["doi"] == "10.1/a"
+
+
+# ── Item #1 — filters forwarded to local OpenSearch legs ────────────────────────
+
+FILT = {"publication_year": "2010-2020", "type": "article"}
+
+
+def test_search_local_index_forwards_filters():
+    router, oa, os_ = _make_full_router()
+    router.search("q", FILT, top_k=10, force_source=SearchSource.LOCAL_INDEX)
+    assert os_.search.call_args.kwargs["filters"] == FILT
+
+
+def test_search_local_rrf_forwards_filters_to_both_modes():
+    oa = MagicMock()
+    os_ = MagicMock()
+    os_.search.return_value = [_doc("10.1/a", "A")]
+    router = FederatedSearchRouter(oa, os_, recency_days=30)
+    router.search("q", FILT, top_k=10, force_source=SearchSource.LOCAL_RRF)
+    assert os_.search.call_count == 2
+    for call in os_.search.call_args_list:
+        assert call.kwargs["filters"] == FILT
+
+
+def test_search_both_forwards_filters_to_local():
+    router, oa, os_ = _make_full_router()
+    router.search("q", FILT, top_k=10, force_source=SearchSource.BOTH)
+    assert os_.search.call_args.kwargs["filters"] == FILT
+
+
+# ── Item #6 — degradation flag when local cluster fails ─────────────────────────
+
+def test_local_index_failure_sets_degraded_flag():
+    router, oa, os_ = _make_full_router()
+    os_.search.side_effect = RuntimeError("cluster down")
+    router.search("q", {}, top_k=10, force_source=SearchSource.LOCAL_INDEX)
+    assert router.last_degraded is True
+
+
+def test_local_rrf_both_legs_fail_sets_degraded_flag():
+    oa = MagicMock()
+    os_ = MagicMock()
+    os_.search.side_effect = RuntimeError("cluster down")
+    router = FederatedSearchRouter(oa, os_, recency_days=30)
+    router.search("q", {}, top_k=10, force_source=SearchSource.LOCAL_RRF)
+    assert router.last_degraded is True
+
+
+def test_local_rrf_one_leg_ok_not_degraded():
+    oa = MagicMock()
+    os_ = MagicMock()
+
+    def _maybe_raise(query, top_k, mode, filters=None):
+        if mode == "splade":
+            raise RuntimeError("down")
+        return [_doc("10.1/bm", "BM")]
+
+    os_.search.side_effect = _maybe_raise
+    router = FederatedSearchRouter(oa, os_, recency_days=30)
+    router.search("q", {}, top_k=10, force_source=SearchSource.LOCAL_RRF)
+    assert router.last_degraded is False
+
+
+def test_healthy_search_leaves_degraded_false():
+    router, oa, os_ = _make_full_router()
+    router.search("q", {}, top_k=10, force_source=SearchSource.LOCAL_INDEX)
+    assert router.last_degraded is False
+
+
+# ── Item #2 — subject detector heuristic ────────────────────────────────────────
+
+def test_detect_subject_theatre():
+    from lib.federated_search import detect_subject
+    assert detect_subject("contemporary playwright dramaturgy in Canada") == "Theatre"
+
+
+def test_detect_subject_music():
+    from lib.federated_search import detect_subject
+    assert detect_subject("string quartet performance analysis") == "Music"
+
+
+def test_detect_subject_anthropology():
+    from lib.federated_search import detect_subject
+    assert detect_subject("zooarchaeology faunal assemblage Pacific Northwest") == "Anthropology"
+
+
+def test_detect_subject_none_for_generic_query():
+    from lib.federated_search import detect_subject
+    assert detect_subject("effects of climate change on salmon") == ""
+
+
+def test_detect_subject_empty_query():
+    from lib.federated_search import detect_subject
+    assert detect_subject("") == ""
+
+
+def test_detected_subject_routes_live_end_to_end():
+    """A Music query, run through the detector, must route LIVE via the router."""
+    from lib.federated_search import detect_subject
+    router, oa, os_ = _make_full_router()
+    hint = detect_subject("string quartet ethnomusicology")
+    router.search("string quartet ethnomusicology", {}, top_k=10, subject_hint=hint)
+    oa.search_works.assert_called_once()
+    os_.search.assert_not_called()

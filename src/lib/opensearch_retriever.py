@@ -94,9 +94,14 @@ class OpenSearchRetriever:
         self.timeout = timeout
 
     def _http(self, method: str, path: str, body: dict | None = None) -> dict | None:
-        """Execute an HTTP request against OpenSearch; return parsed JSON or None."""
+        """Execute an HTTP request against OpenSearch; return parsed JSON or None.
+
+        Narrowed to network/transport and JSON-decode errors so genuine bugs
+        (e.g. a malformed query body raising TypeError) propagate instead of being
+        silently swallowed into an empty result set.
+        """
+        import requests as _requests
         try:
-            import requests as _requests
             url = f"{self.url.rstrip('/')}/{path}"
             resp = _requests.request(
                 method,
@@ -107,29 +112,108 @@ class OpenSearchRetriever:
             )
             resp.raise_for_status()
             return resp.json()
-        except Exception as exc:
+        except (_requests.exceptions.RequestException, ValueError) as exc:
             logger.warning("OpenSearch request failed (%s %s): %s", method, path, exc)
             return None
 
-    def _build_bm25f_query(self, query: str, top_k: int) -> dict:
-        return {
+    @staticmethod
+    def _build_filter_clauses(filters: dict | None) -> list[dict]:
+        """Translate OpenAlex-style filter dict → OpenSearch bool.filter clauses.
+
+        Accepts the same filter keys the live OpenAlex path uses (built in
+        tools._handle_search_academic) plus a couple of plain aliases:
+          - publication_year: "YYYY-YYYY" range, or a single "YYYY"
+          - from_publication_date / to_publication_date: ISO dates → year range
+          - type: term filter on the keyword `type` field
+          - open_access.is_oa / is_oa: term filter on the boolean `is_oa` field
+        Unknown keys are ignored so callers can pass a superset safely.
+        """
+        if not filters:
+            return []
+
+        clauses: list[dict] = []
+
+        def _to_year(value: str) -> int | None:
+            try:
+                return int(str(value)[:4])
+            except (ValueError, TypeError):
+                return None
+
+        # Explicit year range or single year
+        year_range: dict[str, int] = {}
+        py = filters.get("publication_year")
+        if py:
+            text = str(py)
+            if "-" in text:
+                lo, _, hi = text.partition("-")
+                lo_y, hi_y = _to_year(lo), _to_year(hi)
+                if lo_y is not None:
+                    year_range["gte"] = lo_y
+                if hi_y is not None:
+                    year_range["lte"] = hi_y
+            else:
+                single = _to_year(text)
+                if single is not None:
+                    year_range["gte"] = single
+                    year_range["lte"] = single
+
+        # from/to publication dates → year bounds (index stores integer year)
+        from_date = filters.get("from_publication_date")
+        if from_date:
+            y = _to_year(from_date)
+            if y is not None:
+                year_range.setdefault("gte", y)
+        to_date = filters.get("to_publication_date")
+        if to_date:
+            y = _to_year(to_date)
+            if y is not None:
+                year_range.setdefault("lte", y)
+
+        if year_range:
+            clauses.append({"range": {"publication_year": year_range}})
+
+        work_type = filters.get("type")
+        if work_type:
+            clauses.append({"term": {"type": work_type}})
+
+        # OA flag may arrive as the OpenAlex-style "open_access.is_oa" key or a
+        # plain "is_oa". Treat the string "true"/bool True as the OA filter.
+        oa_value = filters.get("open_access.is_oa", filters.get("is_oa"))
+        if oa_value not in (None, "", False, "false"):
+            clauses.append({"term": {"is_oa": True}})
+
+        return clauses
+
+    def _build_bm25f_query(self, query: str, top_k: int, filters: dict | None = None) -> dict:
+        body: dict = {
             "size": top_k,
             "query": {
-                "multi_match": {
-                    "query": query,
-                    "fields": ["title^3", "abstract", "concepts^2"],
-                    "type": "most_fields",
-                    "tie_breaker": 0.5,
+                "bool": {
+                    "must": [
+                        {
+                            "multi_match": {
+                                "query": query,
+                                "fields": ["title^3", "abstract", "concepts^2"],
+                                "type": "most_fields",
+                                "tie_breaker": 0.5,
+                            }
+                        }
+                    ],
                 }
             },
             "_source": ["doi", "title", "abstract", "publication_year", "type", "is_oa"],
         }
+        filter_clauses = self._build_filter_clauses(filters)
+        if filter_clauses:
+            body["query"]["bool"]["filter"] = filter_clauses
+        return body
 
-    def _build_splade_query(self, query: str, top_k: int, max_terms: int = 64) -> dict:
+    def _build_splade_query(self, query: str, top_k: int, max_terms: int = 64,
+                            filters: dict | None = None) -> dict:
         sparse = encode_splade(query, self.splade_model_path)
         if not sparse:
             logger.warning("SPLADE encoding produced empty vector; falling back to BM25F")
-            return self._build_bm25f_query(query, top_k)
+            return self._build_bm25f_query(query, top_k, filters=filters)
         # Use bool.should with per-term rank_feature + log scaling (SPLADE paper recommendation).
         # scaling_factor=4 boosts rare term weights; top max_terms by weight controls latency.
         should = [
@@ -137,13 +221,18 @@ class OpenSearchRetriever:
                               "log": {"scaling_factor": 4}}}
             for t, w in sorted(sparse.items(), key=lambda x: -x[1])[:max_terms]
         ]
+        bool_query: dict = {"should": should, "minimum_should_match": 1}
+        filter_clauses = self._build_filter_clauses(filters)
+        if filter_clauses:
+            bool_query["filter"] = filter_clauses
         return {
             "size": top_k,
-            "query": {"bool": {"should": should}},
+            "query": {"bool": bool_query},
             "_source": ["doi", "title", "abstract", "publication_year", "type", "is_oa"],
         }
 
-    def search(self, query: str, top_k: int = 50, mode: str | None = None) -> list[dict]:
+    def search(self, query: str, top_k: int = 50, mode: str | None = None,
+               filters: dict | None = None) -> list[dict]:
         """Run a search and return normalized result dicts.
 
         Args:
@@ -153,8 +242,11 @@ class OpenSearchRetriever:
                 None (default) uses self.splade_enabled. Per-call selection lets
                 FederatedSearchRouter run both modes for RRF fusion regardless of
                 the instance flag.
+            filters: OpenAlex-style filter dict (publication_year / from/to dates /
+                type / is_oa). Translated to an OpenSearch bool.filter so the local
+                legs honour the same year/type/OA constraints as the live API path.
 
-        Returns: list of {doi, title, abstract, year, score, source, type, is_oa}
+        Returns: list of {doi, title, abstract, publication_year, year, score, source, type, is_oa}
         """
         if mode is None:
             use_splade = self.splade_enabled
@@ -162,9 +254,9 @@ class OpenSearchRetriever:
             use_splade = mode == "splade"
 
         if use_splade:
-            body = self._build_splade_query(query, top_k)
+            body = self._build_splade_query(query, top_k, filters=filters)
         else:
-            body = self._build_bm25f_query(query, top_k)
+            body = self._build_bm25f_query(query, top_k, filters=filters)
 
         data = self._http("POST", f"{self.index}/_search", body)
         if not data:
@@ -174,11 +266,18 @@ class OpenSearchRetriever:
         results: list[dict] = []
         for hit in hits:
             src = hit.get("_source") or {}
+            pub_year = src.get("publication_year")
             results.append({
                 "doi": src.get("doi", ""),
                 "title": src.get("title", ""),
                 "abstract": src.get("abstract", ""),
-                "year": src.get("publication_year"),
+                # Emit the keys the downstream reranker and query logger expect:
+                #   reranker._normalize_for_rerank reads "date" (OpenAlex-normalized shape)
+                #   tools._log_query reads "publication_year".
+                # "year" is retained for back-compat with existing callers/tests.
+                "publication_year": pub_year,
+                "date": str(pub_year) if pub_year is not None else "",
+                "year": pub_year,
                 "score": hit.get("_score", 0.0),
                 "source": "opensearch",
                 "type": src.get("type", ""),

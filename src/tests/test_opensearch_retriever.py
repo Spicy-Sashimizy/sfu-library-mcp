@@ -47,6 +47,64 @@ class TestOpenSearchRetrieverBM25F:
         assert doc["source"] == "opensearch"
         assert doc["is_oa"] is True
 
+    def test_search_emits_recency_keys(self):
+        """Item #3: local docs must carry publication_year/date so the reranker
+        and query logger keep the recency signal (they read those keys, not year)."""
+        r = self._retriever()
+        with patch.object(r, "_http", return_value=FAKE_SEARCH_RESPONSE):
+            doc = r.search("quantum entanglement", top_k=5)[0]
+        assert doc["publication_year"] == 2022
+        assert doc["date"] == "2022"
+        # back-compat key retained
+        assert doc["year"] == 2022
+
+
+class TestOpenSearchRetrieverFilters:
+    """Item #1: year/type/OA filters must reach the local OpenSearch query."""
+
+    def _retriever(self):
+        return OpenSearchRetriever(url="http://localhost:9200", splade_enabled=False)
+
+    def test_no_filters_no_filter_clause(self):
+        r = self._retriever()
+        body = r._build_bm25f_query("ml", 10, filters=None)
+        assert "filter" not in body["query"]["bool"]
+
+    def test_year_range_emits_range_filter(self):
+        r = self._retriever()
+        body = r._build_bm25f_query("ml", 10, filters={"publication_year": "2010-2020"})
+        flt = body["query"]["bool"]["filter"]
+        rng = next(c["range"]["publication_year"] for c in flt if "range" in c)
+        assert rng == {"gte": 2010, "lte": 2020}
+
+    def test_from_date_emits_gte(self):
+        r = self._retriever()
+        body = r._build_bm25f_query("ml", 10, filters={"from_publication_date": "2015-01-01"})
+        rng = body["query"]["bool"]["filter"][0]["range"]["publication_year"]
+        assert rng == {"gte": 2015}
+
+    def test_type_emits_term_filter(self):
+        r = self._retriever()
+        body = r._build_bm25f_query("ml", 10, filters={"type": "article"})
+        assert {"term": {"type": "article"}} in body["query"]["bool"]["filter"]
+
+    def test_oa_openalex_key_emits_term_filter(self):
+        r = self._retriever()
+        body = r._build_bm25f_query("ml", 10, filters={"open_access.is_oa": "true"})
+        assert {"term": {"is_oa": True}} in body["query"]["bool"]["filter"]
+
+    def test_oa_plain_key_emits_term_filter(self):
+        r = self._retriever()
+        body = r._build_bm25f_query("ml", 10, filters={"is_oa": True})
+        assert {"term": {"is_oa": True}} in body["query"]["bool"]["filter"]
+
+    def test_splade_query_carries_filter(self):
+        r = OpenSearchRetriever(url="http://localhost:9200", splade_enabled=True)
+        with patch("lib.opensearch_retriever.encode_splade", return_value={"x": 1.0}):
+            body = r._build_splade_query("ml", 10, filters={"type": "book"})
+        assert {"term": {"type": "book"}} in body["query"]["bool"]["filter"]
+        assert body["query"]["bool"]["minimum_should_match"] == 1
+
     def test_empty_response_returns_empty_list(self):
         r = self._retriever()
         with patch.object(r, "_http", return_value={"hits": {"hits": []}}):
@@ -61,7 +119,8 @@ class TestOpenSearchRetrieverBM25F:
         r = self._retriever()
         body = r._build_bm25f_query("machine learning", 10)
         assert body["size"] == 10
-        mm = body["query"]["multi_match"]
+        # multi_match is now wrapped in bool.must so filters can be attached.
+        mm = body["query"]["bool"]["must"][0]["multi_match"]
         assert any("title" in f for f in mm["fields"])
         assert mm["type"] == "most_fields"
         assert mm["tie_breaker"] == 0.5
@@ -120,7 +179,8 @@ class TestOpenSearchRetrieverSPLADE:
         r = self._retriever()
         with patch("lib.opensearch_retriever.encode_splade", return_value={}):
             body = r._build_splade_query("anything", 5)
-        assert "multi_match" in body["query"]
+        # Fallback is the BM25F query (multi_match wrapped in bool.must).
+        assert "multi_match" in body["query"]["bool"]["must"][0]
 
     def test_splade_search_returns_normalized_dicts(self):
         r = self._retriever()
