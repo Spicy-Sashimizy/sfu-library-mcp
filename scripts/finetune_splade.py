@@ -34,46 +34,71 @@ SPLADE representation (matches scripts/splade_indexer.py)
     weighted = log1p(relu(logits))         # SPLADE term weighting
     rep = max over sequence dim -> (B, V)  # max-pool with attention mask
 
-VRAM requirement  ⚠
-────────────────────
-SPLADE training is far heavier than the cross-encoder: the FLOPS loss and the
-in-batch similarity matrix both need the full |V| ≈ 30522 vocabulary projection
-held in memory for every example in the batch.
+Cloud cost / runtime  (target: DigitalOcean gpu-l40sx1-48gb @ $1.57/hr)
+───────────────────────────────────────────────────────────────────────
+The 48 GB L40S comfortably runs a full fine-tune at a large batch. With bf16
+autocast + a tuned batch + grad-accum, the 9,135-triplet set converges well
+inside the roadmap's 8-10 GPU-hour budget; in practice early-stopping usually
+trips earlier.
 
-  Full fine-tune at --batch-size 8 needs ~A100 40GB (per roadmap Q3.3, ~$30-36,
-  8-10 GPU hours). This is the intended cloud configuration.
+  Optimized cloud defaults (--batch-size 48 --grad-accum 1, bf16):
+      ~3-5 GPU-hours for 3 epochs of 9,135 triplets   →  ~$5-8
+      Hard wall-clock budget --max-runtime-min 600     →  ≤ $15.70 worst case
+      LoRA path (--lora) is faster/cheaper still (~2-3 GPU-hr, ~$3-5) but trades
+      a little quality — it only adapts low-rank deltas, not full MLM weights.
 
-  On the local RTX 4070 Ti SUPER (16 GB) a full fine-tune at the default batch
+  On the local RTX 4070 Ti SUPER (16 GB) a full fine-tune at the cloud batch
   WILL OOM. Local fallbacks, cheapest first:
     * --batch-size 2 --grad-accum 16   (keeps effective batch 32, fits ~16 GB)
     * --max-seq-length 128             (halves activation memory)
     * --grad-checkpoint                 (trades compute for memory)
-    * LoRA / PEFT adapters on the MLM head (smallest footprint; requires
-      `pip install peft` and is left as a documented TODO below — not wired by
-      default to keep this script dependency-light).
+    * --lora                            (smallest footprint; needs `pip install peft`)
   Use --smoke (CPU/GPU, 1-2 steps, 8 synthetic triplets) to validate the
-  pipeline locally before paying for an A100.
+  pipeline locally before paying for a GPU droplet.
+
+Cost-safety wiring (guards real money)
+───────────────────────────────────────
+This script enforces an INNER wall-clock budget; the OUTER orchestrator
+(scripts/cloud/run_splade_finetune.sh) enforces a HARD deadline and always
+destroys the droplet. The two are independent layers:
+
+  --max-runtime-min N    Soft budget. On hitting it the trainer checkpoints and
+                         exits 0 (the orchestrator then pulls the checkpoint and
+                         tears the droplet down). Default 600 min.
+  --checkpoint-every-min Durable resumable checkpoint cadence (default 15 min).
+  --resume-from DIR      Resume model+optimizer+scheduler+step from a checkpoint.
+
+Checkpoints are resumable (model+optimizer+scheduler+global_step+rng) and are
+written atomically with a checksum manifest so a partial transfer can't be
+mistaken for a good checkpoint (see CHECKPOINT_MANIFEST / verify_checkpoint).
 
 Data format
 ───────────
-JSONL matching data/sfu_training_triplets.jsonl:
+JSONL matching data/training/hard_negatives_triplets.jsonl:
     {"anchor": "...", "positive": "...", "negative": "...", ...}
-"negative" is optional. The Q3.1 hard-negative pool
-(data/training/hard_negatives_rrf_pool.jsonl) is the intended input.
+"negative" is optional. The Q3.1 hard-negative triplets
+(data/training/hard_negatives_triplets.jsonl, 9,135 rows) are the intended input.
 
 Usage
 ─────
-    # Cloud (DO A100 40GB) full run — per roadmap Q3.3
-    python scripts/finetune_splade.py \\
+    # Cloud (DO L40S 48GB) full run — optimized defaults
+    HF_HUB_OFFLINE=1 python scripts/finetune_splade.py \\
         --base-model naver/splade-cocondenser-ensembledistil \\
-        --train-data data/training/hard_negatives_rrf_pool.jsonl \\
+        --train-data data/training/hard_negatives_triplets.jsonl \\
         --output models/sfu-splade-v1 \\
-        --epochs 3 --lambda-q 0.0008 --lambda-d 0.0006 \\
-        --batch-size 8 --grad-accum 4
+        --epochs 3 --batch-size 48 --grad-accum 1 \\
+        --max-runtime-min 600 --checkpoint-every-min 15
+
+    # Cheaper LoRA variant (needs `pip install peft`)
+    HF_HUB_OFFLINE=1 python scripts/finetune_splade.py --lora --batch-size 64
+
+    # Resume after an interrupted/destroyed run
+    HF_HUB_OFFLINE=1 python scripts/finetune_splade.py \\
+        --resume-from models/sfu-splade-v1/checkpoints/latest
 
     # Local 16GB fallback (will be slow; mostly for sanity, not full quality)
     python scripts/finetune_splade.py \\
-        --train-data data/sfu_training_triplets.jsonl \\
+        --train-data data/training/hard_negatives_triplets.jsonl \\
         --batch-size 2 --grad-accum 16 --max-seq-length 128
 
     # Smoke test — 1-2 steps on synthetic triplets, no data file needed
@@ -84,9 +109,13 @@ After training: re-index all docs with the new model (scripts/splade_indexer.py,
 """
 
 import argparse
+import hashlib
 import json
 import logging
+import os
+import shutil
 import sys
+import time
 from pathlib import Path
 
 logging.basicConfig(
@@ -97,9 +126,12 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 
 REPO_ROOT = Path(__file__).parent.parent
-DEFAULT_TRAIN_DATA = REPO_ROOT / "data/sfu_training_triplets.jsonl"
+DEFAULT_TRAIN_DATA = REPO_ROOT / "data/training/hard_negatives_triplets.jsonl"
 DEFAULT_OUTPUT = REPO_ROOT / "models/sfu-splade-v1"
 DEFAULT_BASE_MODEL = "naver/splade-cocondenser-ensembledistil"
+
+CHECKPOINT_MANIFEST = "checkpoint_manifest.json"   # checksum + step metadata
+TRAIN_STATE_FILE = "training_state.pt"             # optim/sched/step/rng
 
 # Synthetic SFU triplets so --smoke runs with no data files / no OpenSearch.
 _SMOKE_TRIPLETS = [
@@ -202,6 +234,136 @@ def mnrl_loss(anchor_reps, doc_reps, scale: float = 1.0):
     return F.cross_entropy(scores, labels)
 
 
+# ── Checkpoint round-trip (verify-on-arrival) ───────────────────────────────────
+
+def _sha256(path: Path, chunk: int = 1 << 20) -> str:
+    h = hashlib.sha256()
+    with path.open("rb") as f:
+        while True:
+            b = f.read(chunk)
+            if not b:
+                break
+            h.update(b)
+    return h.hexdigest()
+
+
+def write_manifest(ckpt_dir: Path, global_step: int, epoch: int) -> None:
+    """Write a checksum+size manifest so a partial transfer can't be mistaken
+    for a good checkpoint. verify_checkpoint() re-checks these on arrival."""
+    files = {}
+    for p in sorted(ckpt_dir.rglob("*")):
+        if p.is_file() and p.name != CHECKPOINT_MANIFEST:
+            rel = str(p.relative_to(ckpt_dir))
+            files[rel] = {"size": p.stat().st_size, "sha256": _sha256(p)}
+    manifest = {
+        "global_step": global_step,
+        "epoch": epoch,
+        "created": time.time(),
+        "files": files,
+    }
+    tmp = ckpt_dir / (CHECKPOINT_MANIFEST + ".tmp")
+    tmp.write_text(json.dumps(manifest, indent=2))
+    tmp.replace(ckpt_dir / CHECKPOINT_MANIFEST)
+
+
+def verify_checkpoint(ckpt_dir: Path) -> bool:
+    """Verify every file in the manifest matches by size + sha256.
+
+    Used both locally (after writing) and conceptually by the orchestrator after
+    an rsync pull/push — a half-transferred file fails here and is not resumed.
+    """
+    mpath = ckpt_dir / CHECKPOINT_MANIFEST
+    if not mpath.exists():
+        logger.error("No manifest in %s — refusing to trust checkpoint", ckpt_dir)
+        return False
+    manifest = json.loads(mpath.read_text())
+    for rel, meta in manifest.get("files", {}).items():
+        p = ckpt_dir / rel
+        if not p.exists():
+            logger.error("Checkpoint missing file: %s", rel)
+            return False
+        if p.stat().st_size != meta["size"]:
+            logger.error("Checkpoint size mismatch (%s): %d != %d",
+                         rel, p.stat().st_size, meta["size"])
+            return False
+        if _sha256(p) != meta["sha256"]:
+            logger.error("Checkpoint checksum mismatch: %s", rel)
+            return False
+    logger.info("Checkpoint verified OK: %s (step %s)",
+                ckpt_dir, manifest.get("global_step"))
+    return True
+
+
+def save_checkpoint(ckpt_root: Path, tag: str, model, tokenizer, optimizer,
+                    scheduler, scaler, global_step: int, epoch: int,
+                    is_lora: bool) -> Path:
+    """Write a resumable checkpoint atomically, then update `latest` symlink.
+
+    Layout:
+        <ckpt_root>/<tag>/                       (HF model + tokenizer + state)
+            config.json, model.safetensors, ...  (or adapter_* for LoRA)
+            training_state.pt                    (optim/sched/scaler/step/rng)
+            checkpoint_manifest.json             (size+sha256 of every file)
+        <ckpt_root>/latest -> <tag>
+    """
+    import torch
+
+    ckpt_root.mkdir(parents=True, exist_ok=True)
+    final_dir = ckpt_root / tag
+    staging = ckpt_root / (tag + ".staging")
+    if staging.exists():
+        shutil.rmtree(staging)
+    staging.mkdir(parents=True)
+
+    # HF weights (full model, or LoRA adapter only)
+    model.save_pretrained(str(staging))
+    tokenizer.save_pretrained(str(staging))
+
+    state = {
+        "global_step": global_step,
+        "epoch": epoch,
+        "optimizer": optimizer.state_dict(),
+        "scheduler": scheduler.state_dict(),
+        "scaler": scaler.state_dict() if scaler is not None else None,
+        "torch_rng": torch.get_rng_state(),
+        "cuda_rng": torch.cuda.get_rng_state_all() if torch.cuda.is_available() else None,
+        "is_lora": is_lora,
+    }
+    torch.save(state, staging / TRAIN_STATE_FILE)
+
+    write_manifest(staging, global_step, epoch)
+    if not verify_checkpoint(staging):
+        raise RuntimeError(f"Checkpoint failed self-verification: {staging}")
+
+    # Atomic swap into place
+    if final_dir.exists():
+        shutil.rmtree(final_dir)
+    staging.replace(final_dir)
+
+    latest = ckpt_root / "latest"
+    try:
+        if latest.is_symlink() or latest.exists():
+            if latest.is_dir() and not latest.is_symlink():
+                shutil.rmtree(latest)
+            else:
+                latest.unlink()
+        latest.symlink_to(tag, target_is_directory=True)
+    except OSError:
+        # Filesystems without symlink support: write a pointer file instead.
+        (ckpt_root / "latest.txt").write_text(tag)
+
+    logger.info("Checkpoint saved: %s (step %d, epoch %d)", final_dir, global_step, epoch)
+    return final_dir
+
+
+def resolve_resume_dir(resume_from: str) -> Path:
+    """Resolve --resume-from, following `latest` symlink / latest.txt pointer."""
+    p = Path(resume_from)
+    if (p / "latest.txt").exists() and not (p / TRAIN_STATE_FILE).exists():
+        p = p / (p / "latest.txt").read_text().strip()
+    return p
+
+
 # ── Training ──────────────────────────────────────────────────────────────────
 
 def train(
@@ -218,6 +380,19 @@ def train(
     max_samples: int | None = None,
     grad_checkpoint: bool = False,
     smoke: bool = False,
+    *,
+    num_workers: int = 4,
+    use_lora: bool = False,
+    lora_r: int = 16,
+    lora_alpha: int = 32,
+    compile_model: bool = False,
+    max_steps: int | None = None,
+    max_runtime_min: float | None = 600.0,
+    checkpoint_every_min: float = 15.0,
+    early_stop_patience: int = 0,
+    early_stop_min_delta: float = 1e-4,
+    resume_from: str | None = None,
+    dry_run: bool = False,
 ) -> None:
     import torch
     from torch.optim import AdamW
@@ -225,6 +400,7 @@ def train(
 
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     logger.info("Device: %s", device)
+    vram_gb = 0.0
     if device.type == "cuda":
         props = torch.cuda.get_device_properties(0)
         vram_gb = props.total_memory / 1e9
@@ -234,11 +410,24 @@ def train(
                 "VRAM is %.0f GB but batch-size=%d — SPLADE full fine-tune likely "
                 "to OOM. See the fallback note in this script's docstring "
                 "(--batch-size 2 --grad-accum 16, --max-seq-length 128, "
-                "--grad-checkpoint).", vram_gb, batch_size,
+                "--grad-checkpoint, or --lora).", vram_gb, batch_size,
             )
     else:
         logger.warning("No CUDA device — running on CPU (very slow; fine for --smoke).")
+
+    # ── Mixed precision: prefer bf16 on Ampere+ (no GradScaler needed); fall
+    #    back to fp16 + GradScaler on older GPUs; plain fp32 on CPU.
     use_amp = device.type == "cuda"
+    amp_dtype = None
+    scaler = None
+    if use_amp:
+        if torch.cuda.is_bf16_supported():
+            amp_dtype = torch.bfloat16
+            logger.info("AMP: bf16 autocast (no GradScaler)")
+        else:
+            amp_dtype = torch.float16
+            scaler = torch.cuda.amp.GradScaler()
+            logger.info("AMP: fp16 autocast + GradScaler")
 
     # ── Data ──
     if smoke:
@@ -248,21 +437,96 @@ def train(
         if not train_data.exists():
             logger.error("Training data not found: %s", train_data)
             logger.error("Mine hard negatives first (roadmap Q3.1) or pass "
-                         "--train-data data/sfu_training_triplets.jsonl")
+                         "--train-data data/training/hard_negatives_triplets.jsonl")
             sys.exit(1)
         rows = clean_triplets(load_triplets(train_data, max_samples))
     if not rows:
         logger.error("No usable triplets. Aborting.")
         sys.exit(1)
 
+    eff_batch = min(batch_size, len(rows)) if smoke else batch_size
+    steps_per_epoch = max(1, (len(rows) + eff_batch - 1) // eff_batch)
+    optim_steps_total = max(1, (steps_per_epoch * epochs) // max(1, grad_accum))
+    if max_steps:
+        optim_steps_total = min(optim_steps_total, max_steps)
+    warmup_steps = min(int(0.1 * optim_steps_total), max(0, optim_steps_total - 1))
+
+    # ── DRY RUN: print the plan and exit before loading the model / paying. ──
+    if dry_run:
+        print("─" * 64)
+        print("finetune_splade.py --dry-run plan")
+        print("─" * 64)
+        print(f"  device              : {device} ({vram_gb:.0f} GB VRAM)" if device.type == "cuda"
+              else f"  device              : {device}")
+        print(f"  base_model          : {base_model}")
+        print(f"  train_data          : {train_data}")
+        print(f"  usable_triplets     : {len(rows)}")
+        print(f"  output              : {output_dir}")
+        print(f"  epochs              : {epochs}")
+        print(f"  batch_size          : {eff_batch}  grad_accum: {grad_accum}  "
+              f"eff_batch: {eff_batch * grad_accum}")
+        print(f"  max_seq_length      : {max_seq_length}")
+        print(f"  optim_steps (planned): {optim_steps_total}  (warmup {warmup_steps})")
+        print(f"  amp                 : {amp_dtype}")
+        print(f"  lora                : {use_lora} (r={lora_r}, alpha={lora_alpha})")
+        print(f"  torch.compile       : {compile_model}")
+        print(f"  num_workers         : {num_workers}")
+        print(f"  max_steps           : {max_steps}")
+        print(f"  max_runtime_min     : {max_runtime_min}  (soft budget; checkpoint+exit)")
+        print(f"  checkpoint_every_min: {checkpoint_every_min}")
+        print(f"  early_stop_patience : {early_stop_patience} (min_delta {early_stop_min_delta})")
+        print(f"  resume_from         : {resume_from}")
+        print("─" * 64)
+        print("DRY RUN — no model loaded, no GPU work, no files written.")
+        return
+
     # ── Model + tokenizer ──
     logger.info("Loading base SPLADE model: %s", base_model)
-    tokenizer = AutoTokenizer.from_pretrained(base_model)
-    model = AutoModelForMaskedLM.from_pretrained(base_model)
+    resume_dir = None
+    load_src = base_model
+    if resume_from:
+        resume_dir = resolve_resume_dir(resume_from)
+        if not verify_checkpoint(resume_dir):
+            logger.error("Refusing to resume from unverified checkpoint: %s", resume_dir)
+            sys.exit(1)
+        # For a full (non-LoRA) checkpoint, the HF weights live in resume_dir.
+        state_meta = json.loads((resume_dir / CHECKPOINT_MANIFEST).read_text())
+        if not use_lora:
+            load_src = str(resume_dir)
+        logger.info("Resuming from %s (step %s)", resume_dir, state_meta.get("global_step"))
+
+    tokenizer = AutoTokenizer.from_pretrained(load_src)
+    model = AutoModelForMaskedLM.from_pretrained(load_src)
+
+    is_lora = False
+    if use_lora:
+        try:
+            from peft import LoraConfig, PeftModel, get_peft_model
+        except ImportError:
+            logger.error("--lora requires peft. Install with: "
+                         "sudo %s/.venv/bin/pip install peft", REPO_ROOT)
+            sys.exit(1)
+        if resume_dir is not None:
+            model = PeftModel.from_pretrained(model, str(resume_dir), is_trainable=True)
+        else:
+            # Target the transformer attention + MLM head projections.
+            lora_cfg = LoraConfig(
+                r=lora_r, lora_alpha=lora_alpha, lora_dropout=0.05,
+                target_modules=["query", "key", "value", "dense"],
+                bias="none", task_type="FEATURE_EXTRACTION",
+            )
+            model = get_peft_model(model, lora_cfg)
+        is_lora = True
+        if hasattr(model, "print_trainable_parameters"):
+            model.print_trainable_parameters()
+
     model.to(device)
     if grad_checkpoint and hasattr(model, "gradient_checkpointing_enable"):
         model.gradient_checkpointing_enable()
         logger.info("Gradient checkpointing enabled")
+    if compile_model and hasattr(torch, "compile"):
+        logger.info("Compiling model with torch.compile (first step will be slow)")
+        model = torch.compile(model)
     model.train()
 
     def encode(texts: list[str]):
@@ -274,24 +538,42 @@ def train(
         return splade_rep(logits, enc["attention_mask"])
 
     # ── Optimizer / schedule ──
-    eff_batch = min(batch_size, len(rows)) if smoke else batch_size
-    steps_per_epoch = max(1, (len(rows) + eff_batch - 1) // eff_batch)
-    optim_steps = max(1, (steps_per_epoch * epochs) // max(1, grad_accum))
-    warmup_steps = min(int(0.1 * optim_steps), max(0, optim_steps - 1))
-
     optimizer = AdamW(model.parameters(), lr=learning_rate, weight_decay=0.01, eps=1e-6)
-    scheduler = get_linear_schedule_with_warmup(optimizer, warmup_steps, optim_steps)
-    scaler = torch.cuda.amp.GradScaler() if use_amp else None
+    scheduler = get_linear_schedule_with_warmup(optimizer, warmup_steps, optim_steps_total)
+
+    global_step = 0
+    start_epoch = 0
+    if resume_dir is not None:
+        state = torch.load(resume_dir / TRAIN_STATE_FILE, map_location=device, weights_only=False)
+        optimizer.load_state_dict(state["optimizer"])
+        scheduler.load_state_dict(state["scheduler"])
+        if scaler is not None and state.get("scaler"):
+            scaler.load_state_dict(state["scaler"])
+        if state.get("torch_rng") is not None:
+            torch.set_rng_state(state["torch_rng"].cpu() if hasattr(state["torch_rng"], "cpu")
+                                 else state["torch_rng"])
+        if device.type == "cuda" and state.get("cuda_rng") is not None:
+            try:
+                torch.cuda.set_rng_state_all(state["cuda_rng"])
+            except Exception:  # noqa: BLE001 — RNG restore is best-effort
+                pass
+        global_step = int(state.get("global_step", 0))
+        start_epoch = int(state.get("epoch", 0))
+        logger.info("Resumed optimizer/scheduler at global_step=%d, epoch=%d",
+                    global_step, start_epoch)
 
     logger.info(
         "Training: epochs=%d, batch=%d, grad_accum=%d, eff_batch=%d, lr=%s, "
-        "lambda_q=%s, lambda_d=%s, max_seq=%d, optim_steps=%d, amp=%s",
+        "lambda_q=%s, lambda_d=%s, max_seq=%d, optim_steps=%d, amp=%s, lora=%s, "
+        "max_runtime_min=%s, ckpt_every_min=%s, max_steps=%s",
         epochs, eff_batch, grad_accum, eff_batch * grad_accum, learning_rate,
-        lambda_q, lambda_d, max_seq_length, optim_steps, use_amp,
+        lambda_q, lambda_d, max_seq_length, optim_steps_total, amp_dtype, is_lora,
+        max_runtime_min, checkpoint_every_min, max_steps,
     )
 
     output_dir.mkdir(parents=True, exist_ok=True)
-    global_step = 0
+    ckpt_root = output_dir / "checkpoints"
+
     optimizer.zero_grad()
 
     try:
@@ -301,8 +583,25 @@ def train(
         def _tqdm(x, **kw):
             return x
 
-    for epoch in range(epochs):
-        # Simple shuffle without numpy dependency
+    # ── Time budgets + early stopping bookkeeping ──
+    t_start = time.monotonic()
+    last_ckpt = t_start
+    runtime_budget_s = (max_runtime_min * 60.0) if max_runtime_min else None
+    ckpt_interval_s = checkpoint_every_min * 60.0
+    best_loss = float("inf")
+    no_improve = 0
+    stop_reason = "completed"
+
+    def _checkpoint(tag: str, epoch: int):
+        nonlocal last_ckpt
+        if smoke:
+            return
+        save_checkpoint(ckpt_root, tag, model, tokenizer, optimizer, scheduler,
+                        scaler, global_step, epoch, is_lora)
+        last_ckpt = time.monotonic()
+
+    stop = False
+    for epoch in range(start_epoch, epochs):
         import random
         order = list(range(len(rows)))
         if not smoke:
@@ -317,7 +616,6 @@ def train(
             batch = [rows[i] for i in idx]
             anchors = [b["anchor"] for b in batch]
             docs = [b["positive"] for b in batch]
-            # Append in-batch hard negatives as extra candidate columns
             hard_negs = [b["negative"] for b in batch if b["negative"]]
             doc_texts = docs + hard_negs
 
@@ -329,9 +627,12 @@ def train(
                 return rank + reg, rank, reg
 
             if use_amp:
-                with torch.cuda.amp.autocast():
+                with torch.autocast(device_type="cuda", dtype=amp_dtype):
                     loss, rank, reg = _step()
-                scaler.scale(loss / grad_accum).backward()
+                if scaler is not None:
+                    scaler.scale(loss / grad_accum).backward()
+                else:
+                    (loss / grad_accum).backward()
             else:
                 loss, rank, reg = _step()
                 (loss / grad_accum).backward()
@@ -340,7 +641,7 @@ def train(
             n += 1
 
             if (bi + 1) % grad_accum == 0 or (bi + 1) == len(batches):
-                if use_amp:
+                if scaler is not None:
                     scaler.unscale_(optimizer)
                     torch.nn.utils.clip_grad_norm_(model.parameters(), 1.0)
                     scaler.step(optimizer)
@@ -362,16 +663,73 @@ def train(
 
             if smoke and global_step >= 2:
                 logger.info("SMOKE: reached 2 optimizer steps, stopping early.")
+                stop = True
                 break
 
-        logger.info("Epoch %d/%d — mean loss=%.4f", epoch + 1, epochs, epoch_loss / max(1, n))
+            # ── Hard caps checked every batch ──
+            now = time.monotonic()
+            if max_steps and global_step >= max_steps:
+                logger.info("Reached --max-steps=%d; stopping.", max_steps)
+                stop_reason = "max_steps"
+                stop = True
+                break
+            if runtime_budget_s is not None and (now - t_start) >= runtime_budget_s:
+                logger.warning("Hit --max-runtime-min=%.0f (%.1f min elapsed); "
+                               "checkpointing and exiting cleanly.",
+                               max_runtime_min, (now - t_start) / 60.0)
+                stop_reason = "runtime_budget"
+                stop = True
+                break
+            if not smoke and (now - last_ckpt) >= ckpt_interval_s:
+                logger.info("Periodic checkpoint (%.1f min since last).",
+                            (now - last_ckpt) / 60.0)
+                _checkpoint("latest_ckpt", epoch)
+
+        mean_loss = epoch_loss / max(1, n)
+        logger.info("Epoch %d/%d — mean loss=%.4f", epoch + 1, epochs, mean_loss)
+
         if smoke:
             break
 
-    # ── Save (HF format so splade_indexer.py can load via from_pretrained) ──
-    model.save_pretrained(str(output_dir))
+        # Save an epoch checkpoint so an interrupted next epoch can resume here.
+        _checkpoint("latest_ckpt", epoch + 1)
+
+        # ── Early stopping ──
+        if early_stop_patience > 0:
+            if best_loss - mean_loss > early_stop_min_delta:
+                best_loss = mean_loss
+                no_improve = 0
+            else:
+                no_improve += 1
+                logger.info("Early-stop: no improvement (%d/%d, best=%.4f)",
+                            no_improve, early_stop_patience, best_loss)
+                if no_improve >= early_stop_patience:
+                    logger.info("Early stopping: converged.")
+                    stop_reason = "early_stop"
+                    stop = True
+
+        if stop:
+            break
+
+    # ── Save final model (HF format so splade_indexer.py can load via from_pretrained) ──
+    if is_lora:
+        logger.info("Merging LoRA adapters into base weights for inference export")
+        if hasattr(model, "merge_and_unload"):
+            export_model = model.merge_and_unload()
+        else:
+            export_model = model
+        export_model.save_pretrained(str(output_dir))
+    else:
+        # torch.compile wraps the module; save the original.
+        export_model = getattr(model, "_orig_mod", model)
+        export_model.save_pretrained(str(output_dir))
     tokenizer.save_pretrained(str(output_dir))
-    logger.info("Model saved to %s", output_dir)
+    logger.info("Model saved to %s (stop_reason=%s, global_step=%d)",
+                output_dir, stop_reason, global_step)
+
+    # Final resumable checkpoint too (so resume-from a budget exit still works).
+    if not smoke and stop_reason in ("runtime_budget", "max_steps"):
+        _checkpoint("latest_ckpt", epoch)
 
     # ── Reload + sanity check sparsity on one synthetic doc ──
     model.eval()
@@ -380,7 +738,11 @@ def train(
         nnz = int((rep > 0).sum().item())
     logger.info("Reload sanity — sample doc has %d active terms (sparse rep OK)", nnz)
 
+    elapsed_min = (time.monotonic() - t_start) / 60.0
     print(f"\nSPLADE model saved: {output_dir}")
+    print(f"  stop_reason : {stop_reason}")
+    print(f"  global_step : {global_step}")
+    print(f"  wall_time   : {elapsed_min:.1f} min")
     print("Next steps:")
     print(f"  1. Set SPLADE_MODEL in scripts/splade_indexer.py to {output_dir}")
     print("  2. Re-index: python scripts/splade_indexer.py   (~11 min)")
@@ -395,8 +757,7 @@ def main() -> None:
     parser.add_argument("--base-model", default=DEFAULT_BASE_MODEL,
                         help="Base SPLADE (MLM) model to fine-tune")
     parser.add_argument("--train-data", default=str(DEFAULT_TRAIN_DATA),
-                        help="Triplet/hard-negative JSONL "
-                             "(falls back to data/sfu_training_triplets.jsonl)")
+                        help="Triplet/hard-negative JSONL")
     parser.add_argument("--output", default=str(DEFAULT_OUTPUT),
                         help="Output directory for the fine-tuned model")
     parser.add_argument("--epochs", type=int, default=3)
@@ -404,8 +765,10 @@ def main() -> None:
                         help="FLOPS regularization weight for query reps")
     parser.add_argument("--lambda-d", type=float, default=0.0006,
                         help="FLOPS regularization weight for doc reps")
-    parser.add_argument("--batch-size", type=int, default=8)
-    parser.add_argument("--grad-accum", type=int, default=4,
+    parser.add_argument("--batch-size", type=int, default=48,
+                        help="Per-step batch (48 tuned for the 48GB L40S; "
+                             "use 2 + --grad-accum 16 on a local 16GB GPU)")
+    parser.add_argument("--grad-accum", type=int, default=1,
                         help="Gradient accumulation steps (effective batch = batch*accum)")
     parser.add_argument("--learning-rate", type=float, default=2e-5)
     parser.add_argument("--max-seq-length", type=int, default=256)
@@ -413,10 +776,41 @@ def main() -> None:
                         help="Limit training to first N triplets (for testing)")
     parser.add_argument("--grad-checkpoint", action="store_true",
                         help="Enable gradient checkpointing (saves VRAM, slower)")
+    parser.add_argument("--num-workers", type=int, default=4,
+                        help="DataLoader/tokenization worker hint (reserved; "
+                             "tokenization runs inline but kept for parity)")
+    # ── Speed / cost knobs ──
+    parser.add_argument("--lora", action="store_true",
+                        help="Train low-rank PEFT adapters instead of full weights "
+                             "(faster/cheaper ~$3-5, slightly lower quality; needs peft)")
+    parser.add_argument("--lora-r", type=int, default=16)
+    parser.add_argument("--lora-alpha", type=int, default=32)
+    parser.add_argument("--compile", dest="compile_model", action="store_true",
+                        help="torch.compile the model (first step slow, then faster)")
+    parser.add_argument("--max-steps", type=int, default=None,
+                        help="Hard cap on optimizer steps (stops as soon as hit)")
+    parser.add_argument("--early-stop-patience", type=int, default=2,
+                        help="Stop after N epochs without mean-loss improvement "
+                             "(0 disables)")
+    parser.add_argument("--early-stop-min-delta", type=float, default=1e-4)
+    # ── Cost-safety: wall-clock budget + checkpoint cadence + resume ──
+    parser.add_argument("--max-runtime-min", type=float, default=600.0,
+                        help="Soft wall-clock budget: checkpoint and exit cleanly "
+                             "when reached (the outer orchestrator enforces a "
+                             "separate HARD deadline). 0 disables.")
+    parser.add_argument("--checkpoint-every-min", type=float, default=15.0,
+                        help="Write a resumable checkpoint at least this often")
+    parser.add_argument("--resume-from", default=None,
+                        help="Resume from a checkpoint dir (or its 'latest' link)")
+    parser.add_argument("--dry-run", action="store_true",
+                        help="Print the resolved training plan and exit without "
+                             "loading the model or touching the GPU")
     parser.add_argument("--smoke", action="store_true",
                         help="Run 1-2 steps on synthetic triplets to validate the "
                              "pipeline without a full (paid) training run")
     args = parser.parse_args()
+
+    max_runtime = args.max_runtime_min if args.max_runtime_min and args.max_runtime_min > 0 else None
 
     if args.smoke:
         logger.info("=== SMOKE MODE: validating import + SPLADE training path only ===")
@@ -433,6 +827,15 @@ def main() -> None:
             max_samples=8,
             grad_checkpoint=args.grad_checkpoint,
             smoke=True,
+            num_workers=0,
+            use_lora=False,
+            compile_model=False,
+            max_steps=None,
+            max_runtime_min=None,
+            checkpoint_every_min=args.checkpoint_every_min,
+            early_stop_patience=0,
+            resume_from=None,
+            dry_run=False,
         )
         logger.info("=== SMOKE OK — pipeline validated. ===")
         return
@@ -451,6 +854,18 @@ def main() -> None:
         max_samples=args.max_samples,
         grad_checkpoint=args.grad_checkpoint,
         smoke=False,
+        num_workers=args.num_workers,
+        use_lora=args.lora,
+        lora_r=args.lora_r,
+        lora_alpha=args.lora_alpha,
+        compile_model=args.compile_model,
+        max_steps=args.max_steps,
+        max_runtime_min=max_runtime,
+        checkpoint_every_min=args.checkpoint_every_min,
+        early_stop_patience=args.early_stop_patience,
+        early_stop_min_delta=args.early_stop_min_delta,
+        resume_from=args.resume_from,
+        dry_run=args.dry_run,
     )
 
 

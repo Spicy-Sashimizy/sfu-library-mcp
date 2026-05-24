@@ -129,7 +129,7 @@ Previous model baseline: `sfu-academic-embed-v4-bge` NDCG@10 = 0.6689 (35-query 
 ### Q3 — Training (DigitalOcean):
 - [ ] Q3.1 Mine hard negatives from local OpenSearch (CPU, free)
 - [ ] Q3.2 Cross-encoder fine-tune on SFU triplets (~$12-15 DO, L40S, 5-6 GPU hrs)
-- [ ] Q3.3 SPLADE fine-tune on SFU corpus (~$30-36 DO, A100, 8-10 GPU hrs)
+- [ ] Q3.3 SPLADE fine-tune on SFU corpus (~$5-8 DO, L40S 48GB, 3-5 GPU hrs — bf16/cost-safe rewrite; ≤$15.70 worst case). Orchestrator: `scripts/cloud/run_splade_finetune.sh` (auto-teardown + self-destruct + checkpoint round-trip). Run-time prereqs: install doctl + Write-scope DO token + `--ssh-key-id`.
 
 **Target:** RRF NDCG@10 ≥ 0.70 after Q1+Q2; ≥ 0.74 after Q3.
 

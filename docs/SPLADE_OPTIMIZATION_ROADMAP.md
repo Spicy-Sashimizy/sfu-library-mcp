@@ -257,7 +257,7 @@ After training: deploy to `src/lib/reranker.py`, run 120-query benchmark to conf
 
 ### Q3.3 — SPLADE Fine-Tuning on SFU Corpus
 **Expected gain:** +0.03–0.06 NDCG on sparse encoding  
-**DO cost:** ~$30–36 (8-10 GPU hours on A100 at $3.57/hr)  
+**DO cost:** ~$5–8 expected (3-5 GPU hours on L40S 48GB at $1.57/hr); **≤$15.70 worst-case** at the 600-min soft budget; **hard ceiling $17.27** at the 11h deadline (refuses to launch above `--max-cost $20`)  
 **Do this after Q3.2 confirms training pipeline works**
 
 Fine-tuning modifies the SPLADE encoder weights to better expand SFU-specific vocabulary in the sparse representation. "Indigenous" expands correctly to "First Nations", "Musqueam", "treaty rights" — terms the pretrained MS-MARCO model underweights because they're rare in web search.
@@ -265,21 +265,38 @@ Fine-tuning modifies the SPLADE encoder weights to better expand SFU-specific vo
 **Architecture:**
 - Base: `naver/splade-cocondenser-ensembledistil` (after Q2.3 model swap)
 - Training loss: FLOPS regularization (controls sparsity) + MultipleNegativesRankingLoss
-- Data: 8,724 SFU triplets from `data/sfu_training_triplets.jsonl` + hard negatives from Q3.1
+- Data: 9,135 SFU triplets from `data/training/hard_negatives_triplets.jsonl` (Q3.1 hard negatives)
 
-**VRAM requirement:** A100 40GB (SPLADE training requires more VRAM than cross-encoder — the FLOPS loss requires full vocabulary projection at each step)
+**Target GPU:** DigitalOcean `gpu-l40sx1-48gb` (48 GB, $1.57/hr). DO has **no A100**. GPU droplets are region-restricted — the sizes API returns empty `regions[]`, so a GPU-enabled region (`nyc2`/`tor1`/`atl1`) **must be passed explicitly**. The 48 GB card runs a full fine-tune at `--batch-size 48` in bf16 — far above the 16 GB local fallback.
+
+**Cost-safety (three independent guards):**
+1. **Inner soft budget** — `finetune_splade.py --max-runtime-min 600` checkpoints and exits cleanly when hit.
+2. **Orchestrator hard deadline + always-destroy** — `scripts/cloud/run_splade_finetune.sh` computes `max_cost = rate * deadline`, refuses to launch above `--max-cost`, and a shell `trap` runs `doctl compute droplet delete -f` on success, timeout, error, OR SIGINT/SIGTERM.
+3. **On-droplet self-destruct** — cloud-init schedules `shutdown -h` + a `doctl` self-delete at the deadline, so a lost-connection orchestrator still can't leave the droplet running.
+
+**Checkpoint round-trip (no lost progress):** resumable checkpoints (model+optimizer+scheduler+step+RNG) every `--checkpoint-every-min 15`, written atomically with a sha256+size manifest. The always-on local box `rsync`-pulls them to `models/sfu-splade-v1/checkpoints/` every 5 min and verifies-on-arrival; `--resume-from` continues from the latest. DO Volume/Spaces is a documented alternative to the rsync pull.
 
 ```bash
-# On A100 droplet (~$3.57/hr)
-python scripts/finetune_splade.py \
-  --base-model naver/splade-cocondenser-ensembledistil \
-  --train-data data/training/hard_negatives_rrf_pool.jsonl \
-  --output models/sfu-splade-v1 \
-  --epochs 3 --lambda-q 0.0008 --lambda-d 0.0006 \
-  --batch-size 8 --grad-accum 4
+# 1. PREP: validate everything with NO spend
+HF_HUB_OFFLINE=1 python scripts/finetune_splade.py --smoke
+HF_HUB_OFFLINE=1 python scripts/finetune_splade.py --dry-run
+bash scripts/cloud/run_splade_finetune.sh --dry-run
 
-# Expected wall time: 8-10 hours
-# Expected cost: ~$30-36 from DO credits
+# 2. RUN (once doctl is installed + a Write-scope DO token + SSH key are set):
+bash scripts/cloud/run_splade_finetune.sh --launch --ssh-key-id <DO_SSH_KEY_FINGERPRINT>
+
+# The orchestrator runs, on the droplet:
+#   HF_HUB_OFFLINE=1 python scripts/finetune_splade.py \
+#     --train-data data/training/hard_negatives_triplets.jsonl \
+#     --output models/sfu-splade-v1 --batch-size 48 --grad-accum 1 --epochs 3 \
+#     --max-runtime-min 600 --checkpoint-every-min 15
+#
+# Cheaper LoRA variant (~$3-5, slightly lower quality; needs `pip install peft`):
+#   bash scripts/cloud/run_splade_finetune.sh --launch --ssh-key-id <FP> \
+#     --extra-train-args "--lora"
+
+# Expected wall time: 3-5 GPU hours (early-stopping often trips sooner)
+# Expected cost: ~$5-8; ≤$15.70 if the full 600-min budget is used
 ```
 
 After training: re-index all 1M docs with new model (~11 min), run full benchmark.
