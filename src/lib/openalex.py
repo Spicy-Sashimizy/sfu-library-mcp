@@ -360,8 +360,13 @@ class OpenAlexClient:
                     "OpenAlex request timed out, retry %d/%d after %.1fs",
                     attempt + 1, self._max_retries, delay,
                 )
-                self._breaker.record_failure()
-                if attempt < self._max_retries:
+                # Record the breaker failure ONCE per logical request — only on
+                # the final exhausted attempt. Recording per-attempt over-counts
+                # (max_retries=3 → 4 failures) and trips a threshold-5 breaker
+                # after a single failing request.
+                if attempt >= self._max_retries:
+                    self._breaker.record_failure()
+                else:
                     time.sleep(delay)
             except requests.HTTPError as e:
                 last_exc = e
@@ -370,8 +375,9 @@ class OpenAlexClient:
                     "OpenAlex HTTP error %s, retry %d/%d after %.1fs",
                     e, attempt + 1, self._max_retries, delay,
                 )
-                self._breaker.record_failure()
-                if attempt < self._max_retries:
+                if attempt >= self._max_retries:
+                    self._breaker.record_failure()
+                else:
                     time.sleep(delay)
             except Exception as e:
                 logger.error("OpenAlex request failed: %s", e)

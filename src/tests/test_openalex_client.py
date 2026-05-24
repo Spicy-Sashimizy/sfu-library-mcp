@@ -156,6 +156,49 @@ class TestOpenAlexCircuitBreaker:
         assert client._breaker.state == CircuitBreaker.HALF_OPEN
 
 
+class TestOpenAlexCircuitBreakerWithRetries:
+    """Regression (Item 1): with retries enabled, one failing request must
+    record exactly ONE breaker failure — not one per attempt.
+
+    The existing breaker tests use max_retries=0, which hides the bug.
+    """
+
+    def test_one_failing_request_records_single_failure(self):
+        client = _make_client(
+            max_retries=3, retry_base_delay=0.0, circuit_breaker_threshold=5
+        )
+        with patch("requests.get", side_effect=requests.Timeout()) as mock_get:
+            result = client._get("/works", {})
+        assert result is None
+        # 1 original + 3 retries = 4 HTTP calls, but only ONE breaker failure.
+        assert mock_get.call_count == 4
+        assert client._breaker.failure_count == 1
+        assert client._breaker.state == CircuitBreaker.CLOSED
+
+    def test_http_error_records_single_failure(self):
+        client = _make_client(
+            max_retries=3, retry_base_delay=0.0, circuit_breaker_threshold=5
+        )
+        with patch("requests.get", side_effect=requests.HTTPError()):
+            client._get("/works", {})
+        assert client._breaker.failure_count == 1
+        assert client._breaker.state == CircuitBreaker.CLOSED
+
+    def test_breaker_opens_only_after_threshold_logical_requests(self):
+        client = _make_client(
+            max_retries=3, retry_base_delay=0.0, circuit_breaker_threshold=5
+        )
+        with patch("requests.get", side_effect=requests.Timeout()):
+            for _ in range(4):
+                client._get("/works", {})
+        # 4 failing requests < threshold 5 → still closed.
+        assert client._breaker.failure_count == 4
+        assert client._breaker.state == CircuitBreaker.CLOSED
+        with patch("requests.get", side_effect=requests.Timeout()):
+            client._get("/works", {})  # 5th
+        assert client._breaker.state == CircuitBreaker.OPEN
+
+
 class TestOpenAlexBudgetBlocking:
     def test_budget_exhausted_blocks_request(self):
         client = _make_client()

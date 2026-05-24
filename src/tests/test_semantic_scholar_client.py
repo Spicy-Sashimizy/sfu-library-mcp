@@ -125,3 +125,28 @@ class TestS2CircuitBreaker:
         time.sleep(0.1)
         assert client._breaker.can_proceed() is True
         assert client._breaker.state == CircuitBreaker.HALF_OPEN
+
+
+class TestS2CircuitBreakerWithRetries:
+    """Regression (Item 1): one failing request with retries must record
+    exactly ONE breaker failure, not one per attempt."""
+
+    def test_one_failing_request_records_single_failure(self):
+        client = _make_client(
+            max_retries=3, retry_base_delay=0.0, circuit_breaker_threshold=5
+        )
+        with patch("requests.get", side_effect=requests.Timeout()) as mock_get:
+            result = client._get("/paper/abc", {})
+        assert result is None
+        assert mock_get.call_count == 4  # 1 original + 3 retries
+        assert client._breaker.failure_count == 1
+        assert client._breaker.state == CircuitBreaker.CLOSED
+
+    def test_http_error_records_single_failure(self):
+        client = _make_client(
+            max_retries=3, retry_base_delay=0.0, circuit_breaker_threshold=5
+        )
+        with patch("requests.get", return_value=_err(503)):
+            client._get("/paper/abc", {})
+        assert client._breaker.failure_count == 1
+        assert client._breaker.state == CircuitBreaker.CLOSED

@@ -156,16 +156,69 @@ class TestCircuitBreaker:
 
         @retry_with_backoff(
             max_retries=5,
-            base_delay=0.01,
+            base_delay=0.0,
             circuit_breaker=cb,
         )
         def always_fail():
             raise ConnectionError("fail")
 
-        # First call exhausts retries and opens circuit breaker
+        # Each logical request records exactly ONE failure (Item 1). With
+        # threshold=2 the breaker opens only after the SECOND failing request,
+        # regardless of how many retries each performs.
+        with pytest.raises(ConnectionError):
+            always_fail()
+        assert cb.failure_count == 1
+        assert cb.state == CircuitBreaker.CLOSED
+
+        with pytest.raises(ConnectionError):
+            always_fail()
+        assert cb.state == CircuitBreaker.OPEN
+
+        # Third call should now fail immediately with CircuitBreakerOpenError
+        with pytest.raises(CircuitBreakerOpenError):
+            always_fail()
+
+    def test_decorator_records_one_failure_per_request(self):
+        """Regression (Item 1): the decorator must record exactly ONE breaker
+        failure per logical request, no matter how many retries it performs.
+
+        Previously record_failure() was called per-attempt, so a single failing
+        request with max_retries=3 logged 4 failures and tripped a threshold-5
+        breaker after ~1-2 requests.
+        """
+        cb = CircuitBreaker(threshold=5, timeout=60.0)
+
+        @retry_with_backoff(
+            max_retries=3,
+            base_delay=0.0,
+            circuit_breaker=cb,
+        )
+        def always_fail():
+            raise ConnectionError("fail")
+
         with pytest.raises(ConnectionError):
             always_fail()
 
-        # Second call should fail immediately with CircuitBreakerOpenError
-        with pytest.raises(CircuitBreakerOpenError):
-            always_fail()
+        # One logical request → exactly one recorded failure, breaker still CLOSED.
+        assert cb.failure_count == 1
+        assert cb.state == CircuitBreaker.CLOSED
+
+    def test_decorator_success_records_no_failure(self):
+        """A request that eventually succeeds must record no failures."""
+        cb = CircuitBreaker(threshold=5, timeout=60.0)
+        calls = {"n": 0}
+
+        @retry_with_backoff(
+            max_retries=3,
+            base_delay=0.0,
+            circuit_breaker=cb,
+        )
+        def fail_twice_then_ok():
+            calls["n"] += 1
+            if calls["n"] < 3:
+                raise ConnectionError("fail")
+            return "ok"
+
+        assert fail_twice_then_ok() == "ok"
+        assert cb.failure_count == 0
+        assert cb.state == CircuitBreaker.CLOSED

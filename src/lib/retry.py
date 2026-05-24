@@ -113,8 +113,6 @@ def retry_with_backoff(
                     raise
                 except retry_on as e:
                     last_exception = e
-                    if circuit_breaker:
-                        circuit_breaker.record_failure()
 
                     if attempt < max_retries:
                         delay = min(base_delay * (2 ** attempt), max_delay)
@@ -138,6 +136,12 @@ def retry_with_backoff(
                         )
                         time.sleep(delay)
 
+            # Record at most ONE failure per logical request: only after all
+            # retries are exhausted. Recording per-attempt would over-count and
+            # trip the breaker after a single failing request (e.g. max_retries=3
+            # would log 4 failures, opening a threshold-5 breaker prematurely).
+            if circuit_breaker:
+                circuit_breaker.record_failure()
             raise last_exception  # type: ignore[misc]
 
         @functools.wraps(func)
@@ -158,8 +162,6 @@ def retry_with_backoff(
                     raise
                 except retry_on as e:
                     last_exception = e
-                    if circuit_breaker:
-                        circuit_breaker.record_failure()
 
                     if attempt < max_retries:
                         delay = min(base_delay * (2 ** attempt), max_delay)
@@ -179,6 +181,9 @@ def retry_with_backoff(
                         )
                         await asyncio.sleep(delay)
 
+            # Record at most ONE failure per logical request (see sync_wrapper).
+            if circuit_breaker:
+                circuit_breaker.record_failure()
             raise last_exception  # type: ignore[misc]
 
         if asyncio.iscoroutinefunction(func):
