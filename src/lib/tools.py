@@ -24,7 +24,7 @@ from lib.formatters import (
     format_sfu_database,
     format_semantic_scholar_papers,
 )
-from lib.reranker import rerank_results, rerank_with_crossencoder
+from lib.reranker import rerank_results, rerank_with_crossencoder, _CE_CANDIDATE_POOL
 from lib.config import SERVER_VERSION
 from lib.validators import sanitize_search_query
 from lib.zotero import ZoteroClient, ZoteroError, fetch_zotero_item_types
@@ -49,6 +49,20 @@ def _get_features() -> dict[str, bool]:
     return _get_config().features
 
 
+def _retrieval_top_k(limit: int) -> int:
+    """How many candidates to retrieve before reranking.
+
+    When reranking is on, fetch a wider pool than the caller's `limit` so the
+    reranker (and especially the cross-encoder second pass) has docs from rank
+    11-N to promote (item #4). When reranking is off, fetch exactly `limit`.
+    """
+    features = _get_features()
+    if not features.get("rerank_enabled"):
+        return limit
+    pool = _CE_CANDIDATE_POOL if features.get("crossencoder_enabled") else limit
+    return max(limit, pool)
+
+
 def _maybe_rerank(docs: list[dict], query: str, limit: int) -> list[dict]:
     """Apply reranking pipeline if enabled; always returns at most `limit` docs.
 
@@ -65,15 +79,22 @@ def _maybe_rerank(docs: list[dict], query: str, limit: int) -> list[dict]:
         # SFU_EMBEDDING_MODEL_PATH selects the fine-tuned checkpoint (e.g. v4-bge);
         # empty falls through to the reranker's default (all-MiniLM-L6-v2).
         model_path = cfg.embedding_model_path or None
+        ce_enabled = features.get("crossencoder_enabled")
+        # Item #4: when the cross-encoder runs as a second pass, Stage-1 must hand
+        # it a pool wider than `limit` (>= _CE_CANDIDATE_POOL) so the CE can re-rank
+        # docs from rank 11-20 — otherwise Stage-1 already truncated to `limit` and
+        # the CE never sees them. Stage-1 still produces a quality-ordered list, so
+        # widening only adds candidates, never removes good ones.
+        stage1_limit = max(limit, _CE_CANDIDATE_POOL) if ce_enabled else limit
         reranked = rerank_results(
             docs,
             query,
-            limit,
+            stage1_limit,
             use_embedding=True,
             use_rrf=features.get("rrf_enabled", False),
             embedding_model_path=model_path,
         )
-        if features.get("crossencoder_enabled"):
+        if ce_enabled:
             reranked = rerank_with_crossencoder(reranked, query, limit)
         return reranked
     except Exception:
@@ -927,11 +948,12 @@ async def _handle_search_academic(args: dict) -> list[TextContent]:
         # included in the logged latency (item #10).
         t0 = time.monotonic()
         router = _get_federated_router()
+        fetch_k = _retrieval_top_k(limit)
         async with _request_semaphore:
             results = await asyncio.get_event_loop().run_in_executor(
                 None,
                 lambda: router.search(
-                    query, filters, top_k=limit,
+                    query, filters, top_k=fetch_k,
                     subject_hint=subject_hint, prefer_local=prefer_local,
                 ),
             )
@@ -957,7 +979,9 @@ async def _handle_search_academic(args: dict) -> list[TextContent]:
     async with _request_semaphore:
         data = await asyncio.get_event_loop().run_in_executor(
             None,
-            lambda: _get_openalex().search_works(query, filters=filters, per_page=limit, page=page),
+            lambda: _get_openalex().search_works(
+                query, filters=filters, per_page=_retrieval_top_k(limit), page=page
+            ),
         )
 
     if not data.get("results"):

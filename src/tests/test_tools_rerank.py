@@ -78,6 +78,49 @@ class TestMaybeRerank:
             result = _maybe_rerank(docs, "query", 4)
         assert len(result) == 4
 
+    def test_crossencoder_pool_widened_stage1(self):
+        """Item #4: with CE enabled, Stage-1 must be asked for a pool >= 20 even
+        when the caller's limit is small, so the CE sees a real candidate set."""
+        docs = [_make_oa_doc(f"Paper {i}") for i in range(30)]
+        feats = {"rerank_enabled": True, "rrf_enabled": False, "crossencoder_enabled": True}
+        with patch("lib.tools._get_features", return_value=feats):
+            with patch("lib.tools.rerank_results", return_value=docs) as mock_rerank:
+                # CE unavailable → second pass is a no-op slice, but we only care
+                # about the Stage-1 limit argument here.
+                with patch("lib.tools.rerank_with_crossencoder", side_effect=lambda d, q, l: d[:l]):
+                    _maybe_rerank(docs, "query", 5)
+        stage1_limit = mock_rerank.call_args.args[2]
+        assert stage1_limit >= 20
+
+    def test_crossencoder_receives_at_least_20_pairs(self):
+        """Item #4 end-to-end: with CE on + 30 docs, the cross-encoder is handed
+        >= 20 (query, text) pairs to score (spy on predict)."""
+        from lib import reranker
+
+        docs = [_make_oa_doc(f"Paper {i}") for i in range(30)]
+        feats = {"rerank_enabled": True, "rrf_enabled": False, "crossencoder_enabled": True}
+        fake_ce = MagicMock()
+        # predict must return something with .tolist(); mirror input length.
+        fake_ce.predict.side_effect = lambda pairs, show_progress_bar=False: MagicMock(
+            tolist=lambda: [0.0] * len(pairs)
+        )
+        with patch("lib.tools._get_features", return_value=feats):
+            # Stage-1 passthrough so the CE sees all retrieved docs in order.
+            with patch("lib.tools.rerank_results", side_effect=lambda d, q, l, **k: d[:l]):
+                with patch.object(reranker, "_get_cross_encoder", return_value=fake_ce):
+                    _maybe_rerank(docs, "query", 5)
+        pairs = fake_ce.predict.call_args.args[0]
+        assert len(pairs) >= 20
+
+    def test_no_pool_widening_without_crossencoder(self):
+        """When CE is off, Stage-1 limit stays at the caller's limit (no widening)."""
+        docs = [_make_oa_doc(f"Paper {i}") for i in range(30)]
+        feats = {"rerank_enabled": True, "rrf_enabled": False, "crossencoder_enabled": False}
+        with patch("lib.tools._get_features", return_value=feats):
+            with patch("lib.tools.rerank_results", return_value=docs[:5]) as mock_rerank:
+                _maybe_rerank(docs, "query", 5)
+        assert mock_rerank.call_args.args[2] == 5
+
 
 @pytest.mark.asyncio
 class TestHandlerRerank:

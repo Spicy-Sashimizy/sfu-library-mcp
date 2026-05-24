@@ -242,6 +242,12 @@ def _compute_rrf_scores(semantic_scores: list[float], n_docs: int) -> list[float
 _CROSS_ENCODER_MODEL = "cross-encoder/ms-marco-MiniLM-L-6-v2"
 _cross_encoder = None  # None = not yet tried; False = unavailable
 
+# Cross-encoder candidate pool: the CE re-scores at most this many top docs to
+# bound latency (~50-100ms on CPU for 20 pairs). For the CE to see a meaningful
+# pool, Stage-1 must hand it at least this many docs — see rerank_with_crossencoder
+# / _maybe_rerank's candidate_k widening (item #4).
+_CE_CANDIDATE_POOL = 20
+
 
 def _get_cross_encoder():
     global _cross_encoder
@@ -259,14 +265,17 @@ def _get_cross_encoder():
 def rerank_with_crossencoder(docs: list[dict], query: str, limit: int) -> list[dict]:
     """Second-pass reranker: score top candidates with a cross-encoder.
 
-    Runs only on the top-20 inputs to bound latency (~50-100ms on CPU).
+    Runs only on the top _CE_CANDIDATE_POOL inputs to bound latency (~50-100ms on
+    CPU). For this to be effective the caller must pass a pool wider than `limit`
+    (see _maybe_rerank, item #4) — otherwise the CE only ever re-scores `limit`
+    docs and can't pull a better doc up from rank 11-20.
     Falls back silently to `docs[:limit]` if the model is unavailable or errors.
     """
     ce = _get_cross_encoder()
     if ce is None:
         return docs[:limit]
 
-    candidates = docs[:20]
+    candidates = docs[:_CE_CANDIDATE_POOL]
     norms = [_normalize_for_rerank(d) for d in candidates]
     texts = [f"{n['title']} {n['abstract']}".strip() or n["title"] for n in norms]
     pairs = [(query, t) for t in texts]
