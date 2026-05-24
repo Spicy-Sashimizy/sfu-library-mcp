@@ -5,6 +5,8 @@ from datetime import date, timedelta
 from unittest.mock import MagicMock
 
 from lib.federated_search import (
+    ALWAYS_LIVE_SUBJECTS,
+    SOFT_LIVE_SUBJECTS,
     FederatedSearchRouter,
     SearchSource,
     _normalize_doi,
@@ -224,3 +226,114 @@ def test_search_doi_dedup_in_both_mode():
     dois = [d["doi"] for d in results]
     assert dois.count("10.1/shared") == 1
     assert len(dois) == 3
+
+
+# ── Q2.1 — zero-coverage subject fallback ───────────────────────────────────────
+
+def test_always_live_subjects_has_expected_15():
+    """The zero-coverage set must contain exactly the 15 subjects from the roadmap."""
+    assert ALWAYS_LIVE_SUBJECTS == {
+        "Theatre", "Music", "Urban Studies", "Applied Legal Studies",
+        "Publishing", "Management & Organizational Studies", "Accounting",
+        "Forensics", "Statistics & Actuarial Science",
+        "Sustainable Energy Engineering (SEE)",
+        "Sustainable Community Development",
+        "Visual Arts", "Public Policy",
+        "Molecular Biology & Biochemistry", "Global Health",
+    }
+    assert len(ALWAYS_LIVE_SUBJECTS) == 15
+
+
+def test_route_zero_coverage_subject_goes_live():
+    router = _make_router()
+    assert router.route("string quartets", {}, subject_hint="Music") == SearchSource.LIVE_API
+
+
+def test_route_zero_coverage_subject_goes_live_for_all_15():
+    router = _make_router()
+    for subject in ALWAYS_LIVE_SUBJECTS:
+        assert (
+            router.route("some historical query", {}, subject_hint=subject)
+            == SearchSource.LIVE_API
+        ), f"{subject!r} should route LIVE_API"
+
+
+def test_route_zero_coverage_overrides_prefer_local():
+    """ALWAYS_LIVE is a hard route — prefer_local cannot pull it back to local."""
+    router = _make_router()
+    assert (
+        router.route("string quartets", {}, subject_hint="Music", prefer_local=True)
+        == SearchSource.LIVE_API
+    )
+
+
+def test_route_covered_subject_goes_local_rrf():
+    router = _make_router()
+    # A subject not in either special set follows the default historical path.
+    assert (
+        router.route("Indigenous land rights", {}, subject_hint="Indigenous Studies")
+        == SearchSource.LOCAL_RRF
+    )
+
+
+def test_route_empty_subject_hint_unchanged():
+    """No subject detected → behaves exactly like the pre-Q2 default path."""
+    router = _make_router()
+    assert router.route("effects of climate change", {}, subject_hint="") == SearchSource.LOCAL_RRF
+
+
+def test_search_zero_coverage_subject_calls_only_openalex():
+    """Q2.1 end-to-end: a zero-coverage subject must not touch the local retriever."""
+    router, oa, os_ = _make_full_router()
+    results = router.search("string quartets", {}, top_k=10, subject_hint="Music")
+    oa.search_works.assert_called_once()
+    os_.search.assert_not_called()
+    assert results[0]["doi"] == "10.1/a"
+
+
+# ── Q2.2 — Anthropology soft-route ──────────────────────────────────────────────
+
+def test_anthropology_is_soft_live():
+    assert "Anthropology" in SOFT_LIVE_SUBJECTS
+
+
+def test_route_anthropology_prefers_live_by_default():
+    router = _make_router()
+    assert (
+        router.route("kinship systems in melanesia", {}, subject_hint="Anthropology")
+        == SearchSource.LIVE_API
+    )
+
+
+def test_route_anthropology_overridable_to_local():
+    router = _make_router()
+    assert (
+        router.route(
+            "kinship systems in melanesia",
+            {},
+            subject_hint="Anthropology",
+            prefer_local=True,
+        )
+        == SearchSource.LOCAL_RRF
+    )
+
+
+def test_route_anthropology_override_respects_rrf_disabled():
+    router = _make_router(local_rrf_enabled=False)
+    assert (
+        router.route(
+            "kinship systems",
+            {},
+            subject_hint="Anthropology",
+            prefer_local=True,
+        )
+        == SearchSource.LOCAL_INDEX
+    )
+
+
+def test_search_anthropology_default_calls_only_openalex():
+    router, oa, os_ = _make_full_router()
+    results = router.search("kinship systems", {}, top_k=10, subject_hint="Anthropology")
+    oa.search_works.assert_called_once()
+    os_.search.assert_not_called()
+    assert results[0]["doi"] == "10.1/a"

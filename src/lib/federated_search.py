@@ -2,6 +2,8 @@
 
 Routes queries between live OpenAlex API and local OpenSearch index:
   - Fresh queries (within federated_recency_days, or explicit temporal cues) → LIVE_API
+  - Zero-coverage subjects (no local index data) → LIVE_API (Q2.1)
+  - Soft-live subjects (OpenAlex beats local RRF) → LIVE_API unless overridden (Q2.2)
   - Historical queries → LOCAL_INDEX
   - When federated_both_enabled or both sources requested → BOTH (with RRF fusion + DOI dedup)
 
@@ -23,6 +25,27 @@ _TEMPORAL_CUES = re.compile(
 )
 
 _RRF_K = 60
+
+# Q2.1 — Zero-coverage subjects. These 15 subjects have 0.0 local NDCG@10 in the
+# 120-query LLM-judged benchmark; the local index holds no useful documents for
+# them, so a LOCAL_RRF route would return blank results. Always route live.
+ALWAYS_LIVE_SUBJECTS = {
+    "Theatre", "Music", "Urban Studies", "Applied Legal Studies",
+    "Publishing", "Management & Organizational Studies", "Accounting",
+    "Forensics", "Statistics & Actuarial Science",
+    "Sustainable Energy Engineering (SEE)",
+    "Sustainable Community Development",
+    "Visual Arts", "Public Policy",
+    "Molecular Biology & Biochemistry", "Global Health",
+}
+
+# Q2.2 — Soft-live subjects. These have real local coverage, but OpenAlex live
+# scores higher than local RRF (Anthropology: RRF 0.898 vs OpenAlex 0.931).
+# Prefer live by default, but allow the caller to override back to local via
+# the `prefer_local` flag (e.g. for offline/air-gapped runs or when live is down).
+SOFT_LIVE_SUBJECTS = {
+    "Anthropology",
+}
 
 
 class SearchSource(str, Enum):
@@ -101,13 +124,31 @@ class FederatedSearchRouter:
         # either retriever alone (+5.1% NDCG@10 vs BM25, avg overlap only 7.5%).
         self.local_rrf_enabled = local_rrf_enabled
 
-    def route(self, query: str, filters: dict) -> SearchSource:
+    def route(
+        self,
+        query: str,
+        filters: dict,
+        subject_hint: str = "",
+        prefer_local: bool = False,
+    ) -> SearchSource:
         """Determine which backend(s) to query.
 
         Rules (evaluated in order):
         1. from_publication_date within recency_days → LIVE_API
         2. Temporal cue words in query → LIVE_API
-        3. Everything else → LOCAL_RRF (when local_rrf_enabled) else LOCAL_INDEX
+        3. subject_hint in ALWAYS_LIVE_SUBJECTS (zero local coverage) → LIVE_API (Q2.1)
+        4. subject_hint in SOFT_LIVE_SUBJECTS → LIVE_API unless prefer_local (Q2.2)
+        5. Everything else → LOCAL_RRF (when local_rrf_enabled) else LOCAL_INDEX
+
+        Args:
+            query: raw query string
+            filters: OpenAlex-style filter dict (e.g. from_publication_date, type)
+            subject_hint: detected SFU subject area for the query (e.g. "Theatre").
+                Empty string means no subject was detected and subject-aware rules
+                are skipped. NOTE: no caller currently passes this — see module note.
+            prefer_local: when True, overrides the SOFT_LIVE_SUBJECTS preference and
+                keeps soft-live subjects on the local route. Has no effect on the
+                hard ALWAYS_LIVE_SUBJECTS list (those have no usable local data).
         """
         from_date_str = filters.get("from_publication_date", "")
         if from_date_str:
@@ -122,6 +163,16 @@ class FederatedSearchRouter:
         if _TEMPORAL_CUES.search(query):
             return SearchSource.LIVE_API
 
+        # Q2.1 — zero-coverage subjects: route live before attempting local
+        # retrieval, otherwise the local index returns blank results.
+        if subject_hint in ALWAYS_LIVE_SUBJECTS:
+            return SearchSource.LIVE_API
+
+        # Q2.2 — soft-live subjects: prefer live, but allow an explicit override
+        # back to the local route.
+        if subject_hint in SOFT_LIVE_SUBJECTS and not prefer_local:
+            return SearchSource.LIVE_API
+
         return SearchSource.LOCAL_RRF if self.local_rrf_enabled else SearchSource.LOCAL_INDEX
 
     def search(
@@ -130,6 +181,8 @@ class FederatedSearchRouter:
         filters: dict,
         top_k: int = 50,
         force_source: SearchSource | None = None,
+        subject_hint: str = "",
+        prefer_local: bool = False,
     ) -> list[dict]:
         """Dispatch to one or both backends and return a merged, deduplicated list.
 
@@ -138,8 +191,13 @@ class FederatedSearchRouter:
             filters: OpenAlex-style filter dict (e.g. from_publication_date, type)
             top_k: maximum results to return
             force_source: override automatic routing when set
+            subject_hint: detected SFU subject area, forwarded to route() for the
+                Q2.1/Q2.2 subject-aware rules.
+            prefer_local: forwarded to route() — overrides the soft-live preference.
         """
-        source = force_source or self.route(query, filters)
+        source = force_source or self.route(
+            query, filters, subject_hint=subject_hint, prefer_local=prefer_local
+        )
 
         live_results: list[dict] = []
         local_results: list[dict] = []
