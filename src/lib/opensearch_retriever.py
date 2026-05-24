@@ -21,6 +21,41 @@ _SPLADE_TOKENIZER: Any = None
 _SPLADE_ID_TO_TOKEN: dict[int, str] | None = None
 _SPLADE_LOCK = threading.Lock()
 
+# Dense bi-encoder (v5) singleton for dense_search() k-NN query encoding.
+_DENSE_MODEL: Any = None  # sentence_transformers.SentenceTransformer
+_DENSE_MODEL_PATH: str | None = None
+_DENSE_LOCK = threading.Lock()
+
+
+def _get_dense_model(model_path: str):
+    """Load the v5 bi-encoder once (singleton, thread-safe) for query encoding.
+
+    Mirrors how scripts/eval_embedder.py loads the model: SentenceTransformer on
+    CUDA when available, L2-normalized output (cosine == dot product).
+    """
+    global _DENSE_MODEL, _DENSE_MODEL_PATH
+    with _DENSE_LOCK:
+        if _DENSE_MODEL is None or _DENSE_MODEL_PATH != model_path:
+            try:
+                from sentence_transformers import SentenceTransformer
+                import torch
+            except ImportError as exc:
+                raise ImportError(
+                    "sentence_transformers and torch are required for dense_search."
+                ) from exc
+            device = "cuda" if torch.cuda.is_available() else "cpu"
+            logger.info("Loading dense embedder %s on %s", model_path, device)
+            _DENSE_MODEL = SentenceTransformer(model_path, device=device)
+            _DENSE_MODEL_PATH = model_path
+        return _DENSE_MODEL
+
+
+def encode_dense(text: str, model_path: str) -> list[float]:
+    """Encode a query/doc to a 384-dim L2-normalized vector with the v5 model."""
+    model = _get_dense_model(model_path)
+    emb = model.encode([text], normalize_embeddings=True, convert_to_numpy=True)
+    return emb[0].astype("float32").tolist()
+
 # Repo root = .../sfu-library-mcp(-training); this file is at src/lib/.
 _REPO_ROOT = Path(__file__).resolve().parents[2]
 # The SPLADE ONNX export carries the exact indexer weights. The matching
@@ -318,6 +353,54 @@ class OpenSearchRetriever:
             "_source": ["doi", "title", "abstract", "publication_year", "type", "is_oa"],
         }
 
+    def dense_search(self, query: str, top_k: int = 50,
+                     dense_index: str = "openalex_works_dense",
+                     dense_model_path: str = "",
+                     filters: dict | None = None) -> list[dict]:
+        """Dense-ANN k-NN search: encode the query with v5 and retrieve neighbours.
+
+        PROOF-OF-CONCEPT leg. Mirrors splade_search's return shape so the eval can
+        RRF-fuse it alongside BM25F/SPLADE. The query is encoded to a 384-dim
+        L2-normalized vector and matched against the `embedding` knn_vector field
+        (lucene HNSW, cosinesimil) on `dense_index` — a SUBSET index, so coverage
+        is partial vs the full lexical index.
+        """
+        if not dense_model_path:
+            dense_model_path = str(_REPO_ROOT / "models" / "sfu-academic-embed-v5")
+        vector = encode_dense(query, dense_model_path)
+        knn: dict = {"embedding": {"vector": vector, "k": top_k}}
+        filter_clauses = self._build_filter_clauses(filters)
+        if filter_clauses:
+            knn["embedding"]["filter"] = {"bool": {"filter": filter_clauses}}
+        body = {
+            "size": top_k,
+            "query": {"knn": knn},
+            "_source": ["doi", "title", "abstract", "publication_year", "type", "is_oa",
+                        "openalex_id"],
+        }
+        data = self._http("POST", f"{dense_index}/_search", body)
+        if not data:
+            return []
+        hits = (data.get("hits") or {}).get("hits") or []
+        results: list[dict] = []
+        for hit in hits:
+            src = hit.get("_source") or {}
+            pub_year = src.get("publication_year")
+            results.append({
+                "doi": src.get("doi", ""),
+                "openalex_id": src.get("openalex_id", hit.get("_id", "")),
+                "title": src.get("title", ""),
+                "abstract": src.get("abstract", ""),
+                "publication_year": pub_year,
+                "date": str(pub_year) if pub_year is not None else "",
+                "year": pub_year,
+                "score": hit.get("_score", 0.0),
+                "source": "opensearch_dense",
+                "type": src.get("type", ""),
+                "is_oa": src.get("is_oa", False),
+            })
+        return results
+
     def search(self, query: str, top_k: int = 50, mode: str | None = None,
                filters: dict | None = None) -> list[dict]:
         """Run a search and return normalized result dicts.
@@ -356,6 +439,10 @@ class OpenSearchRetriever:
             pub_year = src.get("publication_year")
             results.append({
                 "doi": src.get("doi", ""),
+                # The OpenAlex id is the OpenSearch _id (e.g. "W123..."); expose it
+                # so RRF fusion / judged-doc grading can key on it consistently with
+                # the dense leg and the LLM-judge cache.
+                "openalex_id": src.get("openalex_id") or hit.get("_id", ""),
                 "title": src.get("title", ""),
                 "abstract": src.get("abstract", ""),
                 # Emit the keys the downstream reranker and query logger expect:
