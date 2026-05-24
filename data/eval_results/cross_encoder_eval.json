@@ -1,0 +1,56 @@
+{
+  "config": {
+    "judge_cache": "/workspaces/sfu-library-mcp-training/data/eval_results/llm_judge_cache.json",
+    "index": "openalex_works",
+    "opensearch_url": "http://claudebox-sfu-library-mcp-training-opensearch:9200",
+    "relevant_threshold": 2,
+    "min_candidates": 2,
+    "k": 10,
+    "gain": "2^grade - 1"
+  },
+  "dataset": {
+    "queries_in_cache": 120,
+    "queries_qualifying_pre_fetch": 120,
+    "unique_candidate_ids": 3958,
+    "fetched": 3349,
+    "missing_from_index": 609,
+    "queries_evaluated": 120,
+    "queries_dropped_after_fetch": 0,
+    "total_candidates_scored": 3390
+  },
+  "base_label": "base",
+  "winner": {
+    "label": "v1",
+    "ndcg@10": 0.7405292017485222,
+    "delta_vs_base": 0.0642333851415855
+  },
+  "results": [
+    {
+      "label": "base",
+      "model_path": "cross-encoder/ms-marco-MiniLM-L-6-v2",
+      "ndcg@10": 0.6762958166069367,
+      "mrr@10": 0.7246825396825397,
+      "queries": 120,
+      "candidates_scored": 3390,
+      "ndcg@10_delta_vs_base": 0.0
+    },
+    {
+      "label": "baseline",
+      "model_path": "models/sfu-cross-encoder-baseline",
+      "ndcg@10": 0.6598827028703999,
+      "mrr@10": 0.7151322751322752,
+      "queries": 120,
+      "candidates_scored": 3390,
+      "ndcg@10_delta_vs_base": -0.016413113736536866
+    },
+    {
+      "label": "v1",
+      "model_path": "models/sfu-cross-encoder-v1",
+      "ndcg@10": 0.7405292017485222,
+      "mrr@10": 0.7941997354497355,
+      "queries": 120,
+      "candidates_scored": 3390,
+      "ndcg@10_delta_vs_base": 0.0642333851415855
+    }
+  ]
+}
