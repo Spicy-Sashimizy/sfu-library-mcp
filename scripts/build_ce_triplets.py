@@ -280,9 +280,25 @@ def main() -> None:
     )
 
     out_path.parent.mkdir(parents=True, exist_ok=True)
-    with out_path.open("w") as out:
+    # Atomic write: write to a temp file in the same dir, fsync, then
+    # os.replace() so a crash mid-write can never leave a half-written
+    # triplets file that a downstream "skip-if-fresh" check would trust.
+    tmp_path = out_path.with_suffix(out_path.suffix + ".tmp")
+    with tmp_path.open("w") as out:
         for t in triplets:
             out.write(json.dumps(t) + "\n")
+        out.flush()
+        os.fsync(out.fileno())
+    os.replace(tmp_path, out_path)
+    # fsync the directory so the rename itself is durable.
+    try:
+        dir_fd = os.open(str(out_path.parent), os.O_RDONLY)
+        try:
+            os.fsync(dir_fd)
+        finally:
+            os.close(dir_fd)
+    except OSError:
+        pass
 
     # ── Validation summary ──
     logger.info("=== Triplet build complete ===")

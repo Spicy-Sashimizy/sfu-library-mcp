@@ -739,14 +739,125 @@ def train(
     logger.info("Reload sanity — sample doc has %d active terms (sparse rep OK)", nnz)
 
     elapsed_min = (time.monotonic() - t_start) / 60.0
+    peak_vram_gb = None
+    if device.type == "cuda":
+        try:
+            peak_vram_gb = torch.cuda.max_memory_reserved() / 1e9
+            logger.info("Peak VRAM (max_memory_reserved): %.2f GB / %.1f GB total",
+                        peak_vram_gb, vram_gb)
+        except Exception:  # noqa: BLE001
+            pass
     print(f"\nSPLADE model saved: {output_dir}")
     print(f"  stop_reason : {stop_reason}")
     print(f"  global_step : {global_step}")
     print(f"  wall_time   : {elapsed_min:.1f} min")
+    if peak_vram_gb is not None:
+        print(f"  peak_vram   : {peak_vram_gb:.2f} GB / {vram_gb:.1f} GB total")
     print("Next steps:")
     print(f"  1. Set SPLADE_MODEL in scripts/splade_indexer.py to {output_dir}")
     print("  2. Re-index: python scripts/splade_indexer.py   (~11 min)")
     print("  3. Run: python scripts/benchmark_llm_judge.py   (confirm NDCG gain)")
+
+
+def _is_cuda_oom(exc: BaseException) -> bool:
+    """True if exc is a CUDA out-of-memory error (class or message match).
+
+    torch.cuda.OutOfMemoryError exists on modern torch, but some code paths
+    raise a plain RuntimeError whose message contains 'out of memory'. Catch
+    both so the auto-backoff is robust across torch versions.
+    """
+    try:
+        import torch
+        if isinstance(exc, torch.cuda.OutOfMemoryError):
+            return True
+    except Exception:  # noqa: BLE001 — torch may not expose the class
+        pass
+    return isinstance(exc, RuntimeError) and "out of memory" in str(exc).lower()
+
+
+def _cuda_empty_cache() -> None:
+    try:
+        import torch
+        if torch.cuda.is_available():
+            torch.cuda.empty_cache()
+            torch.cuda.synchronize()
+    except Exception:  # noqa: BLE001 — best-effort cleanup
+        pass
+
+
+def train_with_oom_backoff(base_kwargs: dict) -> dict:
+    """Run train() with CUDA-OOM auto-backoff.
+
+    On torch.cuda.OutOfMemoryError (or an 'out of memory' RuntimeError) we
+    empty_cache() and retry with a progressively smaller config. The ladder,
+    starting from the 16 GB-safe config the orchestrator passes in:
+
+        1. requested config (e.g. batch 2 / grad_accum 16 / seq 128 / grad-ckpt)
+        2. batch 1 / grad_accum 32  (keep effective batch, halve activations)
+        3. batch 1 / grad_accum 32 / max_seq_length 96 + grad_checkpoint
+        4. LoRA (smallest footprint; needs peft) at batch 1 / grad_accum 32
+
+    Each rung preserves the effective batch where possible so the optimization
+    dynamics barely change. The config that finally succeeds is written to
+    <output>/oom_backoff_result.json and returned so the orchestrator can
+    record exactly what ran.
+    """
+    base_batch = base_kwargs["batch_size"]
+    base_accum = base_kwargs["grad_accum"]
+    base_seq = base_kwargs["max_seq_length"]
+    eff = max(1, base_batch * base_accum)
+
+    ladder: list[dict] = [dict(base_kwargs)]
+    # Rung 2: batch 1, keep effective batch.
+    if base_batch > 1:
+        ladder.append({**base_kwargs, "batch_size": 1,
+                       "grad_accum": eff, "grad_checkpoint": True})
+    # Rung 3: also shrink the sequence length.
+    ladder.append({**base_kwargs, "batch_size": 1, "grad_accum": eff,
+                   "max_seq_length": min(base_seq, 96), "grad_checkpoint": True})
+    # Rung 4: LoRA — smallest footprint.
+    ladder.append({**base_kwargs, "batch_size": 1, "grad_accum": eff,
+                   "max_seq_length": min(base_seq, 96),
+                   "grad_checkpoint": True, "use_lora": True})
+
+    output_dir = base_kwargs["output_dir"]
+    last_exc: BaseException | None = None
+    for i, cfg in enumerate(ladder):
+        attempt = {
+            "rung": i + 1,
+            "batch_size": cfg["batch_size"],
+            "grad_accum": cfg["grad_accum"],
+            "max_seq_length": cfg["max_seq_length"],
+            "grad_checkpoint": cfg.get("grad_checkpoint", False),
+            "use_lora": cfg.get("use_lora", False),
+        }
+        logger.info("OOM-backoff rung %d/%d: %s", i + 1, len(ladder), attempt)
+        _cuda_empty_cache()
+        try:
+            train(**cfg)
+            result = {"success": True, **attempt}
+            try:
+                Path(output_dir).mkdir(parents=True, exist_ok=True)
+                (Path(output_dir) / "oom_backoff_result.json").write_text(
+                    json.dumps(result, indent=2))
+            except OSError:
+                pass
+            logger.info("OOM-backoff: rung %d succeeded — config recorded.", i + 1)
+            return result
+        except BaseException as exc:  # noqa: BLE001 — inspect, re-raise non-OOM
+            if _is_cuda_oom(exc):
+                last_exc = exc
+                logger.warning("OOM-backoff: rung %d OOM'd (%s). "
+                               "empty_cache() + retry at a smaller config.",
+                               i + 1, type(exc).__name__)
+                _cuda_empty_cache()
+                continue
+            # Not an OOM — a real error; don't mask it.
+            raise
+    logger.error("OOM-backoff: exhausted all %d rungs and still OOM.", len(ladder))
+    if last_exc is not None:
+        raise last_exc
+    raise RuntimeError("OOM-backoff exhausted with no recorded exception")
 
 
 def main() -> None:
@@ -808,6 +919,11 @@ def main() -> None:
     parser.add_argument("--smoke", action="store_true",
                         help="Run 1-2 steps on synthetic triplets to validate the "
                              "pipeline without a full (paid) training run")
+    parser.add_argument("--oom-backoff", action="store_true",
+                        help="On CUDA OutOfMemoryError, empty_cache() and retry at a "
+                             "progressively smaller config (batch 2->1, shorter seq, "
+                             "then LoRA). The winning config is written to "
+                             "<output>/oom_backoff_result.json. Recommended on 16 GB GPUs.")
     args = parser.parse_args()
 
     max_runtime = args.max_runtime_min if args.max_runtime_min and args.max_runtime_min > 0 else None
@@ -840,7 +956,7 @@ def main() -> None:
         logger.info("=== SMOKE OK — pipeline validated. ===")
         return
 
-    train(
+    train_kwargs = dict(
         base_model=args.base_model,
         train_data=Path(args.train_data),
         output_dir=Path(args.output),
@@ -867,6 +983,13 @@ def main() -> None:
         resume_from=args.resume_from,
         dry_run=args.dry_run,
     )
+
+    # --oom-backoff retries at a smaller config on CUDA OOM (no-op for --dry-run,
+    # which never touches the GPU).
+    if args.oom_backoff and not args.dry_run:
+        train_with_oom_backoff(train_kwargs)
+    else:
+        train(**train_kwargs)
 
 
 if __name__ == "__main__":
