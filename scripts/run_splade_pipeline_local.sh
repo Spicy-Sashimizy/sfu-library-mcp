@@ -77,6 +77,14 @@ export SFU_OPENSEARCH_URL="$OPENSEARCH_URL"
 export SFU_OPENSEARCH_INDEX="$INDEX"
 # Helps the allocator avoid fragmentation OOMs on a tight 16 GB card.
 export PYTORCH_CUDA_ALLOC_CONF="${PYTORCH_CUDA_ALLOC_CONF:-expandable_segments:True}"
+# TensorRT 10 runtime libs (pip tensorrt-cu12) so onnxruntime's
+# TensorrtExecutionProvider can dlopen libnvinfer.so.10 for the fast TRT encode
+# path. Without this, the indexer silently falls back to a slow CUDA path
+# (~37x slower). Only prepend if the lib is actually present.
+TRT_LIBS="$REPO_ROOT/.venv/lib/python3.11/site-packages/tensorrt_libs"
+if [[ -f "$TRT_LIBS/libnvinfer.so.10" ]]; then
+  export LD_LIBRARY_PATH="$TRT_LIBS:${LD_LIBRARY_PATH:-}"
+fi
 
 START_EPOCH=$(date +%s)
 
