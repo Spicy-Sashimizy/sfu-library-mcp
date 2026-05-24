@@ -1,0 +1,50 @@
+{
+  "config": {
+    "judge_cache": "data/eval_results/llm_judge_cache.json",
+    "index": "openalex_works",
+    "opensearch_url": "http://claudebox-sfu-library-mcp-training-opensearch:9200",
+    "relevant_threshold": 2,
+    "min_candidates": 2,
+    "k": 10,
+    "gain": "2^grade - 1",
+    "scoring": "bi-encoder cosine similarity (L2-normalized dot product)"
+  },
+  "dataset": {
+    "queries_in_cache": 120,
+    "queries_qualifying_pre_fetch": 120,
+    "unique_candidate_ids": 3958,
+    "fetched": 3349,
+    "missing_from_index": 609,
+    "queries_evaluated": 120,
+    "queries_dropped_after_fetch": 0,
+    "total_candidates_scored": 3390
+  },
+  "base_label": "v4",
+  "winner": {
+    "label": "v5",
+    "ndcg@10": 0.7717375485701758,
+    "delta_vs_base": 0.14844924089534806
+  },
+  "results": [
+    {
+      "label": "v4",
+      "model_path": "models/sfu-academic-embed-v4-bge",
+      "ndcg@10": 0.6232883076748278,
+      "mrr@10": 0.7040608465608463,
+      "queries": 120,
+      "candidates_scored": 3390,
+      "unique_docs_embedded": 3178,
+      "ndcg@10_delta_vs_base": 0.0
+    },
+    {
+      "label": "v5",
+      "model_path": "models/sfu-academic-embed-v5",
+      "ndcg@10": 0.7717375485701758,
+      "mrr@10": 0.8374603174603173,
+      "queries": 120,
+      "candidates_scored": 3390,
+      "unique_docs_embedded": 3178,
+      "ndcg@10_delta_vs_base": 0.14844924089534806
+    }
+  ]
+}
