@@ -104,6 +104,10 @@ OPENALEX_MANIFEST_URL = "https://openalex.s3.amazonaws.com/data/works/manifest"
 DEFAULT_OUTPUT_DIR = Path(__file__).parent.parent / "data" / "openalex_snapshot"
 CHECKPOINT_FILE = "download_checkpoint.json"
 STATUS_FILE = "snapshot_status.json"
+# Crash-durable holding file for the writer's partial (sub-chunk-size) buffer.
+# Persisted atomically alongside every checkpoint and reloaded on resume so a
+# hard kill between full-chunk flushes cannot drop buffered records.
+PENDING_BUFFER_FILE = "pending_buffer.jsonl.gz"
 DEFAULT_MIN_YEAR = 2015
 DEFAULT_CHUNK_SIZE = 500_000  # records per output chunk
 DEFAULT_WORKERS = 3          # concurrent part downloads
@@ -566,6 +570,58 @@ class ChunkWriter:
         self.current_chunk = []
         return path
 
+    def persist_buffer(self) -> None:
+        """Atomically write the partial (sub-chunk-size) buffer to disk.
+
+        Called alongside each checkpoint so the on-disk record set is always
+        consistent with completed_parts. A hard kill between full-chunk flushes
+        therefore cannot lose buffered records — they are recovered from this
+        file on resume via load_buffer(). Removes the file when the buffer is
+        empty (e.g. right after a full-chunk flush) to keep things tidy.
+        """
+        path = self.output_dir / PENDING_BUFFER_FILE
+        if not self.current_chunk:
+            if path.exists():
+                path.unlink()
+            return
+        tmp = path.with_suffix(".tmp.gz")
+        with gzip.open(tmp, "wt", encoding="utf-8") as f:
+            for rec in self.current_chunk:
+                f.write(json.dumps(rec, ensure_ascii=False) + "\n")
+        os.replace(str(tmp), str(path))
+
+    def load_buffer(self) -> int:
+        """Reload a persisted partial buffer into current_chunk on resume.
+
+        Returns the number of records recovered. These records were counted in
+        cumulative_stats/total_kept at checkpoint time but had not yet been
+        written into a numbered chunk file, so recovering them prevents silent
+        data loss without double-counting.
+        """
+        path = self.output_dir / PENDING_BUFFER_FILE
+        if not path.exists():
+            return 0
+        recovered = []
+        try:
+            with gzip.open(path, "rt", encoding="utf-8") as f:
+                for line in f:
+                    line = line.strip()
+                    if line:
+                        recovered.append(json.loads(line))
+        except Exception as e:
+            logger.warning("Could not load pending buffer (%s) — ignoring", e)
+            return 0
+        self.current_chunk.extend(recovered)
+        if recovered:
+            logger.info("Recovered %d buffered records from pending buffer", len(recovered))
+        return len(recovered)
+
+    def clear_buffer_file(self) -> None:
+        """Remove the pending-buffer file (after a graceful flush)."""
+        path = self.output_dir / PENDING_BUFFER_FILE
+        if path.exists():
+            path.unlink()
+
     def _write_chunk(self, records: list[dict]) -> Path:
         path = self.output_dir / f"works_part_{self.chunk_index:04d}.jsonl.gz"
         tmp = path.with_suffix(".tmp.gz")
@@ -695,6 +751,14 @@ def run_download(
     writer.set_chunk_index(checkpoint.get("next_chunk_index", 0) if checkpoint else 0)
     writer.total_written = cumulative_stats.get("total_kept", 0)
 
+    # Recover any partial buffer persisted before a hard crash (Item 4). These
+    # records were already counted in total_kept at checkpoint time, so reduce
+    # total_written by the recovered count to avoid double-counting when they
+    # are finally written into a numbered chunk.
+    if resume:
+        recovered = writer.load_buffer()
+        writer.total_written -= recovered
+
     start_time = time.time()
     parts_processed = 0
 
@@ -722,6 +786,9 @@ def run_download(
                 for f in pending.values():
                     f.cancel()
                 writer.flush()
+                # Buffer is now in a numbered chunk — drop the pending file so
+                # resume doesn't re-add (and duplicate) these records.
+                writer.clear_buffer_file()
                 save_checkpoint(output_dir, {
                     "completed_parts": i,
                     "total_parts": total_parts,
@@ -770,7 +837,13 @@ def run_download(
                 if i in pending:
                     records, part_stats = pending.pop(i).result()
                 else:
-                    records, part_stats = download_and_process_part(session, part_url, min_year)
+                    # Fallback must use the SAME processing fn and schema as the
+                    # prefetch path (_part_fn honours use_gpu + legacy_schema);
+                    # hardcoding download_and_process_part dropped the GPU path
+                    # and the legacy_schema flag → mixed/wrong-schema records.
+                    records, part_stats = _part_fn(
+                        session, part_url, min_year, legacy_schema
+                    )
             except Exception as e:
                 logger.error("Skipping part %d after all retries failed: %s", i, e)
                 continue
@@ -786,6 +859,13 @@ def run_download(
                 writer.add_records(records)
 
             parts_processed += 1
+
+            # Persist the partial buffer BEFORE advancing the checkpoint so the
+            # on-disk record set is never behind completed_parts (Item 4). Order
+            # matters: a crash between this and save_checkpoint can only cause
+            # part i to be re-processed (harmless — the indexer upserts by a
+            # deterministic OpenAlex _id), never silent loss of buffered records.
+            writer.persist_buffer()
 
             # Checkpoint after every part
             save_checkpoint(output_dir, {
@@ -816,13 +896,16 @@ def run_download(
                 if records:
                     logger.info("Sample record:\n%s", json.dumps(records[0], indent=2, ensure_ascii=False)[:500])
                 writer.flush()
+                writer.clear_buffer_file()
                 return {**cumulative_stats, "state": "dry_run", "completed_parts": 1}
 
     finally:
         executor.shutdown(wait=False)
 
-    # Final flush
+    # Final flush — buffered records go into a numbered chunk, so the pending
+    # buffer file is no longer needed.
     writer.flush()
+    writer.clear_buffer_file()
 
     total_time = time.time() - start_time
     logger.info("═══ Download complete ═══")
