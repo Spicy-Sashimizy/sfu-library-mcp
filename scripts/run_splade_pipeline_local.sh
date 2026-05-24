@@ -9,7 +9,7 @@
 #   2. triplets   Build query-doc triplets (atomic write)                 ~2-3m
 #   3. finetune   SPLADE fine-tune, 16 GB-safe config + CUDA-OOM backoff  ~1-2h
 #   4. reindex    Re-encode the 150M index in place (upsert by _id)       ~2.4h
-#   5. benchmark  NDCG@10 new SPLADE leg vs old on the judged set         ~few min
+#   5. benchmark  LLM-judge NDCG@10 via eval_pipeline (full rerank path)   ~10-15m
 #
 # Hardening:
 #   * Stage-level resume   — scripts/pipeline_state.py (atomic temp->os.replace)
@@ -44,6 +44,7 @@ DOC_BASELINE="$TRAIN_DIR/reindex_baseline_doc.json"
 
 # ── Config / data files ───────────────────────────────────────────────────--
 QUERIES="$REPO_ROOT/data/sfu_eval_queries.json"
+DIVERSE_QUERIES="$REPO_ROOT/data/eval_results/diverse_queries.json"
 JUDGE_CACHE="$REPO_ROOT/data/eval_results/llm_judge_cache.json"
 NEG_SPLADE="$TRAIN_DIR/hard_negatives_splade.jsonl"
 NEG_BM25="$TRAIN_DIR/hard_negatives_bm25.jsonl"
@@ -190,10 +191,13 @@ print_plan() {
                    IN-PLACE; no staging copy — disk can't hold a 2nd index)  ~140 min
                  GATE: doc count >= $MIN_DOC_COUNT AND a spot-doc's
                        sparse_field changed vs a pre-reindex baseline.
-   5. benchmark  ndcg_splade_eval.py -> data/eval_results/                  ~3-5  min
+   5. benchmark  eval_pipeline.py (LLM-judge cache; query-encode SPLADE with
+                   models/splade_onnx_fp16 = the just-re-encoded model; scores
+                   FINAL reranked top-10, A=bm25f+splade vs B=+dense, keyword/
+                   natural) -> data/eval_results/pipeline_splade_eval_*.json   ~10-15 min
 ────────────────────────────────────────────────────────────────────────────
- EST TOTAL (cold): ~10+3+90+140+5 = ~248 min  (~4.1 h)  < 10 h budget. OK.
- Worst plausible (finetune 120m, reindex 160m): ~300 min (~5.0 h). < 10 h. OK.
+ EST TOTAL (cold): ~10+3+90+140+12 = ~255 min  (~4.3 h)  < 10 h budget. OK.
+ Worst plausible (finetune 120m, reindex 160m): ~310 min (~5.2 h). < 10 h. OK.
 ════════════════════════════════════════════════════════════════════════════
 EOF
   echo "── current state ──"
@@ -378,21 +382,50 @@ if should_run reindex; then
     exit 6
   fi
   rm -f "$REENC_GUARD" 2>/dev/null || true   # reset guard for a future re-encode
+  # Rebuild the QUERY-encoder ONNX (models/splade_onnx — the retriever/server
+  # default) from the freshly-exported NEW model. The cache-invalidation step
+  # above deletes it, but the indexer only rebuilds models/splade_onnx_fp16 (its
+  # doc encoder). Without this refresh, query-side SPLADE (production serving and
+  # the standalone eval_pipeline default) would be MISSING or stale-mismatched
+  # after a re-encode. models/splade_onnx* are untracked, so this is safe.
+  NEW_ONNX="$REPO_ROOT/models/splade_onnx_fp16"
+  QUERY_ONNX="$REPO_ROOT/models/splade_onnx"
+  if [[ -s "$NEW_ONNX/model.onnx" ]]; then
+    rm -rf "$QUERY_ONNX"
+    cp -r "$NEW_ONNX" "$QUERY_ONNX" \
+      && hb "STAGE 4 reindex: refreshed query encoder models/splade_onnx <- new model." \
+      || hb "STAGE 4 WARN: could not refresh models/splade_onnx (stage 5 pins _fp16, so benchmark unaffected)."
+  fi
   mark reindex done
   hb "STAGE 4 reindex: DONE + verified."
 else
   hb "STAGE 4 reindex: already done — skip."
 fi
 
-# ── Stage 5: benchmark ────────────────────────────────────────────────────────
+# ── Stage 5: benchmark (LLM-judge harness — task #21) ─────────────────────────
+# Swapped from ndcg_splade_eval.py (citation-count PROXY, ~2.5x undercount) to
+# eval_pipeline.py: the consistent LLM-judge harness used by every other eval
+# (eval_cross_encoder/eval_embedder/eval_dense_poc). It scores the FINAL reranked
+# top-10 (RRF -> embed v5 -> cross-encoder v1) against the judge cache, sliced
+# keyword/natural, for config A=bm25f+splade (NOW the re-encoded model) and
+# B=+dense. Compare A's numbers to the pre-reindex baseline recorded in
+# docs/SESSION_NOTES_2026-05-24.md to read off the fine-tune's effect.
 if should_run benchmark; then
-  check_budget_or_stop benchmark 5
+  check_budget_or_stop benchmark 15
   mark benchmark running
-  BENCH_OUT="$REPO_ROOT/data/eval_results/ndcg_splade_eval_$(date +%Y%m%d_%H%M).json"
-  hb "STAGE 5 benchmark: ndcg_splade_eval -> $BENCH_OUT"
-  "$PY" "$SCRIPT_DIR/ndcg_splade_eval.py" \
-      --queries "$QUERIES" --k 10 --output "$BENCH_OUT" \
+  BENCH_OUT="$REPO_ROOT/data/eval_results/pipeline_splade_eval_$(date +%Y%m%d_%H%M).json"
+  hb "STAGE 5 benchmark: eval_pipeline.py (LLM-judge cache, full rerank path) -> $BENCH_OUT"
+  # CRITICAL: encode SPLADE QUERIES with the SAME ONNX the index was just
+  # re-encoded with (models/splade_onnx_fp16, the indexer's doc encoder) so query
+  # and doc term-weights come from the NEW fine-tuned model. The retriever default
+  # (models/splade_onnx) was deleted+rebuilt in stage 4; pin _fp16 to be certain.
+  "$PY" "$SCRIPT_DIR/eval_pipeline.py" \
+      --judge-cache "$JUDGE_CACHE" \
+      --diverse-queries "$DIVERSE_QUERIES" \
+      --splade-onnx "$REPO_ROOT/models/splade_onnx_fp16" \
+      --output "$BENCH_OUT" \
       >>"$RUN_LOG" 2>&1 || { hb "STAGE 5 FAIL"; mark benchmark failed; exit 7; }
+  [[ -s "$BENCH_OUT" ]] || { hb "STAGE 5 GATE FAIL: empty $BENCH_OUT"; mark benchmark failed; exit 7; }
   mark benchmark done
   hb "STAGE 5 benchmark: DONE -> $BENCH_OUT"
 else

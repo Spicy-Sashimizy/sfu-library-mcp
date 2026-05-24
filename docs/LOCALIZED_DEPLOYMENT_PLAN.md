@@ -153,3 +153,33 @@ Sources:
 3. Zotero/folder ingest: full-text chunks vs title+abstract only.
 4. Laptop engine: keep OpenSearch (heavy JVM) vs a lighter embedded engine (Lucene/Tantivy + FAISS/sparse) for true laptop-class deploys.
 5. Which tier(s) to productize first (recommended: warm-cache as the laptop default, live-only as the zero-infra fallback).
+6. **Add the dense-ANN retrieval leg?** POC says **go for natural-language queries** (see §9), but the gain must be re-measured at full index scale (not the 600K subset) and against NL-seeded judgments before wiring dense into production retrieval (router + index_template + warm-cache write path).
+
+---
+
+## 9. Dense-ANN leg — full-pipeline POC result (2026-05-24)
+
+**Question the POC answers:** does adding a dense (bi-encoder ANN) retrieval leg to the current `bm25f + splade` RRF improve the **FINAL reranked top-10** — i.e. does a retrieval-recall gain *survive* the production rerank path (embed v5 → cross-encoder v1), or get washed out?
+
+**Setup** (`scripts/eval_pipeline.py`, results in `data/eval_results/pipeline_dense_comparison.json`):
+- **Dense index:** `openalex_works_dense`, a **600K-doc subset** (judged docs + distractors), dense vectors from `models/sfu-academic-embed-v5`.
+- **Queries:** 360 diverse paraphrased queries — **120 keyword + 240 natural-language**.
+- **Configs:** A = RRF(bm25f + splade); B = RRF(bm25f + splade + **dense**). **Both** run the identical full production rerank path (Stage-1 embedding rerank with v5, Stage-2 cross-encoder v1, RRF on).
+- **Ground truth:** the **LLM-judge cache** (TREC 0–3), NDCG@10. Same harness as `eval_cross_encoder.py` / `eval_embedder.py`.
+
+**Result — FINAL reranked NDCG@10 (the headline):**
+
+| Slice | A (bm25f+splade) | B (+dense) | Δ final (B−A) | Δ retrieval-only (pre-rerank) |
+|---|---|---|---|---|
+| keyword | 0.684 | 0.701 | **+0.017** | +0.202 |
+| natural | 0.302 | 0.471 | **+0.170** | +0.338 |
+| **overall** | **0.429** | **0.548** | **+0.119** | +0.292 |
+
+**Read:** the dense leg's large *retrieval-only* recall gain (+0.292 overall) **partially survives** reranking (+0.119 overall) and does so **almost entirely on natural-language queries** (+0.170), where lexical retrieval is weakest. On keyword queries dense is ~flat (+0.017) — bm25f+splade already cover those. MRR moves the same direction (overall +0.067; natural +0.100).
+
+**Caveats (why these are an OPTIMISTIC upper bound, not production magnitudes):**
+1. Dense is a **600K judged-coverage subset** vs the full ~150M-doc lexical index → dense had guaranteed judged-doc coverage and far fewer distractors. Absolute deltas overstate; the **direction** (survives reranking; NL ≫ keyword) is the robust takeaway.
+2. Paraphrase ground-truth reuse assumes a paraphrase preserves relevance.
+3. The **keyword-seeded** judge cache likely **understates** dense's natural-language advantage.
+
+**Recommendation:** **conditional go for the dense leg, targeted at natural-language retrieval.** Before productizing: (a) build a **full-scale dense index** and re-run this comparator for de-biased magnitudes; (b) expand judgments with **NL-seeded** queries so dense's NL win isn't scored against keyword-seeded ground truth; then (c) wire the dense leg into the router + `index_template` + warm-cache write path. Tracks as §8 decision #6.

@@ -201,6 +201,12 @@ def main() -> None:
     parser.add_argument("--rerank", choices=["none", "embed", "embed+ce"],
                         default="embed+ce", help="rerank path for both configs")
     parser.add_argument("--dense-index", default="openalex_works_dense")
+    parser.add_argument("--splade-onnx", default=SPLADE_ONNX,
+                        help="ONNX export dir used to encode SPLADE QUERIES. Must "
+                             "match the model the index's sparse_field was encoded "
+                             "with — after a re-encode pass that's "
+                             "models/splade_onnx_fp16 (the indexer's doc encoder), "
+                             "NOT the default models/splade_onnx.")
     parser.add_argument("--limit", type=int, default=0, help="limit #records (0=all)")
     args = parser.parse_args()
 
@@ -208,7 +214,7 @@ def main() -> None:
 
     url = opensearch_url()
     retriever = OpenSearchRetriever(url=url, index="openalex_works",
-                                    splade_model_path=SPLADE_ONNX, timeout=60)
+                                    splade_model_path=args.splade_onnx, timeout=60)
 
     gradebooks = load_judge_grades(Path(args.judge_cache))
     records = json.loads(Path(args.diverse_queries).read_text())
@@ -303,6 +309,7 @@ def main() -> None:
             "judge_cache": args.judge_cache,
             "diverse_queries": args.diverse_queries,
             "dense_index": args.dense_index,
+            "splade_query_onnx": args.splade_onnx,
             "dense_embed_model": DENSE_MODEL,
             "rerank_model_embed": DENSE_MODEL,
             "rerank_model_crossencoder": str(REPO_ROOT / "models/sfu-cross-encoder-v1"),
