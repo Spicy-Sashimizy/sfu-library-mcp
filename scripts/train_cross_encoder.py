@@ -28,22 +28,36 @@ JSONL, one object per line, matching data/sfu_training_triplets.jsonl:
     {"anchor": "...", "positive": "...", "negative": "...", "strategy": "...",
      "subject": "...", "metadata": {...}}
 "negative" is optional; rows without it contribute only a positive pair.
-The hard-negative pool from Q3.1 (data/training/hard_negatives_rrf_pool.jsonl)
-uses the same shape and is the intended production input.
+
+The intended production input is data/training/hard_negatives_triplets.jsonl,
+built by scripts/build_ce_triplets.py. It pairs LLM-judge positives (score>=2)
+with the mined hard negatives, so every row carries the anchor/positive/negative
+keys this loader needs. NOTE: the raw Q3.1 pool
+(data/training/hard_negatives_rrf_pool.jsonl) is NOT usable here directly — its
+rows have no anchor/positive keys, so build_input_examples would produce zero
+pairs and abort. Always run build_ce_triplets.py first.
 
 Usage
 ─────
-    # Local-GPU full run (RTX 4070 Ti SUPER)
+    # 1. Build the triplets from the judge cache + mined negative pool
+    SFU_OPENSEARCH_URL=http://...:9200 \\
+    python scripts/build_ce_triplets.py \\
+        --judge-cache data/eval_results/llm_judge_cache.json \\
+        --neg-pool data/training/hard_negatives_rrf_pool.jsonl \\
+        --output data/training/hard_negatives_triplets.jsonl \\
+        --max-neg-per-pos 5
+
+    # 2a. Local-GPU full run (RTX 4070 Ti SUPER)
     python scripts/train_cross_encoder.py \\
         --base-model cross-encoder/ms-marco-MiniLM-L-6-v2 \\
-        --train-data data/sfu_training_triplets.jsonl \\
+        --train-data data/training/hard_negatives_triplets.jsonl \\
         --output models/sfu-cross-encoder-v1 \\
         --epochs 3 --batch-size 16 --warmup-steps 200
 
-    # Cloud (DO L40S) full run — per roadmap Q3.2
+    # 2b. Cloud (DO L40S) full run — per roadmap Q3.2
     python scripts/train_cross_encoder.py \\
         --base-model cross-encoder/ms-marco-MiniLM-L-6-v2 \\
-        --train-data data/training/hard_negatives_rrf_pool.jsonl \\
+        --train-data data/training/hard_negatives_triplets.jsonl \\
         --output models/sfu-cross-encoder-v1 \\
         --epochs 3 --batch-size 16 --warmup-steps 200
 
@@ -68,7 +82,7 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 
 REPO_ROOT = Path(__file__).parent.parent
-DEFAULT_TRAIN_DATA = REPO_ROOT / "data/sfu_training_triplets.jsonl"
+DEFAULT_TRAIN_DATA = REPO_ROOT / "data/training/hard_negatives_triplets.jsonl"
 DEFAULT_OUTPUT = REPO_ROOT / "models/sfu-cross-encoder-v1"
 DEFAULT_BASE_MODEL = "cross-encoder/ms-marco-MiniLM-L-6-v2"
 
@@ -183,8 +197,8 @@ def train(
     else:
         if not train_data.exists():
             logger.error("Training data not found: %s", train_data)
-            logger.error("Mine hard negatives first (roadmap Q3.1) or pass "
-                         "--train-data data/sfu_training_triplets.jsonl")
+            logger.error("Build triplets first: scripts/build_ce_triplets.py "
+                         "(roadmap Q3.2) -> data/training/hard_negatives_triplets.jsonl")
             sys.exit(1)
         rows = load_triplets(train_data, max_samples)
 
@@ -257,8 +271,10 @@ def main() -> None:
     parser.add_argument("--base-model", default=DEFAULT_BASE_MODEL,
                         help="Base CrossEncoder to fine-tune")
     parser.add_argument("--train-data", default=str(DEFAULT_TRAIN_DATA),
-                        help="Triplet/hard-negative JSONL "
-                             "(falls back to data/sfu_training_triplets.jsonl)")
+                        help="Triplet JSONL with anchor/positive/negative keys "
+                             "(default data/training/hard_negatives_triplets.jsonl, "
+                             "built by scripts/build_ce_triplets.py; NOT the raw "
+                             "hard_negatives_rrf_pool.jsonl, which lacks those keys)")
     parser.add_argument("--output", default=str(DEFAULT_OUTPUT),
                         help="Output directory for the fine-tuned model")
     parser.add_argument("--epochs", type=int, default=3)
