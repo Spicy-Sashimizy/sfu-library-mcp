@@ -121,6 +121,24 @@ def normalize_doi(doi: str | None) -> str:
     return doi
 
 
+def _coerce_year(date_value: object) -> int | None:
+    """Coerce an OpenAlex date string ("YYYY-MM-DD") to an int year.
+
+    `publication_year` is an integer field in OpenSearch. The raw date may be
+    empty, None, or malformed — in all of those cases return None (never a
+    string and never a partial value) so the field is omitted/null rather than
+    rejected by the index mapping.
+    """
+    if isinstance(date_value, int):
+        return date_value
+    if not isinstance(date_value, str):
+        return None
+    prefix = date_value[:4]
+    if len(prefix) == 4 and prefix.isdigit():
+        return int(prefix)
+    return None
+
+
 def reconstruct_abstract(inverted_index: dict | None) -> str:
     """Rebuild abstract text from OpenAlex inverted-index format."""
     if not inverted_index:
@@ -262,6 +280,7 @@ class OpenAlexClient:
         opensearch_enabled: bool = False,
         opensearch_url: str = "http://localhost:9200",
         opensearch_index: str = "openalex_works",
+        opensearch_splade_served: bool = True,
     ):
         self.mailto = mailto
         self.api_key = api_key
@@ -278,6 +297,14 @@ class OpenAlexClient:
         self._opensearch_enabled = opensearch_enabled
         self._opensearch_url = opensearch_url
         self._opensearch_index = opensearch_index
+        # When the target index is served by the SPLADE (sparse) leg, every
+        # document MUST carry a `sparse_field`. The live search path cannot
+        # SPLADE-encode without loading a transformer model into the
+        # fire-and-forget daemon thread (heavy, slow, GPU contention), so we
+        # do NOT push to a SPLADE-served index here — encoded docs are added
+        # by the offline indexer / monthly sync instead. Pushing un-encoded
+        # docs would be invisible to the SPLADE leg AND pollute the index.
+        self._opensearch_splade_served = opensearch_splade_served
 
     def _params(self, extra: dict) -> dict:
         p = dict(extra)
@@ -401,6 +428,19 @@ class OpenAlexClient:
         if not self._opensearch_enabled or not results:
             return
 
+        # Lower-risk choice (Item 2): if the index is served by the SPLADE leg,
+        # skip the live upsert entirely. Live results have no SPLADE
+        # `sparse_field`; pushing them would (a) leave them invisible to the
+        # SPLADE query leg and (b) inject schema-incomplete docs. SPLADE
+        # encoding is done offline by splade_indexer.py / opensearch_sync.py.
+        if self._opensearch_splade_served:
+            logger.debug(
+                "Skipping live OpenSearch push to SPLADE-served index %r "
+                "(docs require offline sparse encoding)",
+                self._opensearch_index,
+            )
+            return
+
         def _do_push():
             try:
                 import requests as _requests
@@ -420,7 +460,10 @@ class OpenAlexClient:
                         "title": doc.get("title", ""),
                         "abstract": doc.get("abstract", ""),
                         "concepts": " ".join(doc.get("topics", [])),
-                        "publication_year": doc.get("date", "")[:4] or None,
+                        # publication_year is an integer field — coerce the
+                        # YYYY prefix of the date string to int, guarding
+                        # empty/malformed values to None (never a string).
+                        "publication_year": _coerce_year(doc.get("date")),
                         "type": doc.get("type", ""),
                         "is_oa": doc.get("is_oa", False),
                     })
