@@ -8,6 +8,7 @@ Handles both PNX (Primo) and OpenAlex flat doc shapes via _normalize_for_rerank.
 import re
 import logging
 from datetime import datetime
+from pathlib import Path
 
 logger = logging.getLogger("sfu_library_mcp")
 
@@ -239,7 +240,16 @@ def _compute_rrf_scores(semantic_scores: list[float], n_docs: int) -> list[float
     return [s / max_possible for s in scores]
 
 
-_CROSS_ENCODER_MODEL = "cross-encoder/ms-marco-MiniLM-L-6-v2"
+# Prefer the SFU-fine-tuned cross-encoder (Q3.2: +9.5% NDCG@10 / +0.069 MRR@10
+# over base on the 120-query judged eval — see data/eval_results/cross_encoder_eval.json).
+# Falls back to the base MS-MARCO model when the local fine-tuned weights aren't
+# present (fresh checkout / deploy without the trained model in models/), so the
+# reranker never silently breaks.
+_FINETUNED_CE = Path(__file__).resolve().parents[2] / "models" / "sfu-cross-encoder-v1"
+_CROSS_ENCODER_MODEL = (
+    str(_FINETUNED_CE) if _FINETUNED_CE.exists()
+    else "cross-encoder/ms-marco-MiniLM-L-6-v2"
+)
 _cross_encoder = None  # None = not yet tried; False = unavailable
 
 # Cross-encoder candidate pool: the CE re-scores at most this many top docs to
