@@ -42,8 +42,11 @@ echo -n "tk_xxptoken"                                       | sudo tee /mnt/MAIN
 > other apps. The NPM admin creds (`TRUENAS_NPM_ADMIN`) are yours; this doc never
 > uses them — you add the host in the UI.
 
-**Cloudflare DNS:** add a record `ntfy` (CNAME to your existing proxied host, or
-A to your public IP), **proxied (orange cloud)** — same as your other subdomains.
+**Cloudflare DNS:** add an **A record `ntfy` → your home/origin IP, DNS-only (grey
+cloud)** — matching the other app subdomains (gcradarr/goonpn/wg/…). NOTE: do NOT
+CNAME to the apex or proxy it (orange cloud): the apex points at a different
+server (landing page) whose nginx returns 404, and the apps are served DNS-only
+direct to NPM behind the home IP. (This bit us on first setup, 2026-05-25.)
 
 **NPM → New Proxy Host:**
 - Domain: `ntfy.YOURDOMAIN`
