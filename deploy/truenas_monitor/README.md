@@ -16,11 +16,18 @@ containers or the box (≤768 MB / 1.0 CPU; box has ~7 GB free RAM).
   defense-in-depth.
 
 ## Required inputs before it can run
-1. **Anthropic API key** (its own, not your dev key):
-   `echo -n "sk-ant-..." | sudo tee /mnt/MAIN/sfu-library-training/secrets/anthropic.key`
-2. *(optional)* **Notify webhook** (ntfy/Discord/Pushover URL):
-   `echo -n "https://ntfy.sh/your-topic" | sudo tee /mnt/MAIN/sfu-library-training/secrets/notify_webhook`
-   Without it, alerts go to `monitor/state/alerts.log` only.
+1. **Claude auth — subscription, headless (no API key).** On any machine where
+   you can log in interactively, run `claude setup-token` (OAuth flow → prints a
+   long-lived token), then place it on the NAS:
+   `echo -n "<token from setup-token>" | sudo tee /mnt/MAIN/sfu-library-training/secrets/claude_oauth_token`
+   Uses your Pro/Max subscription. The agent only calls Claude **on anomalies**
+   (heartbeats are static), so subscription usage stays minimal.
+   *(An API key still works instead — put it in `…/secrets/anthropic.key`.)*
+2. **Notify via ntfy (easiest).** Pick an unguessable topic, install the ntfy
+   app + subscribe to it, then:
+   `echo -n "https://ntfy.sh/sfu-truenas-<random>" | sudo tee /mnt/MAIN/sfu-library-training/secrets/notify_webhook`
+   No account/key needed; urgent alerts push to your phone. Without it, alerts go
+   to `monitor/state/alerts.log` only.
 
 ## Deploy (run ON TrueNAS — docker requires sudo there)
 ```bash

@@ -108,11 +108,15 @@ docs/CLOUD_OFFLOAD_AND_MONITOR_PLAN.md   # this file (authoritative plan/tracker
 
 ## 5. Open decisions / inputs needed (to finish the decision-dependent parts)
 
-1. **Anthropic API key for the NAS agent** — provide one for
-   `/mnt/MAIN/sfu-library-training/secrets/anthropic.key` (the agent needs its own;
-   keep it separate from any dev key). REQUIRED before the monitor can run.
-2. **Notification channel** — ntfy topic? Discord webhook? Pushover? Gmail? Sets
-   `NOTIFY_WEBHOOK`. (Default until then: alerts to a logfile only.)
+1. **Claude auth (subscription, headless)** — run `claude setup-token` once on an
+   interactive machine, drop the token at
+   `/mnt/MAIN/sfu-library-training/secrets/claude_oauth_token` → agent uses
+   `CLAUDE_CODE_OAUTH_TOKEN` (your Pro/Max sub, no API key; only calls Claude on
+   anomalies so usage stays minimal). REQUIRED before the monitor can run.
+2. **Notification channel = ntfy (chosen, easiest)** — topic
+   `https://ntfy.sh/sfu-truenas-<random>` in `…/secrets/notify_webhook`; install
+   the ntfy app + subscribe. notify() already speaks ntfy. (Default until then:
+   logfile only.)
 3. **Reaction authority** — keep Phase-1 notify-only, or enable the Phase-2
    restart allowlist (and for which containers)? Default: notify-only.
 4. **DO provisioning timing** — build scripts now; provision the GPU droplet
