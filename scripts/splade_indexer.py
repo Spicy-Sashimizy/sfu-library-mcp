@@ -750,6 +750,16 @@ def make_encoder(
 # ── OpenSearch bulk upsert ───────────────────────────────────────────────────
 
 
+# Encode-only offload: if SFU_ENCODE_OUT is set, write the same NDJSON (action +
+# doc) to a gzip shard instead of POSTing. Lets a cheap GPU droplet produce
+# bulk-ready sparse shards (-> TrueNAS) with no OpenSearch on the box. Resumable
+# (the indexer's checkpoint still applies). Concatenated gzip members are valid.
+import gzip as _gzip
+import threading as _threading
+_ENCODE_OUT = os.environ.get("SFU_ENCODE_OUT", "").strip()
+_encode_lock = _threading.Lock()
+
+
 def bulk_upsert_opensearch(
     session: requests.Session,
     opensearch_url: str,
@@ -762,6 +772,18 @@ def bulk_upsert_opensearch(
     """
     if not docs:
         return {"indexed": 0, "errors": 0}
+
+    # Encode-only sink: append the bulk NDJSON to a gzip shard, skip OpenSearch.
+    if _ENCODE_OUT:
+        lines = []
+        for doc in docs:
+            lines.append(json.dumps({"index": {"_index": index, "_id": doc.get("id", "")}}))
+            lines.append(json.dumps(doc))
+        payload = ("\n".join(lines) + "\n").encode("utf-8")
+        with _encode_lock:
+            with _gzip.open(_ENCODE_OUT, "ab") as gz:
+                gz.write(payload)
+        return {"indexed": len(docs), "errors": 0}
 
     stats = {"indexed": 0, "errors": 0, "error_details": []}
 
@@ -1113,7 +1135,7 @@ def run_indexer(
     if n_trt_engines:
         logger.info("Found %d cached TRT engines in %s", n_trt_engines, TRT_ENGINE_CACHE)
 
-    if not dry_run:
+    if not dry_run and not _ENCODE_OUT:
         if not check_opensearch_health(session, opensearch_url, index_name):
             logger.error(
                 "OpenSearch pre-flight check failed. Ensure OpenSearch is running at %s",

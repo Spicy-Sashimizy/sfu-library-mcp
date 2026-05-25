@@ -48,9 +48,9 @@ plan() {
    ssh key     : ${SFU_DO_SSH_KEY_NAME:-<none>}
    volume      : ${SFU_VOLUME_SIZE_GB}GB ${SFU_VOLUME_FS} -> ${SFU_VOLUME_MOUNT}
    cost caps   : orchestrator ${SFU_MAX_HOURS}h  +  droplet dead-man ${SFU_DEADMAN_HOURS}h
-   data path   : $SFU_DATA_SOURCE  ${SFU_DATA_PROXY_URL:-}  (auth: $([[ -n "$SFU_DATA_PROXY_AUTH" ]] && echo set || echo MISSING))
-   model/index : $SFU_MODEL_REF / $SFU_INDEX_NAME
-   index sink  : $SFU_INDEX_SINK  -> push ${SFU_DATA_PROXY_URL}${SFU_UPLOAD_PATH:-/upload/openalex_works_snapshot}
+   data proxy  : ${SFU_DATA_PROXY_URL:-} (auth: $([[ -n "${SFU_DATA_PROXY_AUTH:-}" ]] && echo set || echo MISSING))
+   model/batch : $SFU_MODEL_REF / batch ${SFU_BATCH_SIZE:-128} / max_shards ${SFU_ENCODE_MAX_SHARDS:-0}
+   encode out  : push -> ${SFU_DATA_PROXY_URL}${SFU_ENCODE_OUT_PATH:-/upload/encoded}
    token       : $([[ -n "$TOKEN" ]] && echo present || echo MISSING)
    GPU cost ceiling : \$${rate}/hr × ${SFU_MAX_HOURS}h ≈ \$$(awk "BEGIN{r=\"$rate\"; print (r==\"?\")?\"?\":r*$SFU_MAX_HOURS}") (+ volume ~\$$(awk "BEGIN{print $SFU_VOLUME_SIZE_GB*0.00015*$SFU_MAX_HOURS}"))
 ──────────────────────────────────────────────────────────────────────────
@@ -89,17 +89,15 @@ fi
 
 # Bake config into cloud-init via a shell-safe exported preamble (robust vs envsubst).
 preamble=""; ex() { preamble+="export $1=$(printf %q "${2:-}")"$'\n'; }
-ex SFU_DEADMAN_HOURS "$SFU_DEADMAN_HOURS";   ex SFU_VOLUME_FS "$SFU_VOLUME_FS"
-ex SFU_VOLUME_MOUNT "$SFU_VOLUME_MOUNT";     ex SFU_DATA_SOURCE "$SFU_DATA_SOURCE"
-ex SFU_DATA_PROXY_URL "$SFU_DATA_PROXY_URL"; ex SFU_DATA_PROXY_AUTH "$SFU_DATA_PROXY_AUTH"
+ex SFU_DEADMAN_HOURS "${SFU_DEADMAN_HOURS:-3}"
+ex SFU_DATA_PROXY_URL "${SFU_DATA_PROXY_URL:-}";  ex SFU_DATA_PROXY_AUTH "${SFU_DATA_PROXY_AUTH:-}"
 ex SFU_DATA_PROXY_SNAPSHOTS "${SFU_DATA_PROXY_SNAPSHOTS:-/snapshots}"
 ex SFU_DATA_PROXY_MODELS "${SFU_DATA_PROXY_MODELS:-/models}"
-ex SFU_UPLOAD_PATH "${SFU_UPLOAD_PATH:-/upload/openalex_works_snapshot}"
-ex SFU_MODEL_REF "$SFU_MODEL_REF";           ex SFU_INDEX_NAME "$SFU_INDEX_NAME"
-ex SFU_BATCH_SIZE "${SFU_BATCH_SIZE:-64}";   ex SFU_INDEX_SINK "$SFU_INDEX_SINK"
-ex SFU_SPACES_BUCKET "$SFU_SPACES_BUCKET";   ex SFU_SPACES_REGION "$SFU_SPACES_REGION"
-ex SFU_SPACES_ENDPOINT "$SFU_SPACES_ENDPOINT"; ex SFU_SPACES_KEY "$SFU_SPACES_KEY"
-ex SFU_SPACES_SECRET "$SFU_SPACES_SECRET";   ex SFU_SPACES_PREFIX "${SFU_SPACES_PREFIX:-openalex_works_snapshot}"
+ex SFU_DATA_PROXY_CODE "${SFU_DATA_PROXY_CODE:-/code}"
+ex SFU_ENCODE_OUT_PATH "${SFU_ENCODE_OUT_PATH:-/upload/encoded}"
+ex SFU_MODEL_REF "${SFU_MODEL_REF:-sfu-splade-v1}"
+ex SFU_BATCH_SIZE "${SFU_BATCH_SIZE:-128}"
+ex SFU_ENCODE_MAX_SHARDS "${SFU_ENCODE_MAX_SHARDS:-0}"
 USER_DATA="$(printf '#!/usr/bin/env bash\n%s\n%s\n' "$preamble" "$(tail -n +2 "$SCRIPT_DIR/cloud_init.sh")")"
 
 # Create droplet (tagged; with ssh key + volume attached).

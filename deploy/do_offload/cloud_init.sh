@@ -1,166 +1,76 @@
 #!/usr/bin/env bash
 # ============================================================================
-# cloud_init.sh — runs ON the DO GPU droplet (passed as user_data, with
-# ${SFU_*} substituted by provision_build.sh via envsubst).
+# cloud_init.sh — ENCODE-ONLY on a cheap DO GPU droplet (user_data; values baked
+# in by provision_build.sh as an exported preamble).
 #
-# Order matters: the DEAD-MAN TIMER is armed FIRST so the droplet self-destructs
-# even if everything below hangs or the orchestrator dies — it can never bill idle.
+# Reads snapshot shards + the fine-tuned model over the NPM proxy, encodes SPLADE
+# sparse vectors, and PUSHes bulk-ready NDJSON shards back to TrueNAS via the proxy.
+# NO OpenSearch, NO volume — the 412GB index is built later from these shards.
+# Dead-man timer armed FIRST so the droplet can never bill idle.
 #
-# Flow: arm dead-man → mount index volume → deps → fetch model+code+snapshots over
-# the NPM HTTPS proxy → OpenSearch on the volume (bulk-tuned) → splade_indexer in
-# FRESH-INSERT mode (~17.4k docs/s, NOT the slow in-place upsert) → snapshot the
-# finished index to DO Spaces → power off (orchestrator sees status=off → teardown).
-#
-# Validated end-to-end only by a real (paid) run — `provision_build.sh --dry-run`
-# validates the PLAN, not this script. Review before the first provision.
+# MEASUREMENT MODE: SFU_ENCODE_MAX_SHARDS>0 limits how many shards to process
+# (lets a cheap, short run measure real throughput / GPU / CPU before the full job).
+# Validated only by a real run; --dry-run validates the plan, not this script.
 # ============================================================================
 set -uo pipefail
 exec > /var/log/sfu_build.log 2>&1
-echo "=== SFU fresh-build cloud-init start $(date -u) ==="
+ts(){ date -u +%H:%M:%S; }
+echo "=== SFU encode-only start $(date -u) ==="
 
-# Substituted by provision_build.sh (envsubst). Defaults are harmless fallbacks.
-DEADMAN_HOURS="${SFU_DEADMAN_HOURS:-5}"
-VOL_FS="${SFU_VOLUME_FS:-ext4}"
-VOL_MNT="${SFU_VOLUME_MOUNT:-/mnt/index}"
-DATA_SOURCE="${SFU_DATA_SOURCE:-proxy}"
-PROXY_URL="${SFU_DATA_PROXY_URL:-}"
-PROXY_AUTH="${SFU_DATA_PROXY_AUTH:-}"           # "user:pass" for basic auth (may be empty)
+DEADMAN_HOURS="${SFU_DEADMAN_HOURS:-3}"
+PROXY_URL="${SFU_DATA_PROXY_URL:-}"; PROXY_AUTH="${SFU_DATA_PROXY_AUTH:-}"
 PROXY_SNAPS="${SFU_DATA_PROXY_SNAPSHOTS:-/snapshots}"
 PROXY_MODELS="${SFU_DATA_PROXY_MODELS:-/models}"
 PROXY_CODE="${SFU_DATA_PROXY_CODE:-/code}"
-UPLOAD_PATH="${SFU_UPLOAD_PATH:-/upload/openalex_works_snapshot}"  # PUT target for the finished snapshot
+ENCODE_OUT_PATH="${SFU_ENCODE_OUT_PATH:-/upload/encoded}"
 MODEL_REF="${SFU_MODEL_REF:-sfu-splade-v1}"
-INDEX_NAME="${SFU_INDEX_NAME:-openalex_works}"
-BATCH_SIZE="${SFU_BATCH_SIZE:-64}"
-INDEX_SINK="${SFU_INDEX_SINK:-spaces}"
-SPACES_BUCKET="${SFU_SPACES_BUCKET:-}"
-SPACES_REGION="${SFU_SPACES_REGION:-}"
-SPACES_ENDPOINT="${SFU_SPACES_ENDPOINT:-}"
-SPACES_KEY="${SFU_SPACES_KEY:-}"
-SPACES_SECRET="${SFU_SPACES_SECRET:-}"
-SPACES_PREFIX="${SFU_SPACES_PREFIX:-openalex_works_snapshot}"
+BATCH_SIZE="${SFU_BATCH_SIZE:-128}"
+MAX_SHARDS="${SFU_ENCODE_MAX_SHARDS:-0}"
 
-# (1) DEAD-MAN: hard self-shutdown after the budget, no matter what.
-( sleep "$(( DEADMAN_HOURS * 3600 ))"; echo "DEAD-MAN ${DEADMAN_HOURS}h reached -> shutdown"; shutdown -h now ) &
+# (1) DEAD-MAN
+( sleep "$(( DEADMAN_HOURS*3600 ))"; echo "DEAD-MAN ${DEADMAN_HOURS}h -> shutdown"; shutdown -h now ) &
 echo ">> dead-man armed: ${DEADMAN_HOURS}h"
-finish() { echo "=== build phase exit rc=$1 $(date -u) ==="; sync; shutdown -h now; }
+finish(){ echo "=== encode exit rc=$1 $(date -u) ==="; sync; shutdown -h now; }
 
-wget_proxy() {  # $1=remote-path-under-proxy  $2=local-dest   (basic-auth aware)
-  local url="${PROXY_URL%/}$1" auth=()
-  [[ -n "$PROXY_AUTH" ]] && auth=(--user "${PROXY_AUTH%%:*}" --password "${PROXY_AUTH#*:}")
-  wget -q "${auth[@]}" -O "$2" "$url"
-}
-mirror_proxy() { # recursively mirror an nginx-autoindex directory: $1=sub-path $2=dest
-  local sub="$1" dest="$2" wauth=()
-  [[ -n "$PROXY_AUTH" ]] && wauth=(--user "${PROXY_AUTH%%:*}" --password "${PROXY_AUTH#*:}")
-  mkdir -p "$dest"
-  wget -q -r -np -nH --cut-dirs=1 -R "index.html*" "${wauth[@]}" -P "$dest" "${PROXY_URL%/}$sub/"
-}
+UA=(); [[ -n "$PROXY_AUTH" ]] && UA=(--user "${PROXY_AUTH%%:*}" --password "${PROXY_AUTH#*:}")
+getf(){ wget -q "${UA[@]}" -O "$2" "${PROXY_URL%/}$1"; }
+putf(){ wget -q "${UA[@]}" --method=PUT --body-file="$2" -O /dev/null "${PROXY_URL%/}$1"; }
+WORK=/opt/sfu; mkdir -p "$WORK/in"; cd "$WORK"
 
-# (2) Mount the attached block volume for the index (DO exposes it by-id).
-echo ">> locating attached volume..."
-VOL_DEV="$(ls /dev/disk/by-id/scsi-0DO_Volume_* 2>/dev/null | head -1 || true)"
-if [[ -n "$VOL_DEV" ]]; then
-  blkid "$VOL_DEV" >/dev/null 2>&1 || mkfs."$VOL_FS" -F "$VOL_DEV"
-  mkdir -p "$VOL_MNT"; mount -o discard,defaults "$VOL_DEV" "$VOL_MNT"
-  echo ">> mounted $VOL_DEV at $VOL_MNT ($(df -h "$VOL_MNT" | tail -1))"
-else
-  echo ">> no block volume found — using local NVMe at $VOL_MNT"; mkdir -p "$VOL_MNT"
-fi
-SNAP_DIR="$VOL_MNT/snapshots"; OS_DATA="$VOL_MNT/os-data"; OS_SNAP="$VOL_MNT/snap"
-mkdir -p "$SNAP_DIR" "$OS_DATA" "$OS_SNAP"
-chmod 777 "$OS_DATA" "$OS_SNAP"   # opensearch container (uid 1000) writes here
-
-# (3) Deps. The NVIDIA AI/ML Ready image ships CUDA + docker + python3.
-echo ">> installing deps..."
+# (2) deps — NVIDIA AI/ML image ships CUDA + python. Install torch + onnxruntime-gpu
+#     (+ tensorrt so the fast TRT EP can load) + transformers. No OpenSearch.
+echo ">> [$(ts)] installing deps..."
 export DEBIAN_FRONTEND=noninteractive
-apt-get update -qq && apt-get install -y -qq python3-venv python3-pip awscli jq >/dev/null 2>&1 || true
-python3 -m venv /opt/sfu/venv
-PY=/opt/sfu/venv/bin/python; PIP=/opt/sfu/venv/bin/pip
+apt-get update -qq && apt-get install -y -qq python3-venv python3-pip >/dev/null 2>&1 || true
+python3 -m venv venv; PY="$WORK/venv/bin/python"; PIP="$WORK/venv/bin/pip"
 $PIP install -q --upgrade pip
-# encode stack (torch/onnxruntime-gpu come as CUDA wheels; indexer falls back to
-# pytorch FP16 if the TRT EP is unavailable). requests drives OpenSearch.
 $PIP install -q torch --index-url https://download.pytorch.org/whl/cu124 || $PIP install -q torch
-$PIP install -q transformers onnxruntime-gpu "optimum[onnxruntime-gpu]" numpy requests tqdm sentence-transformers || true
+$PIP install -q transformers onnxruntime-gpu "optimum[onnxruntime-gpu]" tensorrt numpy requests tqdm sentence-transformers || true
+echo ">> [$(ts)] gpu: $(nvidia-smi --query-gpu=name,memory.total --format=csv,noheader 2>/dev/null | head -1) | vCPUs=$(nproc)"
 
-# (4) Fetch model + code + snapshots over the NPM proxy.
-echo ">> fetching code + model over proxy ($PROXY_URL)..."
-mkdir -p /opt/sfu
-wget_proxy "$PROXY_CODE/sfu-encode-code.tar.gz" /opt/sfu/code.tar.gz \
-  && tar -xzf /opt/sfu/code.tar.gz -C /opt/sfu || { echo "code fetch FAILED"; finish 70; }
-mirror_proxy "$PROXY_MODELS/$MODEL_REF" "/opt/sfu/models/$MODEL_REF"
-echo ">> fetching ${INDEX_NAME} snapshots -> $SNAP_DIR (the bulk of the transfer)..."
-mirror_proxy "$PROXY_SNAPS" "$SNAP_DIR"
-SHARDS=$(ls "$SNAP_DIR"/works_part_*.jsonl.gz 2>/dev/null | wc -l)
-echo ">> $SHARDS snapshot shards present"; (( SHARDS > 0 )) || { echo "no snapshots fetched"; finish 71; }
+# (3) fetch code + model over the proxy
+echo ">> [$(ts)] fetching code + model..."
+getf "$PROXY_CODE/sfu-encode-code.tar.gz" code.tar.gz && tar -xzf code.tar.gz || { echo "code fetch failed"; finish 70; }
+mkdir -p "models/$MODEL_REF"
+wget -q "${UA[@]}" -r -np -nH --cut-dirs=2 -R "index.html*" -P "models/$MODEL_REF" "${PROXY_URL%/}$PROXY_MODELS/$MODEL_REF/"
+[ -f "models/$MODEL_REF/model.safetensors" ] || { echo "model fetch failed"; ls -R models | head; finish 71; }
 
-# (5) OpenSearch on the volume, tuned for a one-shot bulk load (security off; it's
-#     ephemeral + localhost-only). Heap ~half RAM (cap 31g), single node, no replicas.
-echo ">> starting OpenSearch (data on $OS_DATA)..."
-HEAP_GB=$(( $(awk '/MemTotal/{print int($2/1024/1024)}' /proc/meminfo) / 2 )); (( HEAP_GB>31 )) && HEAP_GB=31
-docker run -d --name os --restart no \
-  -p 127.0.0.1:9200:9200 \
-  -e discovery.type=single-node -e DISABLE_SECURITY_PLUGIN=true \
-  -e "OPENSEARCH_JAVA_OPTS=-Xms${HEAP_GB}g -Xmx${HEAP_GB}g" \
-  -e "bootstrap.memory_lock=true" --ulimit memlock=-1:-1 --ulimit nofile=65536:65536 \
-  -e "path.repo=/snap" \
-  -v "$OS_DATA":/usr/share/opensearch/data \
-  -v "$OS_SNAP":/snap \
-  opensearchproject/opensearch:2 || { echo "opensearch start FAILED"; finish 72; }
-echo ">> waiting for OpenSearch..."; for i in $(seq 1 60); do
-  curl -s localhost:9200/_cluster/health >/dev/null 2>&1 && break; sleep 5; done
-curl -s "localhost:9200/_cluster/health?pretty" || { echo "OS never came up"; finish 73; }
+# (4) list shards (optionally limited for a measurement run), fetch them
+shards=$(wget -q "${UA[@]}" -O - "${PROXY_URL%/}$PROXY_SNAPS/" | grep -oE "works_part_[0-9]+\.jsonl\.gz" | sort -u)
+if [ "${MAX_SHARDS:-0}" -gt 0 ] 2>/dev/null; then shards=$(echo "$shards" | head -n "$MAX_SHARDS"); fi
+total=$(echo "$shards" | grep -c . )
+echo ">> [$(ts)] encoding $total shard(s) (MAX_SHARDS=$MAX_SHARDS, batch=$BATCH_SIZE)"
+for s in $shards; do echo ">> [$(ts)] fetch $s"; getf "$PROXY_SNAPS/$s" "in/$s" || { echo "fetch $s failed"; finish 72; }; done
 
-# Fresh index, bulk-tuned: disable refresh + replicas during the load.
-curl -s -X PUT "localhost:9200/$INDEX_NAME" -H 'Content-Type: application/json' -d '{
-  "settings": {"index": {"number_of_replicas": 0, "refresh_interval": "-1"}}}' >/dev/null
+# (5) encode ALL selected shards in ONE run (single model load) -> one gz shard
+OUT="$WORK/encoded_$(date +%s).ndjson.gz"
+echo ">> [$(ts)] ENCODE START -> $(basename "$OUT")"
+SFU_ENCODE_OUT="$OUT" SFU_PROGRESS_PUSH=off \
+  $PY scripts/splade_indexer.py --input "$WORK/in" --model "$WORK/models/$MODEL_REF" \
+  --batch-size "$BATCH_SIZE" --async-workers 2 --device cuda --backend auto || { echo "ENCODE FAILED"; finish 73; }
+echo ">> [$(ts)] ENCODE DONE; uploading $(basename "$OUT") ($(du -h "$OUT" 2>/dev/null | cut -f1))"
 
-# (6) FRESH bulk insert (NO --resume → fast path). Indexer auto-uses CUDA/TRT.
-echo ">> indexing (fresh bulk insert)..."
-export SFU_PROGRESS_PUSH=off   # droplet can't reach the NAS push target; disable the mirror
-$PY /opt/sfu/scripts/splade_indexer.py \
-    --input "$SNAP_DIR" \
-    --model "/opt/sfu/models/$MODEL_REF" \
-    --index "$INDEX_NAME" \
-    --opensearch-url "http://localhost:9200" \
-    --batch-size "$BATCH_SIZE" \
-    --async-workers 6 \
-    --device cuda --backend auto
-IDX_RC=$?; echo ">> indexer rc=$IDX_RC"; (( IDX_RC == 0 )) || { echo "INDEXING FAILED"; finish 74; }
-
-# restore refresh + flush + one merge pass so the snapshot is compact
-curl -s -X PUT "localhost:9200/$INDEX_NAME/_settings" -H 'Content-Type: application/json' \
-     -d '{"index":{"refresh_interval":"1s"}}' >/dev/null
-curl -s -X POST "localhost:9200/$INDEX_NAME/_forcemerge?max_num_segments=1" >/dev/null
-echo ">> final count: $(curl -s "localhost:9200/$INDEX_NAME/_count")"
-
-# (7) Export: build an fs snapshot on the volume, then PUSH the tree back through
-#     the SAME NPM proxy (PUT over HTTPS) — reverse of the inbound fetch. No SSH to
-#     the NAS; the snapshot lands at $UPLOAD_PATH on the data-server (-> NAS dir).
-if [[ "$INDEX_SINK" == "proxy" && -n "$PROXY_URL" ]]; then
-  echo ">> creating fs snapshot in /snap ..."
-  curl -s -X PUT "localhost:9200/_snapshot/fsrepo" -H 'Content-Type: application/json' \
-       -d '{"type":"fs","settings":{"location":"/snap","compress":true}}' >/dev/null
-  SNAPNAME="build-$(date +%s)"
-  curl -s -X PUT "localhost:9200/_snapshot/fsrepo/$SNAPNAME?wait_for_completion=true" \
-       -H 'Content-Type: application/json' -d "{\"indices\":\"$INDEX_NAME\",\"include_global_state\":false}" \
-    | tee /var/log/sfu_snapshot.json | grep -o '"state":"[A-Z_]*"' | head -1
-  echo ">> uploading snapshot tree -> ${PROXY_URL%/}${UPLOAD_PATH} ..."
-  UA=(); [[ -n "$PROXY_AUTH" ]] && UA=(--user "${PROXY_AUTH%%:*}" --password "${PROXY_AUTH#*:}")
-  cd "$OS_SNAP" || finish 75
-  fail=0; n=0
-  while IFS= read -r f; do
-    rel="${f#./}"
-    code="$(wget -q "${UA[@]}" --method=PUT --body-file="$f" -O /dev/null \
-            --server-response "${PROXY_URL%/}${UPLOAD_PATH%/}/$rel" 2>&1 | awk '/HTTP\//{c=$2} END{print c}')"
-    case "$code" in 2*) n=$((n+1));; *) echo "  PUT $rel -> ${code:-ERR}"; fail=1;; esac
-  done < <(find . -type f | sort)
-  echo ">> uploaded $n files (failures: $fail)"
-  (( fail == 0 )) || { echo ">> SOME UPLOADS FAILED — leaving droplet for inspection (dead-man still armed)"; finish 76; }
-  echo ">> snapshot pushed to NAS via proxy."
-else
-  echo ">> WARN: sink not 'proxy' or PROXY_URL unset — index NOT exported."
-fi
-
-echo ">> build done; powering off so nothing bills."
+# (6) push the encoded shard back to TrueNAS via the proxy
+putf "$ENCODE_OUT_PATH/$(basename "$OUT")" "$OUT" || { echo "upload failed"; finish 74; }
+echo ">> [$(ts)] uploaded. encode-run complete."
 finish 0
