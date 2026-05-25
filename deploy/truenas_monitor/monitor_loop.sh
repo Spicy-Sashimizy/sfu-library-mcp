@@ -40,6 +40,8 @@ assess() {  # feed check output to Claude for a concise human verdict (read-only
     | timeout 150 claude -p 2>/dev/null || echo "(assessment unavailable) $report"
 }
 
+SPEND_DELTA="${DO_SPEND_ALERT_DELTA:-1.0}"   # $ rise in month-to-date usage that (re)fires a "credits used" alert
+
 notify INFO "monitor started (checks ${INTERVAL}s, progress every $(( HEARTBEAT_S/3600 ))h, reactions=${REACTIONS_ENABLED:-false})"
 last_heartbeat=$(date +%s)   # don't fire a heartbeat immediately on boot
 touch "$STATE/seen_droplets"
@@ -47,12 +49,31 @@ while true; do
   report="$(bash /agent/checks.sh 2>&1)"; rc=$?
   now=$(date +%s)
 
-  # --- DigitalOcean: alert the moment a NEW droplet appears (credits start) ---
-  cur_ids="$(echo "$report" | grep -oE 'active_ids=[^[:space:]]*' | cut -d= -f2 | tr ',' '\n' | grep -E '^[0-9]+$' | sort -u)"
-  new_ids="$(comm -13 <(sort -u "$STATE/seen_droplets" 2>/dev/null) <(echo "$cur_ids") 2>/dev/null | grep -E '^[0-9]+$' || true)"
-  echo "$cur_ids" > "$STATE/seen_droplets"
-  if [[ -n "$new_ids" ]]; then
-    notify WARN "DigitalOcean: credits now IN USE — new droplet id(s) $(echo $new_ids). $(assess "$report" | tr '\n' ' ')"
+  # --- DigitalOcean credit alerts ---------------------------------------------
+  # Only act on droplet/spend state when the DO read actually SUCCEEDED this cycle
+  # (do_check_ok=1). A transient API/network blip must not wipe seen_droplets and
+  # then re-fire "new droplet" for everything next cycle.
+  if echo "$report" | grep -q 'do_check_ok=1'; then
+    # (a) NEW droplet id(s) appeared -> a machine was just created, credits start now.
+    cur_ids="$(echo "$report" | grep -oE 'active_ids=[^[:space:]]*' | cut -d= -f2 | tr ',' '\n' | grep -E '^[0-9]+$' | sort -u)"
+    new_ids="$(comm -13 <(sort -u "$STATE/seen_droplets" 2>/dev/null) <(echo "$cur_ids") 2>/dev/null | grep -E '^[0-9]+$' || true)"
+    echo "$cur_ids" > "$STATE/seen_droplets"
+    if [[ -n "$new_ids" ]]; then
+      notify WARN "DigitalOcean: new droplet id(s) $(echo $new_ids) — credits now IN USE. $(assess "$report" | tr '\n' ' ')"
+    fi
+    # (b) month-to-date spend rose -> credits are actively being consumed (covers
+    #     non-droplet usage too). Fire on the first dollar from zero, or any jump
+    #     >= DO_SPEND_ALERT_DELTA; reset the baseline if DO rolled the billing month.
+    cur_mtd="$(echo "$report" | grep -oE 'month_to_date_usage=\$[0-9]+(\.[0-9]+)?' | head -1 | sed 's/.*\$//')"
+    if [[ "$cur_mtd" =~ ^[0-9]+(\.[0-9]+)?$ ]]; then
+      prev_mtd="$(cat "$STATE/last_mtd" 2>/dev/null)"; [[ "$prev_mtd" =~ ^[0-9]+(\.[0-9]+)?$ ]] || prev_mtd=0
+      if [[ "$(jq -n --argjson c "$cur_mtd" --argjson p "$prev_mtd" '$c < $p' 2>/dev/null)" == "true" ]]; then
+        echo "$cur_mtd" > "$STATE/last_mtd"   # billing month rolled over; rebase quietly
+      elif [[ "$(jq -n --argjson c "$cur_mtd" --argjson p "$prev_mtd" --argjson d "$SPEND_DELTA" '(($c - $p) >= $d) or ($p == 0 and $c > 0)' 2>/dev/null)" == "true" ]]; then
+        notify WARN "DigitalOcean: credits used — month-to-date \$$prev_mtd -> \$$cur_mtd."
+        echo "$cur_mtd" > "$STATE/last_mtd"
+      fi
+    fi
   fi
 
   # --- important events: container down / disk full / RUNAWAY droplet ---

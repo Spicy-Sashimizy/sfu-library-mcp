@@ -54,8 +54,19 @@ cd /mnt/MAIN/sfu-library-mcp/monitor && sudo docker compose down
 ```
 
 ## What it watches (Phase 1)
-- Every container's running/health state (via the read-only proxy).
-- `/mnt/MAIN` dataset capacity (alerts ≥ `DISK_WARN_PCT`, default 88%).
+- Every container's running/health state (via the read-only proxy). Clean
+  one-shot init sidecars (`Exited (0)`) are ignored, not flagged.
+- Dataset capacity for `/mnt/MAIN/sfu-library-mcp` + the state dir (alerts ≥
+  `DISK_WARN_PCT`, default 88%).
+- **DigitalOcean credit watch** (read-only API, `/secrets/do_token`) — built to
+  fail LOUD, never silent:
+  - notifies the instant a **new droplet** appears (credits start), and again
+    each time **month-to-date spend rises** by ≥ `DO_SPEND_ALERT_DELTA` ($1 def.);
+  - flags a **RUNAWAY** droplet older than `DO_MAX_DROPLET_HOURS` (6h),
+    month-to-date usage ≥ `DO_BUDGET_USD` ($20), and **orphaned billables**
+    (unattached volumes / reserved IPs);
+  - if the DO API is unreachable or the token is rejected, that itself is an
+    anomaly (a credit monitor that can't see must not stay quiet).
 - Periodic heartbeat ("all clear") every `HEARTBEAT_HOURS`.
 
 ## Phase 2 (opt-in, NOT enabled)
