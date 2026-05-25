@@ -23,5 +23,6 @@ services:
       - /mnt/MAIN/sfu-library-mcp/from-host/snapshots:/srv/snapshots:ro
       - /mnt/MAIN/sfu-library-mcp/from-host/models:/srv/models:ro
       - /mnt/MAIN/sfu-library-mcp/from-host/code:/srv/code:ro
+      - /mnt/MAIN/sfu-library-mcp/from-host/index-snapshots:/srv/upload      # RW: droplet PUTs the finished index here
     mem_limit: 256m
     cpus: 0.5

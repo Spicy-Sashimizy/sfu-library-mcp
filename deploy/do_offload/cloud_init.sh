@@ -28,6 +28,7 @@ PROXY_AUTH="${SFU_DATA_PROXY_AUTH:-}"           # "user:pass" for basic auth (ma
 PROXY_SNAPS="${SFU_DATA_PROXY_SNAPSHOTS:-/snapshots}"
 PROXY_MODELS="${SFU_DATA_PROXY_MODELS:-/models}"
 PROXY_CODE="${SFU_DATA_PROXY_CODE:-/code}"
+UPLOAD_PATH="${SFU_UPLOAD_PATH:-/upload/openalex_works_snapshot}"  # PUT target for the finished snapshot
 MODEL_REF="${SFU_MODEL_REF:-sfu-splade-v1}"
 INDEX_NAME="${SFU_INDEX_NAME:-openalex_works}"
 BATCH_SIZE="${SFU_BATCH_SIZE:-64}"
@@ -66,8 +67,9 @@ if [[ -n "$VOL_DEV" ]]; then
 else
   echo ">> no block volume found — using local NVMe at $VOL_MNT"; mkdir -p "$VOL_MNT"
 fi
-SNAP_DIR="$VOL_MNT/snapshots"; OS_DATA="$VOL_MNT/os-data"; mkdir -p "$SNAP_DIR" "$OS_DATA"
-chmod 777 "$OS_DATA"   # opensearch container (uid 1000) writes here
+SNAP_DIR="$VOL_MNT/snapshots"; OS_DATA="$VOL_MNT/os-data"; OS_SNAP="$VOL_MNT/snap"
+mkdir -p "$SNAP_DIR" "$OS_DATA" "$OS_SNAP"
+chmod 777 "$OS_DATA" "$OS_SNAP"   # opensearch container (uid 1000) writes here
 
 # (3) Deps. The NVIDIA AI/ML Ready image ships CUDA + docker + python3.
 echo ">> installing deps..."
@@ -101,7 +103,9 @@ docker run -d --name os --restart no \
   -e discovery.type=single-node -e DISABLE_SECURITY_PLUGIN=true \
   -e "OPENSEARCH_JAVA_OPTS=-Xms${HEAP_GB}g -Xmx${HEAP_GB}g" \
   -e "bootstrap.memory_lock=true" --ulimit memlock=-1:-1 --ulimit nofile=65536:65536 \
+  -e "path.repo=/snap" \
   -v "$OS_DATA":/usr/share/opensearch/data \
+  -v "$OS_SNAP":/snap \
   opensearchproject/opensearch:2 || { echo "opensearch start FAILED"; finish 72; }
 echo ">> waiting for OpenSearch..."; for i in $(seq 1 60); do
   curl -s localhost:9200/_cluster/health >/dev/null 2>&1 && break; sleep 5; done
@@ -130,19 +134,32 @@ curl -s -X PUT "localhost:9200/$INDEX_NAME/_settings" -H 'Content-Type: applicat
 curl -s -X POST "localhost:9200/$INDEX_NAME/_forcemerge?max_num_segments=1" >/dev/null
 echo ">> final count: $(curl -s "localhost:9200/$INDEX_NAME/_count")"
 
-# (7) Snapshot the finished index out to the sink (DO Spaces = S3-compatible).
-if [[ "$INDEX_SINK" == "spaces" && -n "$SPACES_BUCKET" && -n "$SPACES_KEY" ]]; then
-  echo ">> registering Spaces snapshot repo + snapshotting..."
-  curl -s -X PUT "localhost:9200/_snapshot/spaces" -H 'Content-Type: application/json' -d "{
-    \"type\":\"s3\",\"settings\":{\"bucket\":\"$SPACES_BUCKET\",\"endpoint\":\"$SPACES_ENDPOINT\",
-      \"region\":\"$SPACES_REGION\",\"base_path\":\"$SPACES_PREFIX\",
-      \"access_key\":\"$SPACES_KEY\",\"secret_key\":\"$SPACES_SECRET\"}}" >/dev/null
-  curl -s -X PUT "localhost:9200/_snapshot/spaces/build-$(date +%s)?wait_for_completion=true" \
+# (7) Export: build an fs snapshot on the volume, then PUSH the tree back through
+#     the SAME NPM proxy (PUT over HTTPS) — reverse of the inbound fetch. No SSH to
+#     the NAS; the snapshot lands at $UPLOAD_PATH on the data-server (-> NAS dir).
+if [[ "$INDEX_SINK" == "proxy" && -n "$PROXY_URL" ]]; then
+  echo ">> creating fs snapshot in /snap ..."
+  curl -s -X PUT "localhost:9200/_snapshot/fsrepo" -H 'Content-Type: application/json' \
+       -d '{"type":"fs","settings":{"location":"/snap","compress":true}}' >/dev/null
+  SNAPNAME="build-$(date +%s)"
+  curl -s -X PUT "localhost:9200/_snapshot/fsrepo/$SNAPNAME?wait_for_completion=true" \
        -H 'Content-Type: application/json' -d "{\"indices\":\"$INDEX_NAME\",\"include_global_state\":false}" \
-    | tee /var/log/sfu_snapshot.json
-  echo ">> snapshot to Spaces complete."
+    | tee /var/log/sfu_snapshot.json | grep -o '"state":"[A-Z_]*"' | head -1
+  echo ">> uploading snapshot tree -> ${PROXY_URL%/}${UPLOAD_PATH} ..."
+  UA=(); [[ -n "$PROXY_AUTH" ]] && UA=(--user "${PROXY_AUTH%%:*}" --password "${PROXY_AUTH#*:}")
+  cd "$OS_SNAP" || finish 75
+  fail=0; n=0
+  while IFS= read -r f; do
+    rel="${f#./}"
+    code="$(wget -q "${UA[@]}" --method=PUT --body-file="$f" -O /dev/null \
+            --server-response "${PROXY_URL%/}${UPLOAD_PATH%/}/$rel" 2>&1 | awk '/HTTP\//{c=$2} END{print c}')"
+    case "$code" in 2*) n=$((n+1));; *) echo "  PUT $rel -> ${code:-ERR}"; fail=1;; esac
+  done < <(find . -type f | sort)
+  echo ">> uploaded $n files (failures: $fail)"
+  (( fail == 0 )) || { echo ">> SOME UPLOADS FAILED — leaving droplet for inspection (dead-man still armed)"; finish 76; }
+  echo ">> snapshot pushed to NAS via proxy."
 else
-  echo ">> WARN: no Spaces sink configured — index NOT exported. Set SFU_SPACES_* in .env."
+  echo ">> WARN: sink not 'proxy' or PROXY_URL unset — index NOT exported."
 fi
 
 echo ">> build done; powering off so nothing bills."
