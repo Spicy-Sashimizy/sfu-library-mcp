@@ -67,7 +67,11 @@ cd /mnt/MAIN/sfu-library-mcp/monitor && sudo docker compose down
     (unattached volumes / reserved IPs);
   - if the DO API is unreachable or the token is rejected, that itself is an
     anomaly (a credit monitor that can't see must not stay quiet).
-- Periodic heartbeat ("all clear") every `HEARTBEAT_HOURS`.
+- Periodic heartbeat every `HEARTBEAT_HOURS` that includes a **progress report**:
+  the SPLADE snapshot + re-encode/index job (docs indexed, % done, file N/total,
+  backend) read from `PROGRESS_DIR` status files, **freshness-aware** (reports how
+  stale the mirror is and whether the indexer heartbeat is live vs idle). This is
+  informational only — it never raises an anomaly.
 
 ## Phase 2 (opt-in, NOT enabled)
 - Host hooks for `zpool status -x` / `smartctl -H` via a **command-restricted**

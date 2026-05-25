@@ -133,7 +133,47 @@ else
   echo "  do_check_ok=$do_ok"
 fi
 
-# 4) Phase-2 host hooks (zpool status -x, smartctl -H) go here via a
+# 4) Progress report (INFORMATIONAL — never sets an anomaly): summarize the
+#    SPLADE snapshot + re-encode/index job from the status files the monitor can
+#    read. These are mirrored from the not-always-on host, so we report HOW OLD
+#    they are (and whether the heartbeat is live) rather than implying it's live.
+#    Emits a single `progress_line=` the loop lifts into the heartbeat.
+echo "## progress"
+PROGRESS_DIR="${PROGRESS_DIR:-/mnt/MAIN/sfu-library-mcp/from-host/snapshots}"
+now_s=$(date +%s); skept=0; prog_line=""
+if [[ ! -d "$PROGRESS_DIR" ]]; then
+  echo "  (no progress dir $PROGRESS_DIR)"; prog_line="no progress data (dir missing)"
+else
+  sf="$PROGRESS_DIR/snapshot_status.json"
+  if [[ -f "$sf" ]]; then
+    IFS=$'\t' read -r sstate sdone stot skept < <(jq -r '[.state,(.completed_parts//0),(.total_parts//0),(.total_kept//0)]|@tsv' "$sf" 2>/dev/null)
+    printf '  snapshot: %s %s/%s parts (%sM docs)\n' "$sstate" "$sdone" "$stot" "$(awk -v k="${skept:-0}" 'BEGIN{printf "%.1f",k/1e6}')"
+  fi
+  xf="$PROGRESS_DIR/indexer_status.json"
+  if [[ -f "$xf" ]]; then
+    age_min=$(( (now_s - $(stat -c %Y "$xf" 2>/dev/null || echo "$now_s")) / 60 ))
+    IFS=$'\t' read -r istate fidx ftot indexed backend < <(jq -r '[.state,(.file_index//0),(.total_files//0),(.total_indexed//0),(.gpu.backend//"?")]|@tsv' "$xf" 2>/dev/null)
+    pct=$(awk -v a="${indexed:-0}" -v b="${skept:-0}" 'BEGIN{if(b>0)printf "%.1f",a*100/b; else printf "?"}')
+    fpct=$(awk -v a="${fidx:-0}" -v b="${ftot:-0}" 'BEGIN{if(b>0)printf "%.0f",a*100/b; else printf "?"}')
+    idxM=$(awk -v a="${indexed:-0}" 'BEGIN{printf "%.2f",a/1e6}'); keptM=$(awk -v b="${skept:-0}" 'BEGIN{printf "%.1f",b/1e6}')
+    printf '  indexer: %s  file %s/%s (%s%%)  docs %sM/%sM (%s%%)  backend %s  updated %sm ago\n' \
+      "$istate" "$fidx" "$ftot" "$fpct" "$idxM" "$keptM" "$pct" "$backend" "$age_min"
+    hb="$PROGRESS_DIR/indexer_heartbeat"
+    if [[ -f "$hb" ]]; then
+      hbts=$(cut -d. -f1 < "$hb" 2>/dev/null)
+      if [[ "$hbts" =~ ^[0-9]+$ ]]; then
+        hbage=$(( (now_s - hbts) / 60 ))
+        printf '  indexer_heartbeat: %sm ago (%s)\n' "$hbage" "$([[ $hbage -le 5 ]] && echo RUNNING || echo 'idle/stale — not actively encoding')"
+      fi
+    fi
+    prog_line="indexer ${istate} ${idxM}M/${keptM}M docs (${pct}%), file ${fidx}/${ftot}, updated ${age_min}m ago"
+  else
+    echo "  (no indexer_status.json)"; prog_line="no indexer status"
+  fi
+fi
+echo "  progress_line=${prog_line}"
+
+# 5) Phase-2 host hooks (zpool status -x, smartctl -H) go here via a
 #    command-restricted localhost SSH key. Intentionally absent in Phase 1.
 
 [[ "$anom" -eq 0 ]] && echo "## result: ALL CLEAR" || echo "## result: ANOMALIES FOUND"

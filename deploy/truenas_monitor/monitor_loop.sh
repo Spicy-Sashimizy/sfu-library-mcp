@@ -36,7 +36,7 @@ assess() {  # feed check output to Claude for a concise human verdict (read-only
   local report="$1"
   # settings.json auto-loads from $HOME/.claude/settings.json (HOME=/agent in the image).
   if [[ -z "${CLAUDE_CODE_OAUTH_TOKEN:-}${ANTHROPIC_API_KEY:-}" ]]; then echo "(no Claude auth; raw report follows) $report"; return; fi
-  printf 'You are a read-only watchdog for a TrueNAS server and its DigitalOcean usage. From the health report below, reply in <=5 short lines:\n- overall severity: OK / WARN / CRIT\n- anything wrong or noteworthy: a container not running/unhealthy, a dataset near full, OR a DigitalOcean droplet consuming credits (give its name + age; mark CRIT if a RUNAWAY line is present)\n- the single safest human action, if any (never a destructive command)\nIf all is well, say so in one line. Report:\n\n%s\n' "$report" \
+  printf 'You are a read-only watchdog for a TrueNAS server and its DigitalOcean usage. From the health report below, reply in <=6 short lines:\n- overall severity: OK / WARN / CRIT\n- anything wrong or noteworthy: a container not running/unhealthy, a dataset near full, OR a DigitalOcean droplet consuming credits (give its name + age; mark CRIT if a RUNAWAY line is present)\n- PROGRESS: one line from the ## progress section — the SPLADE re-encode/index job state, docs indexed and %% done, and how stale it is (note if the indexer heartbeat is idle/stale rather than running)\n- the single safest human action, if any (never a destructive command)\nIf all is well health-wise, say so in one line but STILL give the progress line. Report:\n\n%s\n' "$report" \
     | timeout 150 claude -p 2>/dev/null || echo "(assessment unavailable) $report"
 }
 
@@ -85,9 +85,12 @@ while true; do
     # Phase-2 reaction hook (disabled by default):
     # [[ "${REACTIONS_ENABLED:-false}" == "true" ]] && bash /agent/react.sh "$report"
 
-  # --- progress update every HEARTBEAT_S (default 5h): a real status summary ---
+  # --- heartbeat every HEARTBEAT_S (default 5h): health + a concrete progress report ---
   elif (( now - last_heartbeat >= HEARTBEAT_S )); then
-    notify INFO "$(( HEARTBEAT_S/3600 ))h status — $(assess "$report" | tr '\n' ' ')"
+    # Lift the deterministic progress line straight from the report so the numbers
+    # are always present even if the Claude prose rewords them.
+    prog="$(echo "$report" | grep -oE 'progress_line=.*' | head -1 | sed 's/^progress_line=//')"
+    notify INFO "$(( HEARTBEAT_S/3600 ))h heartbeat — PROGRESS: ${prog:-n/a} || HEALTH: $(assess "$report" | tr '\n' ' ')"
     last_heartbeat=$now
   fi
   sleep "$INTERVAL"

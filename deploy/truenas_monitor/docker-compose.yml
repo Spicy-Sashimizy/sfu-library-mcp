@@ -36,6 +36,7 @@ services:
       DO_MAX_DROPLET_HOURS: "6"             # a DO droplet older than this = RUNAWAY (CRIT)
       DO_BUDGET_USD: "20"                   # month-to-date spend >= this = anomaly (CRIT)
       DO_SPEND_ALERT_DELTA: "1.0"           # notify each time month-to-date usage rises by >= this many $
+      PROGRESS_DIR: "/mnt/MAIN/sfu-library-mcp/from-host/snapshots"   # where the SPLADE snapshot/indexer status files are mirrored (read-only)
       REACTIONS_ENABLED: "false"            # Phase-1: notify only. Do NOT flip without the allowlist.
       # NOTIFY_WEBHOOK is read from the secrets file if present (see README)
     volumes:
