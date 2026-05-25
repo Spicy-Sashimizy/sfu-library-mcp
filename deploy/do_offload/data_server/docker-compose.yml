@@ -1,0 +1,27 @@
+# SFU offload data-server — capped, READ-ONLY nginx that serves the snapshot
+# shards + fine-tuned model + code tarball to the DO build droplet, fronted by
+# Nginx Proxy Manager (Cloudflare → NPM → this) at sfu-data.<domain>.
+#
+# Deploy ON TrueNAS under /mnt/MAIN/sfu-library-mcp/data-server:
+#   1) htpasswd:  sudo docker run --rm httpd:alpine htpasswd -nbB sfu '<STRONG_PASS>' > htpasswd
+#      (put the same "sfu:<STRONG_PASS>" in the repo .env as SFU_DATA_PROXY_AUTH)
+#   2) stage code tarball + ensure model/snapshots present (see README)
+#   3) sudo docker compose up -d
+#   4) In NPM add a Proxy Host: sfu-data.<domain> → http://<nas-ip>:30021 (SSL via
+#      Cloudflare/LE). Optionally also add an NPM Access List as a second factor.
+# Capped so it never competes with the 18 production containers.
+services:
+  sfu-data:
+    image: nginx:alpine
+    container_name: sfu-data-server
+    restart: unless-stopped
+    ports:
+      - "30021:80"          # LAN only; NPM proxies to this. Not exposed publicly directly.
+    volumes:
+      - ./nginx.conf:/etc/nginx/conf.d/default.conf:ro
+      - ./htpasswd:/etc/nginx/.htpasswd:ro
+      - /mnt/MAIN/sfu-library-mcp/from-host/snapshots:/srv/snapshots:ro
+      - /mnt/MAIN/sfu-library-mcp/from-host/models:/srv/models:ro
+      - /mnt/MAIN/sfu-library-mcp/from-host/code:/srv/code:ro
+    mem_limit: 256m
+    cpus: 0.5
