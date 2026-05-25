@@ -32,7 +32,8 @@ services:
       DOCKER_PROXY: http://docker-socket-proxy:2375
       CHECK_INTERVAL: "300"                 # seconds between read-only checks
       DISK_WARN_PCT: "88"                   # dataset capacity alert threshold
-      HEARTBEAT_HOURS: "24"                 # periodic "all good" ping
+      HEARTBEAT_HOURS: "5"                  # progress summary cadence (per request)
+      DO_MAX_DROPLET_HOURS: "6"             # a DO droplet older than this = RUNAWAY (CRIT)
       REACTIONS_ENABLED: "false"            # Phase-1: notify only. Do NOT flip without the allowlist.
       # NOTIFY_WEBHOOK is read from the secrets file if present (see README)
     volumes:

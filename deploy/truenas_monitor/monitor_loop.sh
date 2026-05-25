@@ -35,25 +35,38 @@ notify() {  # $1=severity $2=message
 assess() {  # feed check output to Claude for a concise human verdict (read-only tools only)
   local report="$1"
   # settings.json auto-loads from $HOME/.claude/settings.json (HOME=/agent in the image).
-  if [[ -z "${CLAUDE_CODE_OAUTH_TOKEN:-}${ANTHROPIC_API_KEY:-}" ]]; then echo "(no Claude auth; raw report)"; return; fi
-  printf 'You are a read-only TrueNAS watchdog. Given this health report, reply in <=4 lines: severity (OK/WARN/CRIT), what is wrong, and the single safest suggested human action. Do NOT propose destructive commands.\n\n%s\n' "$report" \
-    | timeout 120 claude -p 2>/dev/null || echo "(assessment unavailable)"
+  if [[ -z "${CLAUDE_CODE_OAUTH_TOKEN:-}${ANTHROPIC_API_KEY:-}" ]]; then echo "(no Claude auth; raw report follows) $report"; return; fi
+  printf 'You are a read-only watchdog for a TrueNAS server and its DigitalOcean usage. From the health report below, reply in <=5 short lines:\n- overall severity: OK / WARN / CRIT\n- anything wrong or noteworthy: a container not running/unhealthy, a dataset near full, OR a DigitalOcean droplet consuming credits (give its name + age; mark CRIT if a RUNAWAY line is present)\n- the single safest human action, if any (never a destructive command)\nIf all is well, say so in one line. Report:\n\n%s\n' "$report" \
+    | timeout 150 claude -p 2>/dev/null || echo "(assessment unavailable) $report"
 }
 
-notify INFO "monitor started (interval ${INTERVAL}s, reactions=${REACTIONS_ENABLED:-false})"
-last_heartbeat=0
+notify INFO "monitor started (checks ${INTERVAL}s, progress every $(( HEARTBEAT_S/3600 ))h, reactions=${REACTIONS_ENABLED:-false})"
+last_heartbeat=$(date +%s)   # don't fire a heartbeat immediately on boot
+touch "$STATE/seen_droplets"
 while true; do
   report="$(bash /agent/checks.sh 2>&1)"; rc=$?
   now=$(date +%s)
+
+  # --- DigitalOcean: alert the moment a NEW droplet appears (credits start) ---
+  cur_ids="$(echo "$report" | grep -oE 'active_ids=[^[:space:]]*' | cut -d= -f2 | tr ',' '\n' | grep -E '^[0-9]+$' | sort -u)"
+  new_ids="$(comm -13 <(sort -u "$STATE/seen_droplets" 2>/dev/null) <(echo "$cur_ids") 2>/dev/null | grep -E '^[0-9]+$' || true)"
+  echo "$cur_ids" > "$STATE/seen_droplets"
+  if [[ -n "$new_ids" ]]; then
+    notify WARN "DigitalOcean: credits now IN USE — new droplet id(s) $(echo $new_ids). $(assess "$report" | tr '\n' ' ')"
+  fi
+
+  # --- important events: container down / disk full / RUNAWAY droplet ---
   if (( rc != 0 )); then
     verdict="$(assess "$report")"
     sev=CRIT; echo "$verdict" | grep -qi 'WARN' && sev=WARN
     notify "$sev" "$(echo "$verdict" | tr '\n' ' ')"
-    echo "$report" >> "$STATE/last_anomaly.txt"
+    echo "$(date -u +%FT%TZ)"$'\n'"$report" >> "$STATE/last_anomaly.txt"
     # Phase-2 reaction hook (disabled by default):
     # [[ "${REACTIONS_ENABLED:-false}" == "true" ]] && bash /agent/react.sh "$report"
+
+  # --- progress update every HEARTBEAT_S (default 5h): a real status summary ---
   elif (( now - last_heartbeat >= HEARTBEAT_S )); then
-    notify INFO "heartbeat: all clear"
+    notify INFO "$(( HEARTBEAT_S/3600 ))h status — $(assess "$report" | tr '\n' ' ')"
     last_heartbeat=$now
   fi
   sleep "$INTERVAL"
