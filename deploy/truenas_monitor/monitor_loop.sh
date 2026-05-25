@@ -19,14 +19,17 @@ elif [[ -s /secrets/anthropic.key ]]; then
   export ANTHROPIC_API_KEY="$(cat /secrets/anthropic.key)"
 fi
 NOTIFY_WEBHOOK="${NOTIFY_WEBHOOK:-$(cat /secrets/notify_webhook 2>/dev/null || true)}"
+# Bearer token for the self-hosted, auth-locked ntfy (exposed via Cloudflare->NPM).
+NOTIFY_TOKEN="${NOTIFY_TOKEN:-$(cat /secrets/notify_token 2>/dev/null || true)}"
 
 notify() {  # $1=severity $2=message
   local sev="$1"; shift; local msg="$*"
   local line; line="$(date -u +%FT%TZ) [$sev] $msg"
   echo "$line" | tee -a "$ALERTS"
-  [[ -n "$NOTIFY_WEBHOOK" ]] && curl -s --max-time 15 -H 'Title: TrueNAS monitor' \
-       -H "Priority: $([[ $sev == CRIT ]] && echo urgent || echo default)" \
-       -d "$line" "$NOTIFY_WEBHOOK" >/dev/null 2>&1 || true
+  [[ -z "$NOTIFY_WEBHOOK" ]] && return 0
+  local h=(-H 'Title: TrueNAS monitor' -H "Priority: $([[ $sev == CRIT ]] && echo urgent || echo default)")
+  [[ -n "$NOTIFY_TOKEN" ]] && h+=(-H "Authorization: Bearer $NOTIFY_TOKEN")
+  curl -s --max-time 15 "${h[@]}" -d "$line" "$NOTIFY_WEBHOOK" >/dev/null 2>&1 || true
 }
 
 assess() {  # feed check output to Claude for a concise human verdict (read-only tools only)

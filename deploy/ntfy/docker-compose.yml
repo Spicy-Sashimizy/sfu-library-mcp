@@ -1,0 +1,32 @@
+# Self-hosted ntfy on TrueNAS, proxied by NPM for off-network alerts under your
+# own domain. Capped + auth-locked so exposing it is safe. GATED deploy — see README.
+# Reads NTFY_BASE_URL / NTFY_PORT from config.env (gitignored; your real domain).
+services:
+  ntfy:
+    image: binwiederhier/ntfy:latest
+    container_name: sfu-ntfy
+    command: ["serve"]
+    restart: unless-stopped
+    environment:
+      # public URL NPM serves this on (e.g. https://ntfy.your-domain.tld)
+      NTFY_BASE_URL: "${NTFY_BASE_URL:?set NTFY_BASE_URL in config.env}"
+      NTFY_LISTEN_HTTP: ":80"
+      NTFY_BEHIND_PROXY: "true"                 # trust X-Forwarded-* from NPM
+      # LOCKED DOWN: nobody can read/write without a token (we mint one for the
+      # monitor + your phone). This is what makes public exposure safe.
+      NTFY_AUTH_FILE: "/var/lib/ntfy/user.db"
+      NTFY_AUTH_DEFAULT_ACCESS: "deny-all"
+      NTFY_CACHE_FILE: "/var/lib/ntfy/cache.db"
+      NTFY_ATTACHMENT_CACHE_DIR: "/var/lib/ntfy/attachments"
+      TZ: "America/Vancouver"
+    volumes:
+      - /mnt/MAIN/sfu-library-mcp/ntfy:/var/lib/ntfy        # own dataset dir
+    ports:
+      - "${NTFY_PORT:-30280}:80"                            # NPM upstream -> 192.168.1.142:30280
+    healthcheck:
+      test: ["CMD-SHELL", "wget -q -O - http://127.0.0.1:80/v1/health | grep -q healthy"]
+      interval: 60s
+      timeout: 10s
+      retries: 3
+    mem_limit: 256m
+    cpus: 0.5

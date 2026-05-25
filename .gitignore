@@ -143,6 +143,9 @@ local_settings.*
 *.before-fix
 *.pre-fix-backup
 
+# deploy local configs (may contain domains/ports/tokens — keep out of git)
+deploy/**/config.env
+
 # Trained model artifacts (large, regeneratable)
 models/sfu-academic-embed-*/
 logs/

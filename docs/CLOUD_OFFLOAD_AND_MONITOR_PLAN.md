@@ -81,6 +81,10 @@ deploy/
     checks.sh            # read-only health probes (containers, datasets, pool*, smart*)
     settings.json        # Claude Code permission allowlist (read-only + notify)
     README.md            # gated deploy steps + safety posture
+  ntfy/
+    docker-compose.yml   # self-hosted ntfy (capped, auth deny-all+token)
+    config.example.env   # NTFY_BASE_URL/NTFY_PORT (real domain -> gitignored config.env)
+    README.md            # deploy + Cloudflare->NPM exposure + token + app setup
 docs/CLOUD_OFFLOAD_AND_MONITOR_PLAN.md   # this file (authoritative plan/tracker)
 ```
 
@@ -113,10 +117,13 @@ docs/CLOUD_OFFLOAD_AND_MONITOR_PLAN.md   # this file (authoritative plan/tracker
    `/mnt/MAIN/sfu-library-training/secrets/claude_oauth_token` → agent uses
    `CLAUDE_CODE_OAUTH_TOKEN` (your Pro/Max sub, no API key; only calls Claude on
    anomalies so usage stays minimal). REQUIRED before the monitor can run.
-2. **Notification channel = ntfy (chosen, easiest)** — topic
-   `https://ntfy.sh/sfu-truenas-<random>` in `…/secrets/notify_webhook`; install
-   the ntfy app + subscribe. notify() already speaks ntfy. (Default until then:
-   logfile only.)
+2. **Notification channel = SELF-HOSTED ntfy via Cloudflare → NPM** (chosen).
+   Topic `sfu-truenas-7292faa659` on `https://ntfy.<your-domain>` (own domain,
+   off-network, private). Deployed by `deploy/ntfy/` (capped 256M, auth
+   deny-all + token). No cloudflared tunnel exists on the NAS (verified), so it
+   reuses the existing Cloudflare-DNS → NPM chain (add a CF subdomain record +
+   an NPM proxy host with Websockets). monitor sends `Authorization: Bearer`
+   from `…/secrets/notify_token`. (Default until deployed: logfile only.)
 3. **Reaction authority** — keep Phase-1 notify-only, or enable the Phase-2
    restart allowlist (and for which containers)? Default: notify-only.
 4. **DO provisioning timing** — build scripts now; provision the GPU droplet
