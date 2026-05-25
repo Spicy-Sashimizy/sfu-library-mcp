@@ -124,6 +124,9 @@ docs/CLOUD_OFFLOAD_AND_MONITOR_PLAN.md   # this file (authoritative plan/tracker
    reuses the existing Cloudflare-DNS → NPM chain (add a CF subdomain record +
    an NPM proxy host with Websockets). monitor sends `Authorization: Bearer`
    from `…/secrets/notify_token`. (Default until deployed: logfile only.)
+   CONFIRMED by owner: the reverse proxy is the **NPM ix-app on TrueNAS** (CF DNS
+   points at it; no standalone cloudflared). Adding ntfy = one new proxy host in
+   the NPM app UI; NPM admin creds stay the owner's (never used here).
 3. **Reaction authority** — keep Phase-1 notify-only, or enable the Phase-2
    restart allowlist (and for which containers)? Default: notify-only.
 4. **DO provisioning timing** — build scripts now; provision the GPU droplet

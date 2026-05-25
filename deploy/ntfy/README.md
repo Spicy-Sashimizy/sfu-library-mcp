@@ -36,6 +36,12 @@ echo -n "tk_xxptoken"                                       | sudo tee /mnt/MAIN
 (The monitor's `notify()` sends `Authorization: Bearer <token>` when `notify_token` exists.)
 
 ## 4. Expose via your existing Cloudflare → NPM
+> CONFIRMED topology: Cloudflare DNS → the **NPM ix-app on TrueNAS** (the app you
+> already manage the reverse proxy through) → services. No standalone cloudflared.
+> So this is just **one more proxy host added in the NPM app's UI** — same as your
+> other apps. The NPM admin creds (`TRUENAS_NPM_ADMIN`) are yours; this doc never
+> uses them — you add the host in the UI.
+
 **Cloudflare DNS:** add a record `ntfy` (CNAME to your existing proxied host, or
 A to your public IP), **proxied (orange cloud)** — same as your other subdomains.
 
