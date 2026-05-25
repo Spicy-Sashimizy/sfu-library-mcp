@@ -1,0 +1,30 @@
+{
+  "_comment": "Claude Code permission allowlist for the TrueNAS watchdog. Read-only/defense-in-depth: the real guardrails are the container boundary, the socket-proxy POST=0, and read-only mounts. This denies anything mutating regardless.",
+  "permissions": {
+    "defaultMode": "default",
+    "allow": [
+      "Read",
+      "Bash(curl:*)",
+      "Bash(df:*)",
+      "Bash(jq:*)",
+      "Bash(grep:*)",
+      "Bash(cat /agent/state/*)"
+    ],
+    "deny": [
+      "Write",
+      "Edit",
+      "Bash(docker:*)",
+      "Bash(rm:*)",
+      "Bash(mv:*)",
+      "Bash(shutdown:*)",
+      "Bash(reboot:*)",
+      "Bash(kill:*)",
+      "Bash(zpool:*)",
+      "Bash(zfs:*)",
+      "Bash(systemctl:*)",
+      "Bash(midclt:*)",
+      "Bash(chmod:*)",
+      "Bash(chown:*)"
+    ]
+  }
+}

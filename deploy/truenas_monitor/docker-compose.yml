@@ -1,0 +1,53 @@
+# SFU TrueNAS monitor — capped, read-only-by-default Claude Code agent.
+# Deploy under /mnt/MAIN/sfu-library-mcp/monitor (GATED — see README, needs API key).
+# Hard "do not impede" guarantees:
+#   * agent capped at 768M / 1.0 CPU (box has ~7G free RAM, i5-6500)
+#   * observes via a READ-ONLY docker-socket-proxy (POST disabled -> cannot
+#     start/stop/delete ANY container, incl. the 18 production apps)
+#   * isolated network; only touches its own dataset
+services:
+  docker-socket-proxy:
+    image: tecnativa/docker-socket-proxy:latest
+    container_name: sfu-monitor-socketproxy
+    restart: unless-stopped
+    privileged: false
+    environment:
+      CONTAINERS: 1     # read container list/status/health
+      INFO: 1           # read daemon info
+      # everything else stays 0; POST is 0 -> strictly read-only API
+      POST: 0
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+    networks: [monitor_net]
+    mem_limit: 96m
+    cpus: 0.25
+
+  monitor:
+    build: .
+    image: sfu-truenas-monitor:local
+    container_name: sfu-monitor
+    restart: unless-stopped
+    depends_on: [docker-socket-proxy]
+    environment:
+      DOCKER_PROXY: http://docker-socket-proxy:2375
+      CHECK_INTERVAL: "300"                 # seconds between read-only checks
+      DISK_WARN_PCT: "88"                   # dataset capacity alert threshold
+      HEARTBEAT_HOURS: "24"                 # periodic "all good" ping
+      REACTIONS_ENABLED: "false"            # Phase-1: notify only. Do NOT flip without the allowlist.
+      # NOTIFY_WEBHOOK is read from the secrets file if present (see README)
+    volumes:
+      - ./settings.json:/agent/.claude/settings.json:ro
+      - ./checks.sh:/agent/checks.sh:ro
+      - ./monitor_loop.sh:/agent/monitor_loop.sh:ro
+      - /mnt/MAIN/sfu-library-mcp/monitor/state:/agent/state          # logs/alerts (writable, own dir)
+      - /mnt/MAIN/sfu-library-training/secrets:/secrets:ro            # anthropic.key, notify_webhook
+      # read-only views for capacity checks (never writable):
+      - /mnt/MAIN/sfu-library-mcp:/mnt/MAIN/sfu-library-mcp:ro
+    networks: [monitor_net]
+    mem_limit: 768m
+    cpus: 1.0
+    command: ["/agent/monitor_loop.sh"]
+
+networks:
+  monitor_net:
+    driver: bridge
