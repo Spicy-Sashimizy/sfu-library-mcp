@@ -40,7 +40,7 @@ services:
       - ./checks.sh:/agent/checks.sh:ro
       - ./monitor_loop.sh:/agent/monitor_loop.sh:ro
       - /mnt/MAIN/sfu-library-mcp/monitor/state:/agent/state          # logs/alerts (writable, own dir)
-      - /mnt/MAIN/sfu-library-training/secrets:/secrets:ro            # anthropic.key, notify_webhook
+      - /mnt/MAIN/sfu-library-mcp/monitor/secrets:/secrets:ro         # claude_oauth_token, notify_token, notify_webhook (gordoz-writable; no sudo needed)
       # read-only views for capacity checks (never writable):
       - /mnt/MAIN/sfu-library-mcp:/mnt/MAIN/sfu-library-mcp:ro
     networks: [monitor_net]
