@@ -24,6 +24,10 @@ if json="$(curl -s --max-time 15 "$PROXY/containers/json?all=1" 2>/dev/null)"; t
   if echo "$json" | jq -e "$JQ_BAD"' any(.[]; bad)' >/dev/null 2>&1; then
     anom=1; echo "  ANOMALY: a container is unhealthy or unexpectedly stopped"
   fi
+  # Monitor's own RestartCount — lets a reader tell a REAL crash-loop (count
+  # climbing) from a fresh redeploy (count 0, just low uptime). Informational.
+  self_rc="$(curl -s --max-time 10 "$PROXY/containers/sfu-monitor/json" 2>/dev/null | jq -r '.RestartCount // "?"' 2>/dev/null)"
+  echo "  monitor_self: RestartCount=${self_rc:-?} (a fresh deploy shows 0 with low uptime; a crash-loop keeps climbing)"
 else
   anom=1; echo "  ANOMALY: cannot reach docker-socket-proxy at $PROXY"
 fi
@@ -150,23 +154,25 @@ else
     printf '  snapshot: %s %s/%s parts (%sM docs)\n' "$sstate" "$sdone" "$stot" "$(awk -v k="${skept:-0}" 'BEGIN{printf "%.1f",k/1e6}')"
   fi
   xf="$PROGRESS_DIR/indexer_status.json"
+  hb="$PROGRESS_DIR/indexer_heartbeat"
   if [[ -f "$xf" ]]; then
-    age_min=$(( (now_s - $(stat -c %Y "$xf" 2>/dev/null || echo "$now_s")) / 60 ))
+    # Freshness from the heartbeat EPOCH (tz-independent, bumped every few seconds
+    # while encoding, and unaffected by rsync preserving the status file's mtime).
+    # Fall back to the status file mtime only if there's no heartbeat.
+    age_min=""
+    if [[ -f "$hb" ]]; then
+      hbts=$(cut -d. -f1 < "$hb" 2>/dev/null)
+      [[ "$hbts" =~ ^[0-9]+$ ]] && age_min=$(( (now_s - hbts) / 60 ))
+    fi
+    [[ -z "$age_min" ]] && age_min=$(( (now_s - $(stat -c %Y "$xf" 2>/dev/null || echo "$now_s")) / 60 ))
+    run_state=$([[ "$age_min" -le 5 ]] && echo RUNNING || echo 'idle/stale')
     IFS=$'\t' read -r istate fidx ftot indexed backend < <(jq -r '[.state,(.file_index//0),(.total_files//0),(.total_indexed//0),(.gpu.backend//"?")]|@tsv' "$xf" 2>/dev/null)
     pct=$(awk -v a="${indexed:-0}" -v b="${skept:-0}" 'BEGIN{if(b>0)printf "%.1f",a*100/b; else printf "?"}')
     fpct=$(awk -v a="${fidx:-0}" -v b="${ftot:-0}" 'BEGIN{if(b>0)printf "%.0f",a*100/b; else printf "?"}')
     idxM=$(awk -v a="${indexed:-0}" 'BEGIN{printf "%.2f",a/1e6}'); keptM=$(awk -v b="${skept:-0}" 'BEGIN{printf "%.1f",b/1e6}')
-    printf '  indexer: %s  file %s/%s (%s%%)  docs %sM/%sM (%s%%)  backend %s  updated %sm ago\n' \
-      "$istate" "$fidx" "$ftot" "$fpct" "$idxM" "$keptM" "$pct" "$backend" "$age_min"
-    hb="$PROGRESS_DIR/indexer_heartbeat"
-    if [[ -f "$hb" ]]; then
-      hbts=$(cut -d. -f1 < "$hb" 2>/dev/null)
-      if [[ "$hbts" =~ ^[0-9]+$ ]]; then
-        hbage=$(( (now_s - hbts) / 60 ))
-        printf '  indexer_heartbeat: %sm ago (%s)\n' "$hbage" "$([[ $hbage -le 5 ]] && echo RUNNING || echo 'idle/stale — not actively encoding')"
-      fi
-    fi
-    prog_line="indexer ${istate} ${idxM}M/${keptM}M docs (${pct}%), file ${fidx}/${ftot}, updated ${age_min}m ago"
+    printf '  indexer: %s [%s]  file %s/%s (%s%%)  docs %sM/%sM (%s%%)  backend %s  last beat %sm ago\n' \
+      "$istate" "$run_state" "$fidx" "$ftot" "$fpct" "$idxM" "$keptM" "$pct" "$backend" "$age_min"
+    prog_line="indexer ${istate} [${run_state}] ${idxM}M/${keptM}M docs (${pct}%), file ${fidx}/${ftot}, last beat ${age_min}m ago"
   else
     echo "  (no indexer_status.json)"; prog_line="no indexer status"
   fi

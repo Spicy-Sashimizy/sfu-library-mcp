@@ -73,6 +73,7 @@ import json
 import logging
 import os
 import signal
+import subprocess
 import sys
 import threading
 import time
@@ -1025,6 +1026,53 @@ def write_status(input_dir: Path, state: dict) -> None:
         pass
 
 
+# ── Live progress mirror (push status/heartbeat to the always-on TrueNAS) ─────
+# The TrueNAS monitor reads these files to put a live progress line in its
+# heartbeat. The host isn't always on, so we PUSH from here while indexing runs.
+# Fully decoupled from the write path, opt-out, and failure-safe: a mirror error
+# never touches indexing. Disable with SFU_PROGRESS_PUSH=off (or empty).
+PROGRESS_PUSH_FILES = (STATUS_FILE, HEARTBEAT_FILE, "snapshot_status.json")
+_DEFAULT_PROGRESS_TARGET = "truenas:/mnt/MAIN/sfu-library-mcp/from-host/snapshots/"
+
+
+def _progress_push_target() -> str:
+    t = os.environ.get("SFU_PROGRESS_PUSH", _DEFAULT_PROGRESS_TARGET).strip()
+    return "" if t.lower() in ("", "0", "off", "false", "none") else t
+
+
+def _push_progress_once(input_dir: Path, target: str) -> bool:
+    srcs = [str(input_dir / f) for f in PROGRESS_PUSH_FILES if (input_dir / f).exists()]
+    if not srcs or not target:
+        return False
+    # rsync preferred (delta + preserves the status file's real mtime); scp fallback.
+    for cmd in (["rsync", "-a", "--timeout=30", *srcs, target], ["scp", "-q", *srcs, target]):
+        try:
+            subprocess.run(cmd, check=True, capture_output=True, timeout=60)
+            return True
+        except FileNotFoundError:
+            continue   # tool not installed; try next
+        except Exception:
+            return False
+    return False
+
+
+def _start_progress_pusher(input_dir: Path) -> str:
+    """Spawn a daemon thread that mirrors progress files to the NAS on an interval.
+    Returns the resolved target ('' if disabled) so the caller can flush at exit."""
+    target = _progress_push_target()
+    if not target:
+        return ""
+    interval = max(15, int(os.environ.get("SFU_PROGRESS_PUSH_INTERVAL", "60")))
+
+    def _loop():
+        while True:
+            _push_progress_once(input_dir, target)
+            time.sleep(interval)
+
+    threading.Thread(target=_loop, daemon=True, name="progress-pusher").start()
+    return target
+
+
 # ── Main indexing pipeline ───────────────────────────────────────────────────
 
 
@@ -1578,20 +1626,31 @@ def main():
     if args.dry_run:
         logger.info("Mode: DRY RUN (100 docs)")
 
-    result = run_indexer(
-        input_dir=args.input,
-        model_name=args.model,
-        device=args.device,
-        batch_size=args.batch_size,
-        opensearch_url=args.opensearch_url,
-        index_name=args.index,
-        checkpoint_interval=args.checkpoint_interval,
-        resume=args.resume,
-        dry_run=args.dry_run,
-        max_length=args.max_length,
-        backend=args.backend,
-        async_workers=args.async_workers,
-    )
+    # Mirror status/heartbeat to the always-on NAS so its monitor heartbeat shows
+    # LIVE progress (failure-safe; disable with SFU_PROGRESS_PUSH=off).
+    push_target = _start_progress_pusher(args.input)
+    if push_target:
+        logger.info("Live progress mirror -> %s (every %ss)",
+                    push_target, os.environ.get("SFU_PROGRESS_PUSH_INTERVAL", "60"))
+
+    try:
+        result = run_indexer(
+            input_dir=args.input,
+            model_name=args.model,
+            device=args.device,
+            batch_size=args.batch_size,
+            opensearch_url=args.opensearch_url,
+            index_name=args.index,
+            checkpoint_interval=args.checkpoint_interval,
+            resume=args.resume,
+            dry_run=args.dry_run,
+            max_length=args.max_length,
+            backend=args.backend,
+            async_workers=args.async_workers,
+        )
+    finally:
+        if push_target:
+            _push_progress_once(args.input, push_target)  # flush the terminal state to the NAS
 
     if result.get("state") == "interrupted":
         sys.exit(130)

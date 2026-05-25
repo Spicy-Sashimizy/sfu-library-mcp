@@ -69,9 +69,15 @@ cd /mnt/MAIN/sfu-library-mcp/monitor && sudo docker compose down
     anomaly (a credit monitor that can't see must not stay quiet).
 - Periodic heartbeat every `HEARTBEAT_HOURS` that includes a **progress report**:
   the SPLADE snapshot + re-encode/index job (docs indexed, % done, file N/total,
-  backend) read from `PROGRESS_DIR` status files, **freshness-aware** (reports how
-  stale the mirror is and whether the indexer heartbeat is live vs idle). This is
-  informational only — it never raises an anomaly.
+  backend) read from `PROGRESS_DIR` status files, **freshness-aware** — it bases
+  `RUNNING` vs `idle/stale` on the indexer **heartbeat epoch** (not file mtime) and
+  shows minutes since the last beat. Informational only — never raises an anomaly.
+  **Live progress:** `scripts/splade_indexer.py` pushes its `indexer_status.json` +
+  `indexer_heartbeat` to `PROGRESS_DIR` on the NAS every 60s while it runs (the host
+  isn't always on, so it PUSHes); set `SFU_PROGRESS_PUSH=off` to disable, or point it
+  elsewhere with `SFU_PROGRESS_PUSH=host:/path` / `SFU_PROGRESS_PUSH_INTERVAL=<sec>`.
+- `monitor_self: RestartCount` is reported so a genuine crash-loop (count climbing)
+  is distinguishable from a fresh redeploy (count 0, just low uptime).
 
 ## Phase 2 (opt-in, NOT enabled)
 - Host hooks for `zpool status -x` / `smartctl -H` via a **command-restricted**
