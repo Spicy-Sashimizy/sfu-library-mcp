@@ -71,7 +71,7 @@ trap cleanup EXIT INT TERM
 SSH_ID=""
 if [[ -n "${SFU_DO_SSH_KEY_NAME:-}" ]]; then
   SSH_ID="$(curl -s --max-time 20 "${auth[@]}" "$API/account/keys?per_page=200" \
-    | python3 -c "import sys,json,os;n=os.environ['K'];print(next((str(k['id']) for k in json.load(sys.stdin).get('ssh_keys',[]) if k['name']==n),''))" K="$SFU_DO_SSH_KEY_NAME" 2>/dev/null)"
+    | K="$SFU_DO_SSH_KEY_NAME" python3 -c "import sys,json,os;n=os.environ['K'];print(next((str(k['id']) for k in json.load(sys.stdin).get('ssh_keys',[]) if k['name']==n),''))" 2>/dev/null)"
   [[ -n "$SSH_ID" ]] || echo ">> WARN: SSH key '$SFU_DO_SSH_KEY_NAME' not found in DO account — booting without inbound SSH."
 fi
 
@@ -79,10 +79,9 @@ fi
 VOL_ID=""
 if [[ "${SFU_VOLUME_SIZE_GB:-0}" -gt 0 ]]; then
   echo ">> creating ${SFU_VOLUME_SIZE_GB}GB volume in $SFU_DO_REGION..."
-  vresp="$(curl -s --max-time 60 "${auth[@]}" -d "$(python3 -c "import json,os;print(json.dumps({
+  vresp="$(curl -s --max-time 60 "${auth[@]}" -d "$(T="$SFU_DO_TAG" R="$SFU_DO_REGION" S="$SFU_VOLUME_SIZE_GB" python3 -c "import json,os;print(json.dumps({
     'name':os.environ['T']+'-vol','region':os.environ['R'],
-    'size_gigabytes':int(os.environ['S']),'tags':[os.environ['T']]}))" \
-    T="$SFU_DO_TAG" R="$SFU_DO_REGION" S="$SFU_VOLUME_SIZE_GB")" "$API/volumes")"
+    'size_gigabytes':int(os.environ['S']),'tags':[os.environ['T']]}))")" "$API/volumes")"
   VOL_ID="$(echo "$vresp" | python3 -c "import sys,json;print(json.load(sys.stdin).get('volume',{}).get('id',''))" 2>/dev/null)"
   [[ -n "$VOL_ID" ]] || { echo "ERROR creating volume: $(echo "$vresp" | head -c 300)" >&2; exit 3; }
   echo ">> volume $VOL_ID created."
