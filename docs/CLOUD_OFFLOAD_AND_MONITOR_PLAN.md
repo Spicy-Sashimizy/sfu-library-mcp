@@ -1,6 +1,12 @@
 # Cloud Offload Pipeline + TrueNAS Monitor — Plan & Safety Contract
 
-**Status:** scaffolding (artifacts in repo; NOTHING deployed/provisioned yet)
+**Status (2026-05-25):** monitor LIVE on the NAS (Opus-pinned, notify-only).
+DO offload build IMPLEMENTED (cloud_init P2 + NPM-proxy data path + index volume
++ teardown), `sfu-encode-key` uploaded to DO, code tarball staged on the NAS,
+`--dry-run` passes. REMAINING before a real build: (a) deploy `data_server/` on
+the NAS + add the NPM proxy host, (b) create a DO Spaces bucket + set
+`DO_SPACES_*` in `.env`, (c) set `SFU_DATA_PROXY_AUTH` in `.env`, (d) gated
+provision (`SFU_CONFIRM=I_UNDERSTAND_COST`, explicit go — spends ~$3-6).
 **Created:** 2026-05-25
 **Owner intent:** host (4070 Ti + local OpenSearch) can't stay on 24/7; TrueNAS can.
 Move the heavy re-encode/index *build* to an ephemeral DO GPU droplet, keep

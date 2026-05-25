@@ -113,6 +113,7 @@ curl -s -X PUT "localhost:9200/$INDEX_NAME" -H 'Content-Type: application/json' 
 
 # (6) FRESH bulk insert (NO --resume → fast path). Indexer auto-uses CUDA/TRT.
 echo ">> indexing (fresh bulk insert)..."
+export SFU_PROGRESS_PUSH=off   # droplet can't reach the NAS push target; disable the mirror
 $PY /opt/sfu/scripts/splade_indexer.py \
     --input "$SNAP_DIR" \
     --model "/opt/sfu/models/$MODEL_REF" \
