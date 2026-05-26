@@ -32,7 +32,8 @@ services:
       DOCKER_PROXY: http://docker-socket-proxy:2375
       CHECK_INTERVAL: "300"                 # seconds between read-only checks
       DISK_WARN_PCT: "88"                   # dataset capacity alert threshold
-      HEARTBEAT_HOURS: "5"                  # progress summary cadence (per request)
+      HEARTBEAT_HOURS: "24"                 # liveness + health beat cadence (progress now rides PROGRESS_NOTIFY_PCT)
+      PROGRESS_NOTIFY_PCT: "5"              # push each time indexing crosses a new N% mark (0 = off)
       DO_MAX_DROPLET_HOURS: "6"             # a DO droplet older than this = RUNAWAY (CRIT)
       DO_BUDGET_USD: "20"                   # month-to-date spend >= this = anomaly (CRIT)
       DO_SPEND_ALERT_DELTA: "1.0"           # notify each time month-to-date usage rises by >= this many $

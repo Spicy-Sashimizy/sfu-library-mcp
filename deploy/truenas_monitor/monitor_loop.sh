@@ -41,8 +41,9 @@ assess() {  # feed check output to Claude for a concise human verdict (read-only
 }
 
 SPEND_DELTA="${DO_SPEND_ALERT_DELTA:-1.0}"   # $ rise in month-to-date usage that (re)fires a "credits used" alert
+PROGRESS_NOTIFY_PCT="${PROGRESS_NOTIFY_PCT:-5}"   # notify each time indexing crosses a new N% mark (0 = off)
 
-notify INFO "monitor started (checks ${INTERVAL}s, progress every $(( HEARTBEAT_S/3600 ))h, reactions=${REACTIONS_ENABLED:-false})"
+notify INFO "monitor started (checks ${INTERVAL}s, progress every ${PROGRESS_NOTIFY_PCT}%, health beat every $(( HEARTBEAT_S/3600 ))h, reactions=${REACTIONS_ENABLED:-false})"
 last_heartbeat=$(date +%s)   # don't fire a heartbeat immediately on boot
 touch "$STATE/seen_droplets"
 while true; do
@@ -76,6 +77,26 @@ while true; do
     fi
   fi
 
+  # --- progress milestones: ping each time indexing crosses a new N% mark ---
+  # Driven by the indexer's docs-indexed % (lifted from checks.sh progress_line),
+  # NOT by the clock — so you get a push every PROGRESS_NOTIFY_PCT% of the way.
+  # The last-fired bucket persists in $STATE so a monitor restart never re-fires
+  # an old milestone; a rewound % (a fresh/restarted index run) rebases quietly.
+  if (( PROGRESS_NOTIFY_PCT > 0 )); then
+    cur_pct="$(echo "$report" | sed -n 's/.*progress_line=.*docs (\([0-9.]\{1,\}\)%).*/\1/p' | head -1)"
+    if [[ "$cur_pct" =~ ^[0-9]+(\.[0-9]+)?$ ]]; then
+      cur_bucket=$(awk -v p="$cur_pct" -v s="$PROGRESS_NOTIFY_PCT" 'BEGIN{printf "%d", int(p/s)*s}')
+      last_bucket="$(cat "$STATE/last_progress_bucket" 2>/dev/null)"; [[ "$last_bucket" =~ ^-?[0-9]+$ ]] || last_bucket=-1
+      if (( cur_bucket > last_bucket )); then
+        prog="$(echo "$report" | grep -oE 'progress_line=.*' | head -1 | sed 's/^progress_line=//')"
+        notify INFO "indexing ${cur_bucket}%+ done — PROGRESS: ${prog:-n/a}"
+        echo "$cur_bucket" > "$STATE/last_progress_bucket"
+      elif (( cur_bucket + PROGRESS_NOTIFY_PCT <= last_bucket )); then
+        echo "$cur_bucket" > "$STATE/last_progress_bucket"   # % rewound (index restarted) — rebase so milestones fire again
+      fi
+    fi
+  fi
+
   # --- important events: container down / disk full / RUNAWAY droplet ---
   if (( rc != 0 )); then
     verdict="$(assess "$report")"
@@ -85,7 +106,7 @@ while true; do
     # Phase-2 reaction hook (disabled by default):
     # [[ "${REACTIONS_ENABLED:-false}" == "true" ]] && bash /agent/react.sh "$report"
 
-  # --- heartbeat every HEARTBEAT_S (default 5h): health + a concrete progress report ---
+  # --- heartbeat every HEARTBEAT_S: liveness + health (progress now rides the %-milestones above) ---
   elif (( now - last_heartbeat >= HEARTBEAT_S )); then
     # Lift the deterministic progress line straight from the report so the numbers
     # are always present even if the Claude prose rewords them.
