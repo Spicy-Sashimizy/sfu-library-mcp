@@ -556,7 +556,7 @@ class SpladeEncoder:
             for j in range(SPARSE_TOP_K):
                 w = float(top_w_np[i, j])
                 if w <= SPARSE_WEIGHT_THRESHOLD:
-                    continue
+                    break   # top_w is sorted descending (torch.topk) -> all remaining are below threshold too
                 idx = int(top_idx_np[i, j])
                 if idx in skip:
                     continue
