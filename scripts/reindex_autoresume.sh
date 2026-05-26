@@ -1,47 +1,27 @@
 #!/usr/bin/env bash
 # ============================================================================
-# reindex_autoresume.sh — keep the local SPLADE reindex alive.
+# reindex_autoresume.sh — keep the PARALLEL local SPLADE reindex alive.
 #
-# Relaunches scripts/run_splade_pipeline_local.sh whenever the indexer is NOT
-# running AND the reindex stage is not yet "done". Runs under supervisor
-# (autostart + autorestart) so it survives container restarts and indexer
-# crashes. Exits 0 once reindex is done (supervisor: autorestart=unexpected,
-# so a clean exit is not restarted).
-#
-# Install (already done):
-#   sudo cp deploy/reindex_autoresume.supervisor.conf /etc/supervisor/conf.d/
-#   sudo supervisorctl reread && sudo supervisorctl update
+# (Re)launches any missing/crashed workers via run_parallel_reindex.sh whenever
+# they're not running and their subset isn't done. Runs under supervisor
+# (autostart + autorestart=unexpected) so it survives container restarts and
+# worker crashes. Exits 0 once ALL worker subsets are complete.
 # ============================================================================
 set -uo pipefail
 REPO=/workspaces/sfu-library-mcp-training
-STATE="$REPO/data/training/splade_pipeline_state.json"
 OS_URL="${SFU_OPENSEARCH_URL:-http://claudebox-sfu-library-mcp-training-opensearch:9200}"
 LOG(){ echo "$(date -u +%FT%TZ) autoresume: $*"; }
-
-reindex_done(){
-  python3 - "$STATE" <<'PY' 2>/dev/null
-import json,sys
-try:
-    d=json.load(open(sys.argv[1]))
-except Exception:
-    sys.exit(1)   # no state yet -> not done
-sys.exit(0 if d.get("stages",{}).get("reindex",{}).get("status")=="done" else 1)
-PY
-}
-indexer_running(){ pgrep -f "splade_indexer.py --model" >/dev/null 2>&1; }
 os_ok(){ curl -s --max-time 8 "$OS_URL/_cluster/health" >/dev/null 2>&1; }
 
-LOG "watchdog started (repo=$REPO)"
+LOG "parallel watchdog started (workers=${SFU_PARALLEL_WORKERS:-2})"
 while true; do
-  if reindex_done; then LOG "reindex stage = done — nothing to keep alive, exiting."; exit 0; fi
-  if indexer_running; then
-    :  # healthy — already encoding
-  elif os_ok; then
-    LOG "indexer not running + reindex not done -> launching pipeline"
-    ( cd "$REPO" && setsid nohup bash scripts/run_splade_pipeline_local.sh >> logs/pipeline_stdout.log 2>&1 & )
-    sleep 60   # let it acquire the PID lock before re-checking
+  if bash "$REPO/scripts/run_parallel_reindex.sh" --check-done 2>/dev/null; then
+    LOG "all worker subsets complete — exiting."; exit 0
+  fi
+  if os_ok; then
+    bash "$REPO/scripts/run_parallel_reindex.sh" 2>&1 | sed 's/^/  /'
   else
-    LOG "indexer down but OpenSearch unreachable -> waiting (no fail-loop)"
+    LOG "OpenSearch unreachable — waiting (no launch this cycle)"
   fi
   sleep 120
 done
