@@ -43,7 +43,8 @@ assess() {  # feed check output to Claude for a concise human verdict (read-only
 SPEND_DELTA="${DO_SPEND_ALERT_DELTA:-1.0}"   # $ rise in month-to-date usage that (re)fires a "credits used" alert
 PROGRESS_NOTIFY_PCT="${PROGRESS_NOTIFY_PCT:-5}"   # notify each time indexing crosses a new N% mark (0 = off)
 
-notify INFO "monitor started (checks ${INTERVAL}s, progress every ${PROGRESS_NOTIFY_PCT}%, health beat every $(( HEARTBEAT_S/3600 ))h, reactions=${REACTIONS_ENABLED:-false})"
+hb_desc=$([[ "$HEARTBEAT_S" -gt 0 ]] && echo "every $(( HEARTBEAT_S/3600 ))h" || echo "off")
+notify INFO "monitor started (checks ${INTERVAL}s, progress every ${PROGRESS_NOTIFY_PCT}%, health beat ${hb_desc}, reactions=${REACTIONS_ENABLED:-false})"
 last_heartbeat=$(date +%s)   # don't fire a heartbeat immediately on boot
 touch "$STATE/seen_droplets"
 while true; do
@@ -106,8 +107,9 @@ while true; do
     # Phase-2 reaction hook (disabled by default):
     # [[ "${REACTIONS_ENABLED:-false}" == "true" ]] && bash /agent/react.sh "$report"
 
-  # --- heartbeat every HEARTBEAT_S: liveness + health (progress now rides the %-milestones above) ---
-  elif (( now - last_heartbeat >= HEARTBEAT_S )); then
+  # --- heartbeat every HEARTBEAT_S: liveness + health (progress rides the %-milestones above) ---
+  # HEARTBEAT_S <= 0 disables it entirely — anomaly + progress pushes still fire.
+  elif (( HEARTBEAT_S > 0 && now - last_heartbeat >= HEARTBEAT_S )); then
     # Lift the deterministic progress line straight from the report so the numbers
     # are always present even if the Claude prose rewords them.
     prog="$(echo "$report" | grep -oE 'progress_line=.*' | head -1 | sed 's/^progress_line=//')"
