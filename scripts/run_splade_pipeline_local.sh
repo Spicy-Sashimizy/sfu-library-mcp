@@ -77,6 +77,15 @@ export SFU_OPENSEARCH_URL="$OPENSEARCH_URL"
 export SFU_OPENSEARCH_INDEX="$INDEX"
 # Helps the allocator avoid fragmentation OOMs on a tight 16 GB card.
 export PYTORCH_CUDA_ALLOC_CONF="${PYTORCH_CUDA_ALLOC_CONF:-expandable_segments:True}"
+# Cap CPU thread pools. With the TRT encoder the GPU does the heavy lifting, so
+# the default "one thread per core" pools (OpenMP/MKL for torch+numpy, the Rust
+# tokenizer's rayon pool) only thrash a 16-core box and starve the GPU. Small,
+# fixed pools cut the kernel/context-switch overhead. Override per-host if needed.
+export OMP_NUM_THREADS="${OMP_NUM_THREADS:-4}"
+export MKL_NUM_THREADS="${MKL_NUM_THREADS:-4}"
+export OPENBLAS_NUM_THREADS="${OPENBLAS_NUM_THREADS:-4}"
+export NUMEXPR_NUM_THREADS="${NUMEXPR_NUM_THREADS:-4}"
+export RAYON_NUM_THREADS="${RAYON_NUM_THREADS:-4}"   # HF fast-tokenizer worker pool
 # TensorRT 10 runtime libs (pip tensorrt-cu12) so onnxruntime's
 # TensorrtExecutionProvider can dlopen libnvinfer.so.10 for the fast TRT encode
 # path. Without this, the indexer silently falls back to a slow CUDA path

@@ -634,6 +634,17 @@ class SpladeEncoderTRT(SpladeEncoder):
         }
         sess_opts = ort.SessionOptions()
         sess_opts.graph_optimization_level = ort.GraphOptimizationLevel.ORT_ENABLE_ALL
+        # The TensorRT EP runs the matmuls on-GPU, so ORT's CPU threadpool has
+        # almost nothing to do — but by default it sizes to EVERY core and
+        # BUSY-SPINS between batches. On the 16-core host that burned ~70% of CPU
+        # in the kernel (~60k ctx-switches/s, load ~22) and STARVED the GPU
+        # (~34% util), dragging encode from ~3.5k to ~960 docs/s. Keep the pool
+        # tiny and non-spinning; tune via SFU_ORT_INTRA_THREADS.
+        sess_opts.intra_op_num_threads = int(os.environ.get("SFU_ORT_INTRA_THREADS", "2"))
+        sess_opts.inter_op_num_threads = 1
+        sess_opts.execution_mode = ort.ExecutionMode.ORT_SEQUENTIAL
+        sess_opts.add_session_config_entry("session.intra_op.allow_spinning", "0")
+        sess_opts.add_session_config_entry("session.inter_op.allow_spinning", "0")
         self.session = ort.InferenceSession(
             str(onnx_path),
             sess_options=sess_opts,
