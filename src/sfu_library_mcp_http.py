@@ -26,7 +26,7 @@ from mcp.types import Tool, TextContent
 
 from lib.logging_setup import setup_logging
 from lib.config import load_config, validate_config
-from lib.tools import TOOL_DEFINITIONS, handle_tool_call
+from lib.tools import TOOL_DEFINITIONS, get_tool_definitions, handle_tool_call
 
 config = load_config()
 logger = setup_logging(level=config.log_level, log_file=config.log_file)
@@ -39,7 +39,7 @@ mcp_server = Server("sfu-library")
 
 @mcp_server.list_tools()
 async def list_tools() -> list[Tool]:
-    return TOOL_DEFINITIONS
+    return await get_tool_definitions()
 
 
 @mcp_server.call_tool()

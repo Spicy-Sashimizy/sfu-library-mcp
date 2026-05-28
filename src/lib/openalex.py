@@ -191,7 +191,7 @@ def normalize_work(work: dict) -> dict:
     # Pages
     first_page = biblio.get("first_page", "") or ""
     last_page = biblio.get("last_page", "") or ""
-    pages = f"{first_page}-{last_page}" if first_page and last_page else first_page
+    pages = f"{first_page}-{last_page}" if first_page and last_page else (first_page or last_page)
 
     # Publisher
     publisher = (
@@ -396,6 +396,16 @@ class OpenAlexClient:
                 else:
                     time.sleep(delay)
             except requests.HTTPError as e:
+                # Client errors (4xx, excluding the 429 handled above) are not
+                # service outages — a 404 is normal for missing-DOI/ID lookups
+                # and a 400 means a malformed filter. Treat as not-found without
+                # retrying or tripping the circuit breaker.
+                status = getattr(e.response, "status_code", None)
+                if status is not None and 400 <= status < 500:
+                    logger.debug(
+                        "OpenAlex %s for %s (treating as not-found)", status, path
+                    )
+                    return None
                 last_exc = e
                 delay = min(self._retry_base_delay * (2 ** attempt), 60.0)
                 logger.warning(

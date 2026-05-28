@@ -20,12 +20,34 @@ FIRST_REMAINING="${SFU_FIRST_REMAINING:-47}"   # files numbered < this are alrea
 LOGD="$REPO/logs"; mkdir -p "$LOGD"
 
 # (re)build per-worker subset symlink dirs from the remaining top-level shards.
-for ((w=0; w<N; w++)); do mkdir -p "$SNAP/pw_$w"; done
+# Clear each non-running worker's dir first so changing N or FIRST_REMAINING
+# can't leave stale symlinks (which would double-encode shards and corrupt the
+# positional file_index resume logic). A running worker's dir is left untouched.
+for ((w=0; w<N; w++)); do
+  mkdir -p "$SNAP/pw_$w"
+  if pgrep -f "splade_indexer.py --input $SNAP/pw_$w " >/dev/null 2>&1; then
+    continue   # don't disturb a running worker's input dir
+  fi
+  # snapshot old membership to decide checkpoint validity
+  old=$(ls "$SNAP/pw_$w"/works_part_*.jsonl.gz 2>/dev/null | xargs -n1 basename 2>/dev/null | sort | tr '\n' ' ')
+  rm -f "$SNAP/pw_$w"/works_part_*.jsonl.gz
+  printf '%s' "$old" > "$SNAP/pw_$w/.old_members"
+done
 i=0
 for f in $(ls "$SNAP"/works_part_*.jsonl.gz 2>/dev/null | sort); do
   base=$(basename "$f"); num=${base//[!0-9]/}; num=$((10#$num))
   (( num < FIRST_REMAINING )) && continue
   w=$(( i % N )); ln -sf "$f" "$SNAP/pw_$w/$base"; i=$((i+1))
+done
+
+# For each non-running worker whose membership changed, invalidate the checkpoint
+# so the positional file_index is recomputed against the new file list.
+for ((w=0; w<N; w++)); do
+  pgrep -f "splade_indexer.py --input $SNAP/pw_$w " >/dev/null 2>&1 && continue
+  new=$(ls "$SNAP/pw_$w"/works_part_*.jsonl.gz 2>/dev/null | xargs -n1 basename 2>/dev/null | sort | tr '\n' ' ')
+  if [ "$new" != "$(cat "$SNAP/pw_$w/.old_members" 2>/dev/null)" ]; then
+    rm -f "$SNAP/pw_$w/indexer_checkpoint.json"
+  fi
 done
 
 subset_count(){ ls "$SNAP/pw_$1"/works_part_*.jsonl.gz 2>/dev/null | wc -l; }

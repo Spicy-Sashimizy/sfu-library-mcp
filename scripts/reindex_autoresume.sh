@@ -29,12 +29,13 @@ sys.exit(0 if d.get("stages",{}).get("reindex",{}).get("status")=="done" else 1)
 PY
 }
 indexer_running(){ pgrep -f "splade_indexer.py --model" >/dev/null 2>&1; }
+pipeline_running(){ pgrep -f 'run_splade_pipeline_local.sh' >/dev/null 2>&1; }
 os_ok(){ curl -s --max-time 8 "$OS_URL/_cluster/health" >/dev/null 2>&1; }
 
 LOG "watchdog started (repo=$REPO)"
 while true; do
   if reindex_done; then LOG "reindex stage = done — nothing to keep alive, exiting."; exit 0; fi
-  if indexer_running; then
+  if indexer_running || pipeline_running; then
     :  # healthy — already encoding
   elif os_ok; then
     LOG "indexer not running + reindex not done -> launching pipeline"

@@ -7,7 +7,7 @@ import threading
 import time
 from collections import defaultdict
 from pathlib import Path
-from urllib.parse import urlparse
+from urllib.parse import quote, urlparse
 
 import requests
 
@@ -248,7 +248,7 @@ class SFUDatabaseRegistry:
 
     def ezproxy_url(self, article_url: str) -> str:
         """Wrap an article URL with SFU EZProxy."""
-        return f"{EZPROXY_BASE}{article_url}"
+        return f"{EZPROXY_BASE}{quote(article_url, safe='')}"
 
     @property
     def record_count(self) -> int:

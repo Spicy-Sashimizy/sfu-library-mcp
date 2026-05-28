@@ -387,7 +387,7 @@ def check_vram_reservation(
     if hasattr(encoder, "backend") and encoder.backend.startswith("onnxruntime_trt"):
         return original_batch_size
 
-    total_gb = torch.cuda.get_device_properties(0).total_mem / 1e9
+    total_gb = torch.cuda.get_device_properties(0).total_memory / 1e9
     model_gb = 0.5
     available_for_batches = total_gb - model_gb - reserve_gb
 
@@ -877,7 +877,9 @@ class AsyncBulkUploader:
         self.index_name = index_name
         self.workers = workers
         self._template = template_session
-        self._pending: list[tuple] = []  # (future_or_done, doc_range_end)
+        self._pending: list[tuple] = []  # (future_or_done, doc_range_end, submitted)
+        self._sessions: list[requests.Session] = []
+        self._sessions_lock = threading.Lock()
         self._executor = (
             ThreadPoolExecutor(max_workers=workers, thread_name_prefix="os_bulk")
             if workers > 1 else None
@@ -892,6 +894,8 @@ class AsyncBulkUploader:
             s.verify = self._template.verify
             s.cert = self._template.cert
             _tls.session = s
+            with self._sessions_lock:
+                self._sessions.append(s)
         return _tls.session
 
     def _upload_in_thread(self, docs: list[dict]) -> dict:
@@ -903,25 +907,26 @@ class AsyncBulkUploader:
         """Dispatch an upload. doc_range_end is committed_idx after this batch."""
         if not docs:
             return
+        submitted = len(docs)
         if self._executor is None:
             result = bulk_upsert_opensearch(
                 self._template, self.opensearch_url, self.index_name, docs
             )
             class _Done:
                 def result(self_): return result  # noqa: E301
-            self._pending.append((_Done(), doc_range_end))
+            self._pending.append((_Done(), doc_range_end, submitted))
             return
         future = self._executor.submit(self._upload_in_thread, docs)
-        self._pending.append((future, doc_range_end))
+        self._pending.append((future, doc_range_end, submitted))
 
-    def _drain_one(self) -> tuple[dict, int]:
-        future, doc_range_end = self._pending.pop(0)
+    def _drain_one(self) -> tuple[dict, int, int]:
+        future, doc_range_end, submitted = self._pending.pop(0)
         try:
             result = future.result()
         except Exception as e:
             logger.error("Async bulk upload exception: %s", e)
             result = {"indexed": 0, "errors": -1, "error_details": [str(e)[:200]]}
-        return result, doc_range_end
+        return result, doc_range_end, submitted
 
     def drain(self) -> dict:
         """Wait for all in-flight futures. Returns aggregated stats + per_batch list."""
@@ -929,14 +934,28 @@ class AsyncBulkUploader:
             "indexed": 0, "errors": 0, "error_details": [],
             "new_committed_idx": None, "per_batch": [],
         }
+        # _pending preserves submission (FIFO) order, so we can only safely
+        # advance the committed offset across a CONTIGUOUS prefix of
+        # fully-successful batches. The moment a batch fails (errors != 0,
+        # including the errors == -1 exception case) or is only partially
+        # indexed (indexed < submitted), we stop advancing — resume will then
+        # re-run from the first not-fully-committed doc and the idempotent _id
+        # upsert safely re-indexes everything from there.
+        still_contiguous = True
         while self._pending:
-            result, new_idx = self._drain_one()
+            result, new_idx, submitted = self._drain_one()
             stats["per_batch"].append(result)
             stats["indexed"] += result.get("indexed", 0)
             stats["errors"] += result.get("errors", 0)
             stats["error_details"].extend(result.get("error_details", []))
-            if stats["new_committed_idx"] is None or new_idx > stats["new_committed_idx"]:
+            fully_successful = (
+                result.get("errors", 0) == 0
+                and result.get("indexed", 0) >= submitted
+            )
+            if still_contiguous and fully_successful:
                 stats["new_committed_idx"] = new_idx
+            else:
+                still_contiguous = False
         return stats
 
     @property
@@ -947,6 +966,15 @@ class AsyncBulkUploader:
         self.drain()
         if self._executor:
             self._executor.shutdown(wait=True)
+        # Close the per-thread Sessions we created so their connection pools /
+        # sockets are released (otherwise they leak FDs across repeated runs).
+        with self._sessions_lock:
+            for s in self._sessions:
+                try:
+                    s.close()
+                except Exception:
+                    pass
+            self._sessions.clear()
 
 
 def check_opensearch_health(session: requests.Session, url: str, index: str) -> bool:
@@ -1187,6 +1215,7 @@ def run_indexer(
         "total_errors": 0,
         "total_docs_scanned": 0,
         "total_empty_sparse": 0,
+        "total_empty_text": 0,
     }
 
     if resume:
@@ -1195,6 +1224,8 @@ def run_indexer(
             start_file = min(cp.get("file_index", 0), total_files)
             start_offset = cp.get("doc_offset", 0)
             cumulative = cp.get("cumulative", cumulative)
+            # Backfill counters added after older checkpoints were written.
+            cumulative.setdefault("total_empty_text", 0)
             if start_file >= total_files:
                 logger.info("Checkpoint indicates indexing already complete. Nothing to do.")
                 release_pid_lock(lock_path)
@@ -1318,7 +1349,7 @@ def run_indexer(
                     texts.append(text)
                     valid_records.append(rec)
                 else:
-                    cumulative["total_empty_sparse"] += 1
+                    cumulative["total_empty_text"] += 1
 
             cumulative["total_docs_scanned"] += actual_batch
 
@@ -1513,6 +1544,7 @@ def run_indexer(
                 logger.info("Encoded %d docs", cumulative["total_docs_scanned"])
                 logger.info("Would index %d docs", cumulative["total_indexed"])
                 logger.info("Empty sparse vectors: %d", cumulative["total_empty_sparse"])
+                logger.info("Empty input text (no title/abstract): %d", cumulative.get("total_empty_text", 0))
                 logger.info("Encoding speed: %.1f docs/sec", docs_per_sec)
                 logger.info("GPU: %s", encoder.get_gpu_stats())
                 if sparse_vecs:
@@ -1549,6 +1581,7 @@ def run_indexer(
     logger.info("Docs indexed: %d", cumulative["total_indexed"])
     logger.info("Indexing errors: %d", cumulative["total_errors"])
     logger.info("Empty sparse vectors: %d", cumulative["total_empty_sparse"])
+    logger.info("Empty input text (no title/abstract): %d", cumulative.get("total_empty_text", 0))
     logger.info("Average throughput: %.1f docs/sec", overall_rate)
     logger.info("GPU: %s", encoder.get_gpu_stats())
 

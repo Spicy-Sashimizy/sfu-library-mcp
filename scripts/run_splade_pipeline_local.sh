@@ -242,7 +242,7 @@ hb "state=$STATE_FILE  model_out=$MODEL_OUT  os=$OPENSEARCH_URL/$INDEX"
 
 # ── Stage 1: mine hard negatives ──────────────────────────────────────────────
 if should_run mine; then
-  if file_fresh "$NEG_POOL" "$FRESH_HOURS" && file_fresh "$NEG_SPLADE" "$FRESH_HOURS" \
+  if [[ -z "$FORCE_FROM" ]] && file_fresh "$NEG_POOL" "$FRESH_HOURS" && file_fresh "$NEG_SPLADE" "$FRESH_HOURS" \
      && file_fresh "$NEG_BM25" "$FRESH_HOURS"; then
     hb "STAGE 1 mine: outputs fresh (< ${FRESH_HOURS}h) — skipping; marking done."
     mark mine done
@@ -273,7 +273,7 @@ fi
 
 # ── Stage 2: build triplets ───────────────────────────────────────────────────
 if should_run triplets; then
-  if file_fresh "$TRIPLETS" "$FRESH_HOURS"; then
+  if [[ -z "$FORCE_FROM" ]] && file_fresh "$TRIPLETS" "$FRESH_HOURS"; then
     hb "STAGE 2 triplets: $TRIPLETS fresh — skipping; marking done."
     mark triplets done
   else
@@ -343,8 +343,14 @@ if should_run reindex; then
     hb "STAGE 4 reindex: snapshotting a baseline doc's sparse_field for the gate..."
     "$PY" "$STATE_HELPER" --state "$STATE_FILE" snapshot-doc \
         --url "$OPENSEARCH_URL" --index "$INDEX" --out "$DOC_BASELINE" \
-        >>"$RUN_LOG" 2>&1 || hb "STAGE 4 WARN: baseline snapshot failed (gate will skip change-check)."
+        >>"$RUN_LOG" 2>&1 \
+      || { hb "STAGE 4 FAIL: baseline snapshot failed; refusing to reindex without a change-check baseline."; mark reindex failed; exit 6; }
   fi
+  # Defend against a snapshot that "succeeded" but left an empty/unusable file:
+  # without a real baseline the gate would degrade to a doc-count-only check,
+  # silently letting a no-op re-encode pass. Refuse before the ~2.4h reindex.
+  [[ -s "$DOC_BASELINE" ]] \
+    || { hb "STAGE 4 FAIL: baseline snapshot missing/empty; refusing to reindex without a change-check baseline."; mark reindex failed; exit 6; }
   mark reindex running
   # CRITICAL: splade_indexer caches the ONNX/TRT engine at a FIXED path
   # (models/splade_onnx_fp16, models/trt_engine_cache) keyed only by a sentinel,

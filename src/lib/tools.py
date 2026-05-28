@@ -250,14 +250,18 @@ def _cache_works(works: list[dict]) -> None:
     for w in works:
         doi = w.get("doi", "")
         openalex_id = w.get("openalex_id", "")
+        # Refresh recency on write: pop existing keys so re-cached entries move
+        # to the end (LRU-on-write) rather than keeping their old position.
         if doi:
+            _work_cache.pop(doi, None)
             _work_cache[doi] = w
         if openalex_id:
+            _work_cache.pop(openalex_id, None)
             _work_cache[openalex_id] = w
-    # Cap at 500 entries
-    if len(_work_cache) > 500:
-        for k in list(_work_cache)[:len(_work_cache) - 500]:
-            del _work_cache[k]
+        # Cap at 500 entries (trim per-work to avoid transient overshoot on large batches)
+        if len(_work_cache) > 500:
+            for k in list(_work_cache)[:len(_work_cache) - 500]:
+                del _work_cache[k]
 
 
 def _lookup_work(doi_or_id: str) -> dict | None:
@@ -1202,10 +1206,11 @@ async def _handle_get_full_text_link(args: dict) -> list[TextContent]:
     # Pull cached work metadata for OA info and source URL
     work = _lookup_work(doi_norm)
     if not work:
-        work = await asyncio.get_event_loop().run_in_executor(
-            None,
-            lambda: _get_openalex().get_work_by_doi(doi_norm),
-        )
+        async with _request_semaphore:
+            work = await asyncio.get_event_loop().run_in_executor(
+                None,
+                lambda: _get_openalex().get_work_by_doi(doi_norm),
+            )
         if work:
             _cache_works([work])
 
@@ -1518,7 +1523,9 @@ async def _handle_generate_citation(args: dict) -> list[TextContent]:
             metadata = await _fetch_work_metadata(doi)
         if not metadata:
             return [TextContent(type="text", text=f"Could not retrieve metadata for DOI: {doi}")]
-        metadata = enrich_metadata_from_crossref(metadata)
+        metadata = await asyncio.get_event_loop().run_in_executor(
+            None, enrich_metadata_from_crossref, metadata
+        )
     elif args.get("title", "").strip():
         metadata = _build_manual_metadata(args)
     else:
@@ -1547,7 +1554,14 @@ async def _handle_batch_citations(args: dict) -> list[TextContent]:
 
     async def fetch_one(doi: str) -> tuple[str, dict | None]:
         async with _request_semaphore:
-            return doi, await _fetch_work_metadata(doi)
+            metadata = await _fetch_work_metadata(doi)
+            if metadata:
+                # Run the blocking CrossRef enrichment off the event loop so all
+                # DOIs enrich concurrently rather than sequentially on the loop.
+                metadata = await asyncio.get_event_loop().run_in_executor(
+                    None, enrich_metadata_from_crossref, metadata
+                )
+            return doi, metadata
 
     fetched = await asyncio.gather(*[fetch_one(doi) for doi in dois], return_exceptions=True)
 
@@ -1560,7 +1574,7 @@ async def _handle_batch_citations(args: dict) -> list[TextContent]:
         if not metadata:
             output.append(f"{i}. [Error: Could not retrieve metadata for {doi}]\n")
             continue
-        metadata = enrich_metadata_from_crossref(metadata)
+        # metadata already enriched off the event loop in fetch_one
         citation = _format_single_citation(metadata, fmt)
         output.append(f"{citation}\n" if fmt == "bibtex" else f"{i}. {citation}\n")
 
@@ -1623,12 +1637,22 @@ async def _handle_export_search(args: dict) -> list[TextContent]:
         return [TextContent(type="text", text=f"# CSV Export: {len(works)} of {total:,} results\n" + "\n".join(lines))]
 
     if export_format == "bibtex":
-        entries = [format_bibtex_entry(enrich_metadata_from_crossref(w)) for w in works]
+        # Run blocking CrossRef enrichment + formatting off the event loop.
+        async with _request_semaphore:
+            entries = await asyncio.get_event_loop().run_in_executor(
+                None,
+                lambda: [format_bibtex_entry(enrich_metadata_from_crossref(w)) for w in works],
+            )
         header = f"% BibTeX Export: {len(works)} of {total:,} results for '{query}'\n\n"
         return [TextContent(type="text", text=header + "\n\n".join(entries))]
 
     if export_format == "ris":
-        entries = [format_ris_entry(enrich_metadata_from_crossref(w)) for w in works]
+        # Run blocking CrossRef enrichment + formatting off the event loop.
+        async with _request_semaphore:
+            entries = await asyncio.get_event_loop().run_in_executor(
+                None,
+                lambda: [format_ris_entry(enrich_metadata_from_crossref(w)) for w in works],
+            )
         header = f"# RIS Export: {len(works)} of {total:,} results for '{query}'\n\n"
         return [TextContent(type="text", text=header + "\n\n".join(entries))]
 
@@ -1651,7 +1675,9 @@ async def _handle_save_to_zotero(args: dict) -> list[TextContent]:
             metadata = await _fetch_work_metadata(doi)
         if not metadata:
             return [TextContent(type="text", text=f"Could not retrieve metadata for DOI: {doi}")]
-        metadata = enrich_metadata_from_crossref(metadata)
+        metadata = await asyncio.get_event_loop().run_in_executor(
+            None, enrich_metadata_from_crossref, metadata
+        )
     elif args.get("title", "").strip():
         metadata = _build_manual_metadata(args)
     else:
@@ -1740,7 +1766,9 @@ async def _handle_batch_save_to_zotero(args: dict) -> list[TextContent]:
             failed += 1
             continue
 
-        metadata = enrich_metadata_from_crossref(metadata)
+        metadata = await asyncio.get_event_loop().run_in_executor(
+            None, enrich_metadata_from_crossref, metadata
+        )
         title_short = metadata.get("title", "Unknown")[:60]
 
         try:

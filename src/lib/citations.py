@@ -58,6 +58,16 @@ def enrich_metadata_from_crossref(metadata: dict) -> dict:
     return metadata
 
 
+def _first(d: dict, k: str) -> str:
+    """Return the first element of a PNX list field, or "" if missing/empty.
+
+    PNX records may contain a present key mapped to an empty list, so the
+    `dict.get(k, [""])[0]` idiom is unsafe (it raises IndexError on `[]`).
+    """
+    v = d.get(k) or [""]
+    return v[0] if v else ""
+
+
 def _is_cdi_record(control: dict) -> bool:
     """Check if a record is from CDI (external source) vs local ALMA."""
     record_id = control.get("recordid", [""])[0] if control.get("recordid") else ""
@@ -105,7 +115,7 @@ def _extract_date(display: dict, addata: dict, search: dict) -> str:
     CDI records often lack display.creationdate but have addata.date
     (full date like "2020-07-01") or search.creationdate (year "2020").
     """
-    date = display.get("creationdate", [""])[0]
+    date = _first(display, "creationdate")
     if date:
         return date
     # addata.date has full ISO date — take just the year portion
@@ -129,7 +139,7 @@ def _extract_journal_name(display: dict, addata: dict, is_cdi: bool) -> str:
         if jtitle:
             return normalize_encoding(jtitle)
     # For ALMA records or fallback
-    source = display.get("source", [""])[0]
+    source = _first(display, "source")
     if source:
         return normalize_encoding(source)
     # Final fallback to addata.jtitle
@@ -159,12 +169,12 @@ def extract_metadata(item: dict) -> dict | None:
     source = _extract_journal_name(display, addata, is_cdi)
 
     metadata = {
-        "title": normalize_encoding(display.get("title", [""])[0]),
+        "title": normalize_encoding(_first(display, "title")),
         "creators": authors,
         "contributors": display.get("contributor", []),
         "date": date,
-        "publisher": normalize_encoding(display.get("publisher", [""])[0]),
-        "type": display.get("type", [""])[0].lower(),
+        "publisher": normalize_encoding(_first(display, "publisher")),
+        "type": _first(display, "type").lower(),
         "source": source,
         "isbn": addata.get("isbn", [""])[0] if addata.get("isbn") else "",
         "issn": addata.get("issn", [""])[0] if addata.get("issn") else "",
@@ -710,7 +720,7 @@ def format_bibtex_entry(metadata: dict | None) -> str:
         "audio": "misc",
         "patent": "misc",
         "presentation": "misc",
-        "software": "software",
+        "software": "misc",
     }
 
     authors = metadata.get("authors", [])

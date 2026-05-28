@@ -19,6 +19,7 @@ logger = logging.getLogger("sfu_library_mcp")
 _SPLADE_SESSION: Any = None  # onnxruntime.InferenceSession
 _SPLADE_TOKENIZER: Any = None
 _SPLADE_ID_TO_TOKEN: dict[int, str] | None = None
+_SPLADE_MODEL_PATH: str | None = None
 _SPLADE_LOCK = threading.Lock()
 
 # Dense bi-encoder (v5) singleton for dense_search() k-NN query encoding.
@@ -120,9 +121,9 @@ def _get_splade_model(model_path: str):
     Returns (session, tokenizer, id_to_token). Loads the local ONNX export via
     onnxruntime (CPU) — no torch, no network — matching the indexer's weights.
     """
-    global _SPLADE_SESSION, _SPLADE_TOKENIZER, _SPLADE_ID_TO_TOKEN
+    global _SPLADE_SESSION, _SPLADE_TOKENIZER, _SPLADE_ID_TO_TOKEN, _SPLADE_MODEL_PATH
     with _SPLADE_LOCK:
-        if _SPLADE_SESSION is None:
+        if _SPLADE_SESSION is None or _SPLADE_MODEL_PATH != model_path:
             try:
                 import onnxruntime as ort
                 from transformers import AutoTokenizer
@@ -148,6 +149,7 @@ def _get_splade_model(model_path: str):
             _SPLADE_SESSION = ort.InferenceSession(
                 str(onnx_path), providers=["CPUExecutionProvider"]
             )
+            _SPLADE_MODEL_PATH = model_path
             logger.info("SPLADE ONNX model loaded (CPU)")
         return _SPLADE_SESSION, _SPLADE_TOKENIZER, _SPLADE_ID_TO_TOKEN
 

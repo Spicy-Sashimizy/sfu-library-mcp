@@ -118,6 +118,24 @@ RETRY_BACKOFF_BASE = 5  # seconds
 # Serialise GPU access — cuDF needs ~5-10 GB VRAM per part; one at a time is safe
 _gpu_semaphore = threading.Semaphore(1)
 
+# requests.Session is NOT thread-safe — its urllib3 connection pool can interleave
+# responses or raise intermittent ConnectionError/ProtocolError under concurrent
+# use. The prefetch pool runs `workers` part downloads at once, so give each
+# worker thread its own lazily-created Session via thread-local storage. Headers
+# (User-Agent) are still shared by construction.
+_thread_local = threading.local()
+
+
+def _get_session() -> requests.Session:
+    s = getattr(_thread_local, "session", None)
+    if s is None:
+        s = requests.Session()
+        s.headers.update({
+            "User-Agent": "SFULibraryMCP-SnapshotDownloader/1.0 (mailto:lib-systems@sfu.ca)"
+        })
+        _thread_local.session = s
+    return s
+
 # ── Graceful shutdown ────────────────────────────────────────────────────────
 
 _shutdown_requested = False
@@ -250,7 +268,6 @@ def _list_s3_parts(session: requests.Session) -> list[dict]:
 
 
 def download_and_process_part(
-    session: requests.Session,
     part_url: str,
     min_year: int,
     legacy_schema: bool = False,
@@ -261,6 +278,8 @@ def download_and_process_part(
     Parts can be 500MB-1.1GB compressed; full decompression would use 2-4GB RAM.
     Retries up to MAX_RETRIES on HTTP errors with exponential backoff.
     """
+    # Per-thread Session — sharing one across the prefetch pool is not thread-safe.
+    session = _get_session()
     stats = {"total": 0, "kept": 0, "no_abstract": 0, "too_old": 0, "parse_error": 0, "retracted": 0}
 
     for attempt in range(1, MAX_RETRIES + 1):
@@ -368,7 +387,6 @@ def download_and_process_part(
 
 
 def download_and_process_part_gpu(
-    session: requests.Session,
     part_url: str,
     min_year: int,
     legacy_schema: bool = False,
@@ -382,6 +400,8 @@ def download_and_process_part_gpu(
 
     Falls back to the CPU implementation on any GPU failure.
     """
+    # Per-thread Session — sharing one across the prefetch pool is not thread-safe.
+    session = _get_session()
     stats = {"total": 0, "kept": 0, "no_abstract": 0, "too_old": 0, "parse_error": 0, "retracted": 0}
 
     for attempt in range(1, MAX_RETRIES + 1):
@@ -528,7 +548,7 @@ def download_and_process_part_gpu(
                 logger.warning(
                     "GPU failed after %d attempts, falling back to CPU: %s", MAX_RETRIES, e
                 )
-                return download_and_process_part(session, part_url, min_year, legacy_schema)
+                return download_and_process_part(part_url, min_year, legacy_schema)
 
 
 # ── Chunk writer ─────────────────────────────────────────────────────────────
@@ -772,7 +792,7 @@ def run_download(
             part_url = manifest[idx].get("url", "")
             if part_url:
                 pending[idx] = executor.submit(
-                    _part_fn, session, part_url, min_year, legacy_schema
+                    _part_fn, part_url, min_year, legacy_schema
                 )
 
     # Pre-fill the prefetch queue
@@ -842,7 +862,7 @@ def run_download(
                     # hardcoding download_and_process_part dropped the GPU path
                     # and the legacy_schema flag → mixed/wrong-schema records.
                     records, part_stats = _part_fn(
-                        session, part_url, min_year, legacy_schema
+                        part_url, min_year, legacy_schema
                     )
             except Exception as e:
                 logger.error("Skipping part %d after all retries failed: %s", i, e)

@@ -10,6 +10,30 @@ SERVER_VERSION = "1.1.0-phase-g"
 
 logger = logging.getLogger("sfu_library_mcp")
 
+
+def _int_env(name: str, default: int) -> int:
+    """Parse an int env var, falling back to the default on missing/invalid values."""
+    raw = os.environ.get(name)
+    if raw is None or raw == "":
+        return default
+    try:
+        return int(raw)
+    except ValueError:
+        logger.warning("Invalid int for %s=%r; using default %s", name, raw, default)
+        return default
+
+
+def _float_env(name: str, default: float) -> float:
+    """Parse a float env var, falling back to the default on missing/invalid values."""
+    raw = os.environ.get(name)
+    if raw is None or raw == "":
+        return default
+    try:
+        return float(raw)
+    except ValueError:
+        logger.warning("Invalid float for %s=%r; using default %s", name, raw, default)
+        return default
+
 # Repo root = .../sfu-library-mcp(-training); this file is at src/lib/config.py.
 _REPO_ROOT = Path(__file__).resolve().parents[2]
 # Local SPLADE ONNX export produced by the indexer. Loading this offline via
@@ -218,15 +242,15 @@ def load_config() -> ServerConfig:
             default_features[key] = _bool(env_val)
 
     return ServerConfig(
-        search_timeout=int(os.environ.get("SFU_SEARCH_TIMEOUT", "30")),
-        max_retries=int(os.environ.get("SFU_MAX_RETRIES", "3")),
-        retry_base_delay=float(os.environ.get("SFU_RETRY_BASE_DELAY", "1.0")),
-        retry_max_delay=float(os.environ.get("SFU_RETRY_MAX_DELAY", "60.0")),
-        circuit_breaker_threshold=int(os.environ.get("SFU_CB_THRESHOLD", "5")),
-        circuit_breaker_timeout=float(os.environ.get("SFU_CB_TIMEOUT", "60.0")),
-        cache_ttl=int(os.environ.get("SFU_CACHE_TTL", "300")),
-        cache_max_size=int(os.environ.get("SFU_CACHE_MAX_SIZE", "100")),
-        cache_max_memory_mb=int(os.environ.get("SFU_CACHE_MAX_MEMORY_MB", "50")),
+        search_timeout=_int_env("SFU_SEARCH_TIMEOUT", 30),
+        max_retries=_int_env("SFU_MAX_RETRIES", 3),
+        retry_base_delay=_float_env("SFU_RETRY_BASE_DELAY", 1.0),
+        retry_max_delay=_float_env("SFU_RETRY_MAX_DELAY", 60.0),
+        circuit_breaker_threshold=_int_env("SFU_CB_THRESHOLD", 5),
+        circuit_breaker_timeout=_float_env("SFU_CB_TIMEOUT", 60.0),
+        cache_ttl=_int_env("SFU_CACHE_TTL", 300),
+        cache_max_size=_int_env("SFU_CACHE_MAX_SIZE", 100),
+        cache_max_memory_mb=_int_env("SFU_CACHE_MAX_MEMORY_MB", 50),
         log_level=os.environ.get("SFU_LOG_LEVEL", "INFO"),
         log_file=os.environ.get("SFU_LOG_FILE", "/tmp/sfu-library-mcp.log"),
         features=default_features,
@@ -235,12 +259,10 @@ def load_config() -> ServerConfig:
         zotero_user_id=_read_secret("zotero_user_id", "SFU_ZOTERO_USER_ID"),
         openalex_api_key=_read_secret("openalex_api_key", "OPENALEX_API_KEY"),
         openalex_mailto=_read_secret("openalex_mailto", "OPENALEX_MAILTO"),
-        openalex_daily_call_limit=int(os.environ.get("OPENALEX_DAILY_CALL_LIMIT", "900")),
+        openalex_daily_call_limit=_int_env("OPENALEX_DAILY_CALL_LIMIT", 900),
         openalex_tracker_path=os.environ.get("OPENALEX_TRACKER_PATH", "/tmp/openalex_calls.json"),
         unpaywall_email=_read_secret("unpaywall_email", "UNPAYWALL_EMAIL"),
-        sfu_db_registry_cache_ttl=int(
-            os.environ.get("SFU_DB_REGISTRY_CACHE_TTL", "86400")
-        ),
+        sfu_db_registry_cache_ttl=_int_env("SFU_DB_REGISTRY_CACHE_TTL", 86400),
         sfu_db_registry_cache_file=os.environ.get(
             "SFU_DB_REGISTRY_CACHE_FILE", "/tmp/sfu_databases_cache.json"
         ),
@@ -262,7 +284,7 @@ def load_config() -> ServerConfig:
         splade_model_path=os.environ.get(
             "SFU_SPLADE_MODEL_PATH", _DEFAULT_SPLADE_MODEL_PATH
         ),
-        federated_recency_days=int(os.environ.get("SFU_FEDERATED_RECENCY_DAYS", "30")),
+        federated_recency_days=_int_env("SFU_FEDERATED_RECENCY_DAYS", 30),
     )
 
 

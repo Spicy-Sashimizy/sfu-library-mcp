@@ -10,6 +10,16 @@ from lib.validators import normalize_encoding
 logger = logging.getLogger("sfu_library_mcp")
 
 
+def _first(lst, default=""):
+    """Return the first element of a list, or a default if absent or empty.
+
+    Guards against Primo/Solr responses where a key is present but maps to an
+    empty list ([]), which would make ``.get(key, [default])[0]`` raise
+    IndexError instead of falling back.
+    """
+    return lst[0] if isinstance(lst, list) and lst else default
+
+
 def format_search_results(results: dict | None, metadata: dict | None = None) -> str:
     """Format search results for display.
 
@@ -41,12 +51,12 @@ def format_search_results(results: dict | None, metadata: dict | None = None) ->
         links = pnx.get("links", {})
         delivery = pnx.get("delivery", {})
 
-        title = normalize_encoding(display.get("title", ["No title"])[0])
+        title = normalize_encoding(_first(display.get("title"), "No title"))
         creators = display.get("creator", display.get("contributor", []))
         creator = normalize_encoding(creators[0]) if creators else "Unknown"
-        pub_date = display.get("creationdate", ["N/A"])[0]
-        doc_type = display.get("type", ["N/A"])[0]
-        description = normalize_encoding(display.get("description", [""])[0][:300])
+        pub_date = _first(display.get("creationdate"), "N/A")
+        doc_type = _first(display.get("type"), "N/A")
+        description = normalize_encoding(_first(display.get("description"), "")[:300])
         source = normalize_encoding(display.get("source", [""])[0]) if display.get("source") else ""
         publisher = normalize_encoding(display.get("publisher", [""])[0]) if display.get("publisher") else ""
 
@@ -279,7 +289,7 @@ def format_item_details(item: dict | None) -> str:
     output.append("ITEM DETAILS\n")
     output.append("=" * 60 + "\n\n")
 
-    title = normalize_encoding(display.get("title", ["No title"])[0])
+    title = normalize_encoding(_first(display.get("title"), "No title"))
     output.append(f"Title: {title}\n\n")
 
     creators = display.get("creator", [])
@@ -290,19 +300,19 @@ def format_item_details(item: dict | None) -> str:
     if contributors:
         output.append(f"Contributor(s): {', '.join(normalize_encoding(c) for c in contributors)}\n")
 
-    pub_date = display.get("creationdate", [""])[0]
+    pub_date = _first(display.get("creationdate"))
     if pub_date:
         output.append(f"Publication Date: {pub_date}\n")
 
-    doc_type = display.get("type", [""])[0]
+    doc_type = _first(display.get("type"))
     if doc_type:
         output.append(f"Type: {doc_type}\n")
 
-    publisher = display.get("publisher", [""])[0]
+    publisher = _first(display.get("publisher"))
     if publisher:
         output.append(f"Publisher: {normalize_encoding(publisher)}\n")
 
-    source = display.get("source", [""])[0]
+    source = _first(display.get("source"))
     if source:
         output.append(f"Source/Journal: {normalize_encoding(source)}\n")
 
@@ -319,7 +329,7 @@ def format_item_details(item: dict | None) -> str:
     if doi:
         output.append(f"DOI: {', '.join(doi)}\n")
 
-    doc_id = control.get("recordid", [""])[0]
+    doc_id = _first(control.get("recordid"))
     if doc_id:
         output.append(f"Record ID: {doc_id}\n")
 

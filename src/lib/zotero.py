@@ -8,6 +8,7 @@ wraps all API calls with a circuit breaker.
 import logging
 import os
 import re
+import threading
 import time
 
 import requests
@@ -22,6 +23,7 @@ logger = logging.getLogger("sfu_library_mcp")
 _item_types_cache: list[str] | None = None
 _item_types_cache_ts: float = 0.0
 _ITEM_TYPES_TTL = 86400  # 24 hours
+_item_types_lock = threading.Lock()
 
 
 def fetch_zotero_item_types() -> list[str]:
@@ -31,20 +33,21 @@ def fetch_zotero_item_types() -> list[str]:
     network error; returns an empty list if the API has never been reached.
     """
     global _item_types_cache, _item_types_cache_ts
-    now = time.time()
-    if _item_types_cache is not None and now - _item_types_cache_ts < _ITEM_TYPES_TTL:
+    with _item_types_lock:
+        now = time.time()
+        if _item_types_cache is not None and now - _item_types_cache_ts < _ITEM_TYPES_TTL:
+            return _item_types_cache
+        try:
+            resp = requests.get("https://api.zotero.org/itemTypes", timeout=10)
+            resp.raise_for_status()
+            _item_types_cache = [entry["itemType"] for entry in resp.json()]
+            _item_types_cache_ts = now
+            logger.info("Fetched %d Zotero item types from API", len(_item_types_cache))
+        except Exception as e:
+            logger.warning("Could not fetch Zotero item types: %s", e)
+            if _item_types_cache is None:
+                _item_types_cache = []
         return _item_types_cache
-    try:
-        resp = requests.get("https://api.zotero.org/itemTypes", timeout=10)
-        resp.raise_for_status()
-        _item_types_cache = [entry["itemType"] for entry in resp.json()]
-        _item_types_cache_ts = now
-        logger.info("Fetched %d Zotero item types from API", len(_item_types_cache))
-    except Exception as e:
-        logger.warning("Could not fetch Zotero item types: %s", e)
-        if _item_types_cache is None:
-            _item_types_cache = []
-    return _item_types_cache
 
 
 class ZoteroError(Exception):
@@ -590,7 +593,14 @@ class ZoteroClient:
                 "size_bytes": size_bytes,
                 "error": None,
             }
-        except ZoteroError as e:
+        except Exception as e:
+            # Convert filesystem and unexpected errors to the documented dict.
+            # Remove any partially written file so we don't leave a corrupt PDF.
+            try:
+                if "pdf_path" in locals() and os.path.exists(pdf_path):
+                    os.remove(pdf_path)
+            except OSError:
+                pass
             return {
                 "success": False,
                 "path": None,
@@ -771,7 +781,7 @@ class ZoteroClient:
                 items = self._call_zotero("check_dup_doi", self.zot.items, q=doi, limit=5)
                 for item in items:
                     data = item.get("data", {})
-                    if data.get("DOI", "").strip().lower() == doi.strip().lower():
+                    if (data.get("DOI") or "").strip().lower() == doi.strip().lower():
                         formatted = self._format_item(item)
                         result["is_duplicate"] = True
                         result["existing_key"] = data.get("key", "")
@@ -788,7 +798,7 @@ class ZoteroClient:
                 items = self._call_zotero("check_dup_isbn", self.zot.items, q=isbn, limit=5)
                 for item in items:
                     data = item.get("data", {})
-                    if data.get("ISBN", "").replace("-", "") == isbn.replace("-", ""):
+                    if (data.get("ISBN") or "").replace("-", "") == isbn.replace("-", ""):
                         formatted = self._format_item(item)
                         result["is_duplicate"] = True
                         result["existing_key"] = data.get("key", "")
@@ -808,13 +818,13 @@ class ZoteroClient:
 
                 for item in items:
                     data = item.get("data", {})
-                    existing_title = data.get("title", "")
+                    existing_title = data.get("title") or ""
                     similarity = self._title_similarity(title, existing_title)
 
                     existing_creators = data.get("creators", [])
                     existing_first_last = ""
                     if existing_creators:
-                        existing_first_last = existing_creators[0].get("lastName", "")
+                        existing_first_last = existing_creators[0].get("lastName") or ""
 
                     author_match = (
                         first_author_last.lower() == existing_first_last.lower()

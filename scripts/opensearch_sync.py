@@ -206,8 +206,12 @@ def download_and_filter_part(
     session: requests.Session,
     part_url: str,
     min_year: int,
-) -> list[dict]:
-    """Download a part, filter, return cleaned records."""
+) -> list[dict] | None:
+    """Download a part, filter, return cleaned records.
+
+    Returns the list of cleaned records on success (possibly empty if no
+    records qualify), or None if the download failed after all retries.
+    """
     for attempt in range(1, MAX_RETRIES + 1):
         try:
             resp = session.get(part_url, timeout=HTTP_TIMEOUT, stream=True)
@@ -251,7 +255,7 @@ def download_and_filter_part(
                 time.sleep(wait)
             else:
                 logger.error("Failed after %d attempts: %s", MAX_RETRIES, e)
-                return []
+                return None
 
 
 # ── SPLADE encode + upsert (reuses splade_indexer logic) ─────────────────────
@@ -287,7 +291,7 @@ def encode_and_upsert(
             sparse_vecs = encoder.encode_batch(texts)
         except Exception as e:
             logger.error("Encoding error: %s", e)
-            stats["errors"] += len(batch)
+            stats["errors"] += len(texts)
             continue
 
         os_docs = []
@@ -428,6 +432,13 @@ def run_sync(
         logger.info("Sync part %d/%d: %s", i + 1, len(delta), part_url.split("/")[-1])
 
         records = download_and_filter_part(session, part_url, min_year)
+        if records is None:
+            # Download failed after all retries — do NOT mark synced so the
+            # part is retried on the next run. Surface the failure as an error.
+            logger.error("Skipping part (download failed): %s", part_url)
+            cumulative["errors"] += 1
+            continue
+
         if records:
             stats = encode_and_upsert(
                 records, encoder, session, opensearch_url, index_name, batch_size
@@ -463,7 +474,10 @@ def run_sync(
     all_synced_ids = sorted({part_identity(u) for u in all_synced})
     _atomic_write_json({
         "manifest_hash": manifest["hash"],
-        "synced_urls": all_synced,
+        # Persist only the current manifest's URLs (not the full history) so
+        # last_sync.json stays bounded across monthly republishes. The canonical
+        # bounded dedup store is synced_ids — see part_identity().
+        "synced_urls": [e.get("url", "") for e in manifest["entries"]],
         "synced_ids": all_synced_ids,
         "total_synced_parts": len(all_synced_ids),
         "last_delta_indexed": cumulative["indexed"],

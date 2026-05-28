@@ -73,7 +73,7 @@ def compute_similarity(query: str, documents: list[str], model_path: str | None 
 
     query_emb = embeddings[0]
     doc_embs = embeddings[1:]
-    similarities = (doc_embs @ query_emb).tolist()
+    similarities = [max(0.0, s) for s in (doc_embs @ query_emb).tolist()]
     return similarities
 
 
@@ -81,13 +81,12 @@ def score_papers_semantic(
     query: str,
     papers: list[dict],
     model_path: str | None = None,
-    title_weight: float = 0.3,
-    abstract_weight: float = 0.7,
 ) -> list[float]:
     """Score papers by semantic similarity to a query.
 
-    Combines title and abstract similarity with configurable weights.
-    Papers missing abstracts fall back to title-only scoring.
+    Concatenates each paper's title and abstract into a single document and
+    computes one similarity against the query. Papers missing abstracts fall
+    back to title-only scoring.
 
     Returns a list of scores (0.0-1.0), one per paper.
     """

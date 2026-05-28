@@ -59,7 +59,7 @@ END OF TODO LIST - Last updated: 2026-01-11
 ================================================================================
 """
 
-from http.server import HTTPServer, BaseHTTPRequestHandler
+from http.server import ThreadingHTTPServer, BaseHTTPRequestHandler
 import urllib.request
 import urllib.parse
 import json
@@ -120,36 +120,41 @@ class OllamaProxyHandler(BaseHTTPRequestHandler):
 
             try:
                 with urllib.request.urlopen(req, timeout=60) as response:
-                    if response.getcode() != 200:
-                        error_body = response.read().decode()
-                        print(f"[PROXY] Batch {batch_num} failed: HTTP {response.getcode()} - {error_body}", file=sys.stderr)
-                        return response.getcode(), error_body.encode(), response.headers
-
                     body = response.read()
                     resp_data = json.loads(body.decode())
 
                     # Extract embeddings from response
                     embeddings = resp_data.get('embeddings', resp_data.get('embedding', []))
 
-                    # Handle different response formats
-                    if isinstance(embeddings, list) and len(embeddings) > 0:
-                        if isinstance(embeddings[0], list):
-                            # Already an array of embeddings
-                            all_embeddings.extend(embeddings)
-                        else:
-                            # Single embedding, wrap in array
-                            all_embeddings.append(embeddings)
+                    # Handle different response formats, normalizing to a list-of-lists
+                    if isinstance(embeddings, list) and len(embeddings) > 0 and isinstance(embeddings[0], list):
+                        # Already an array of embeddings
+                        batch_out = embeddings
+                    elif isinstance(embeddings, list) and len(embeddings) > 0:
+                        # Single embedding (list of floats), wrap in array
+                        batch_out = [embeddings]
+                    else:
+                        # Empty or non-list response
+                        batch_out = []
 
-                    print(f"[PROXY] Batch {batch_num} complete: got {len(embeddings) if isinstance(embeddings, list) else 1} embeddings", file=sys.stderr)
+                    # Verify the count matches the chunks we sent (TODO-PROXY-DATA-002/BATCH-002)
+                    if len(batch_out) != len(batch_chunks):
+                        msg = f"batch {batch_num} returned {len(batch_out)} embeddings, expected {len(batch_chunks)}"
+                        print(f"[PROXY] {msg}", file=sys.stderr)
+                        return 502, json.dumps({'error': msg}).encode(), {'Content-Type': 'application/json'}
+
+                    all_embeddings.extend(batch_out)
+
+                    print(f"[PROXY] Batch {batch_num} complete: got {len(batch_out)} embeddings", file=sys.stderr)
 
             except urllib.error.HTTPError as e:
                 error_msg = f"Batch {batch_num} failed: HTTP {e.code} - {e.read().decode()}"
                 print(f"[PROXY] {error_msg}", file=sys.stderr)
-                return e.code, json.dumps({'error': error_msg}).encode(), {}
+                return e.code, json.dumps({'error': error_msg}).encode(), {'Content-Type': 'application/json'}
             except Exception as e:
                 error_msg = f"Batch {batch_num} failed: {str(e)}"
                 print(f"[PROXY] {error_msg}", file=sys.stderr)
-                return 500, json.dumps({'error': error_msg}).encode(), {}
+                return 500, json.dumps({'error': error_msg}).encode(), {'Content-Type': 'application/json'}
 
         # Combine all embeddings into Pommel's expected format
         combined_response = {
@@ -158,7 +163,13 @@ class OllamaProxyHandler(BaseHTTPRequestHandler):
 
         print(f"[PROXY] All batches complete: {len(all_embeddings)} total embeddings", file=sys.stderr)
 
-        return 200, json.dumps(combined_response).encode(), {}
+        # Final integrity check: combined count must match the original input array
+        if len(all_embeddings) != len(input_array):
+            msg = f"combined response has {len(all_embeddings)} embeddings, expected {len(input_array)}"
+            print(f"[PROXY] {msg}", file=sys.stderr)
+            return 502, json.dumps({'error': msg}).encode(), {'Content-Type': 'application/json'}
+
+        return 200, json.dumps(combined_response).encode(), {'Content-Type': 'application/json'}
 
     def _get_upstream_url(self, path):
         """Construct the upstream URL."""
@@ -230,7 +241,7 @@ class OllamaProxyHandler(BaseHTTPRequestHandler):
         except urllib.error.HTTPError as e:
             return e.code, e.read(), e.headers
         except Exception as e:
-            return 500, json.dumps({'error': str(e)}).encode(), {}
+            return 500, json.dumps({'error': str(e)}).encode(), {'Content-Type': 'application/json'}
 
     def do_GET(self):
         """Handle GET requests."""
@@ -240,7 +251,10 @@ class OllamaProxyHandler(BaseHTTPRequestHandler):
             if header.lower() not in ('transfer-encoding', 'connection'):
                 self.send_header(header, value)
         self.end_headers()
-        self.wfile.write(body)
+        try:
+            self.wfile.write(body)
+        except (BrokenPipeError, ConnectionResetError):
+            self.log_message("client disconnected before response was fully sent")
 
     def do_POST(self):
         """Handle POST requests."""
@@ -263,7 +277,10 @@ class OllamaProxyHandler(BaseHTTPRequestHandler):
             if header.lower() not in ('transfer-encoding', 'connection'):
                 self.send_header(header, value)
         self.end_headers()
-        self.wfile.write(resp_body)
+        try:
+            self.wfile.write(resp_body)
+        except (BrokenPipeError, ConnectionResetError):
+            self.log_message("client disconnected before response was fully sent")
 
 
 # TODO-PROXY-CONFIG-002: Port hardcoded to 11434, should be configurable
@@ -271,7 +288,8 @@ class OllamaProxyHandler(BaseHTTPRequestHandler):
 def main(port=11434):
     """Start the Ollama proxy server."""
     server_address = ('', port)
-    httpd = HTTPServer(server_address, OllamaProxyHandler)
+    httpd = ThreadingHTTPServer(server_address, OllamaProxyHandler)
+    httpd.daemon_threads = True
     print(f"Ollama proxy listening on port {port}", file=sys.stderr)
     print(f"Forwarding to {OllamaProxyHandler.OLLAMA_UPSTREAM}", file=sys.stderr)
     httpd.serve_forever()

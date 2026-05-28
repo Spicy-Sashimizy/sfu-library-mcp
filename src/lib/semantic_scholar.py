@@ -119,6 +119,16 @@ class SemanticScholarClient:
                     time.sleep(delay)
             except requests.HTTPError as e:
                 last_exc = e
+                status = getattr(e.response, "status_code", None)
+                # A non-429 client error (4xx) reflects a bad input (e.g. unknown
+                # paper ID/DOI -> 404), not a service outage. Don't retry and don't
+                # count it against the circuit breaker — just return None.
+                if status is not None and 400 <= status < 500 and status != 429:
+                    logger.warning(
+                        "Semantic Scholar client error %s — not retrying: %s",
+                        status, e,
+                    )
+                    return None
                 delay = min(self._retry_base_delay * (2 ** attempt), 60.0)
                 logger.warning(
                     "Semantic Scholar HTTP error %s, retry %d/%d after %.1fs",
