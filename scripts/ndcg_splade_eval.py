@@ -211,6 +211,9 @@ def main():
     parser.add_argument("--k", type=int, default=10)
     parser.add_argument("--fetch-k", type=int, default=50)
     parser.add_argument("--device", default="auto", choices=["auto", "cuda", "cpu"])
+    parser.add_argument("--model", default=SPLADE_MODEL,
+                        help="Query encoder model — pass the path of the model the INDEX was built with "
+                             "(e.g. models/sfu-splade-v1) to avoid encoder mismatch. Default: %(default)s")
     parser.add_argument("--output", type=Path, default=None)
     args = parser.parse_args()
 
@@ -218,9 +221,9 @@ def main():
         eval_queries = json.load(f)
     log.info("Loaded %d eval queries", len(eval_queries))
 
-    log.info("Loading SPLADE encoder...")
+    log.info("Loading SPLADE encoder: %s", args.model)
     from scripts.benchmark_splade import SpladeQueryEncoder
-    encoder = SpladeQueryEncoder(SPLADE_MODEL, device=args.device)
+    encoder = SpladeQueryEncoder(args.model, device=args.device)
 
     session = requests.Session()
 
