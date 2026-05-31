@@ -4,7 +4,9 @@
     "settings": {
       "number_of_shards": 2,
       "number_of_replicas": 0,
-      "index.refresh_interval": "30s"
+      "index.refresh_interval": "30s",
+      "index.codec": "zstd",
+      "index.codec.compression_level": 3
     },
     "mappings": {
       "properties": {
