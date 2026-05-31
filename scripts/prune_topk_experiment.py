@@ -162,16 +162,20 @@ def load_pruned(index: str, k: int, limit_docs: int | None) -> tuple[int, float]
                    {"scroll": scroll, "scroll_id": sid})
         sid = res["_scroll_id"]
     flush()
-    _req("DELETE", f"/_search/scroll/{sid}") if False else None
-    _req("POST", f"/{index}/_forcemerge?max_num_segments=1")
+    # flush=true makes forcemerge synchronous and drops the translog so the
+    # size read below is stable.
+    _req("POST", f"/{index}/_forcemerge?max_num_segments=1&flush=true")
     _req("POST", f"/{index}/_refresh")
     avg = total_terms / total_docs if total_docs else 0.0
     return total_docs, avg
 
 
 def index_size_mb(index: str) -> float:
-    st = _req("GET", f"/{index}/_stats/store")
-    return st["indices"][index]["primaries"]["store"]["size_in_bytes"] / 1e6
+    """Sum LIVE segment bytes — the true distributable size. Avoids _stats/store,
+    which transiently counts post-forcemerge files still pending deletion and so
+    yields non-monotonic, timing-dependent numbers."""
+    segs = _req("GET", f"/{index}/_segments")["indices"][index]["shards"]["0"][0]["segments"]
+    return sum(s["size_in_bytes"] for s in segs.values()) / 1e6
 
 
 # ------------------------------- evaluation ------------------------------------

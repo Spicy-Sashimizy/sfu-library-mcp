@@ -1,0 +1,59 @@
+{
+  "note": "100k-doc eval subset; sizes are LIVE segment bytes (zstd codec). Projection: current prod=425GB LZ4; zstd-only=~306GB; prune is applied on top of zstd.",
+  "source_index": "openalex_works_splade_eval",
+  "sparse_field": "sparse_v1",
+  "queries": 120,
+  "k_ndcg": 10,
+  "rows": [
+    {
+      "k": 256,
+      "avg_terms": 89.9,
+      "size_mb": 184.1,
+      "ndcg@10": 0.8127,
+      "mrr@10": 0.9067,
+      "size_vs_k256_pct": 0.0,
+      "ndcg_delta_pct": 0.0,
+      "proj_prod_gb_zstd_plus_prune": 306
+    },
+    {
+      "k": 128,
+      "avg_terms": 86.4,
+      "size_mb": 180.5,
+      "ndcg@10": 0.8146,
+      "mrr@10": 0.9109,
+      "size_vs_k256_pct": -2.0,
+      "ndcg_delta_pct": 0.2,
+      "proj_prod_gb_zstd_plus_prune": 300
+    },
+    {
+      "k": 64,
+      "avg_terms": 62.7,
+      "size_mb": 157.0,
+      "ndcg@10": 0.8205,
+      "mrr@10": 0.9069,
+      "size_vs_k256_pct": -14.7,
+      "ndcg_delta_pct": 1.0,
+      "proj_prod_gb_zstd_plus_prune": 261
+    },
+    {
+      "k": 32,
+      "avg_terms": 32.0,
+      "size_mb": 125.9,
+      "ndcg@10": 0.7824,
+      "mrr@10": 0.8858,
+      "size_vs_k256_pct": -31.6,
+      "ndcg_delta_pct": -3.7,
+      "proj_prod_gb_zstd_plus_prune": 209
+    },
+    {
+      "k": 16,
+      "avg_terms": 16.0,
+      "size_mb": 109.1,
+      "ndcg@10": 0.7332,
+      "mrr@10": 0.8247,
+      "size_vs_k256_pct": -40.7,
+      "ndcg_delta_pct": -9.8,
+      "proj_prod_gb_zstd_plus_prune": 181
+    }
+  ]
+}
