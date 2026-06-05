@@ -24,7 +24,12 @@ from lib.formatters import (
     format_sfu_database,
     format_semantic_scholar_papers,
 )
-from lib.reranker import rerank_results, rerank_with_crossencoder, _CE_CANDIDATE_POOL
+from lib.reranker import (
+    rerank_results,
+    rerank_with_crossencoder,
+    rerank_with_lambdamart,
+    _CE_CANDIDATE_POOL,
+)
 from lib.config import SERVER_VERSION
 from lib.validators import sanitize_search_query
 from lib.zotero import ZoteroClient, ZoteroError, fetch_zotero_item_types
@@ -59,7 +64,11 @@ def _retrieval_top_k(limit: int) -> int:
     features = _get_features()
     if not features.get("rerank_enabled"):
         return limit
-    pool = _CE_CANDIDATE_POOL if features.get("crossencoder_enabled") else limit
+    # The cross-encoder (Tier 1.5) and LambdaMART (Tier 2) both re-score a wide
+    # candidate pool, so retrieval must hand reranking at least _CE_CANDIDATE_POOL
+    # docs when either is enabled.
+    wide = features.get("crossencoder_enabled") or features.get("lambdamart_enabled")
+    pool = _CE_CANDIDATE_POOL if wide else limit
     return max(limit, pool)
 
 
@@ -68,7 +77,8 @@ def _maybe_rerank(docs: list[dict], query: str, limit: int) -> list[dict]:
 
     Stage 1 (rerank_enabled):  embedding cosine ± RRF fusion.
     Stage 2 (crossencoder_enabled): cross-encoder second pass on top-20 Stage 1 results.
-    Either stage can be toggled independently via SFU_FEATURE_* env vars.
+    Stage 3 (lambdamart_enabled): LambdaMART learned re-score on the same pool (Tier 2).
+    Each stage can be toggled independently via SFU_FEATURE_* env vars.
     Falls back to original order if any stage errors.
     """
     features = _get_features()
@@ -80,12 +90,12 @@ def _maybe_rerank(docs: list[dict], query: str, limit: int) -> list[dict]:
         # empty falls through to the reranker's default (all-MiniLM-L6-v2).
         model_path = cfg.embedding_model_path or None
         ce_enabled = features.get("crossencoder_enabled")
-        # Item #4: when the cross-encoder runs as a second pass, Stage-1 must hand
-        # it a pool wider than `limit` (>= _CE_CANDIDATE_POOL) so the CE can re-rank
-        # docs from rank 11-20 — otherwise Stage-1 already truncated to `limit` and
-        # the CE never sees them. Stage-1 still produces a quality-ordered list, so
-        # widening only adds candidates, never removes good ones.
-        stage1_limit = max(limit, _CE_CANDIDATE_POOL) if ce_enabled else limit
+        lm_enabled = features.get("lambdamart_enabled")
+        # Item #4: when a second/third pass runs, Stage-1 must hand it a pool wider
+        # than `limit` (>= _CE_CANDIDATE_POOL) so later stages can promote docs from
+        # rank 11-20 — otherwise Stage-1 already truncated to `limit` and they're gone.
+        # Stage-1 still produces a quality-ordered list, so widening only adds candidates.
+        stage1_limit = max(limit, _CE_CANDIDATE_POOL) if (ce_enabled or lm_enabled) else limit
         reranked = rerank_results(
             docs,
             query,
@@ -95,7 +105,14 @@ def _maybe_rerank(docs: list[dict], query: str, limit: int) -> list[dict]:
             embedding_model_path=model_path,
         )
         if ce_enabled:
-            reranked = rerank_with_crossencoder(reranked, query, limit)
+            # When LambdaMART follows, keep the wide pool through the CE so Tier 2
+            # still sees rank 11-20; otherwise the CE truncates to the final `limit`.
+            ce_limit = _CE_CANDIDATE_POOL if lm_enabled else limit
+            reranked = rerank_with_crossencoder(reranked, query, ce_limit)
+        if lm_enabled:
+            reranked = rerank_with_lambdamart(
+                reranked, query, limit, model_path=cfg.lambdamart_model_path or None
+            )
         return reranked
     except Exception:
         logger.exception("Reranker failed, falling back to original order")

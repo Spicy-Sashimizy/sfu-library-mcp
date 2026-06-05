@@ -258,6 +258,18 @@ _cross_encoder = None  # None = not yet tried; False = unavailable
 # / _maybe_rerank's candidate_k widening (item #4).
 _CE_CANDIDATE_POOL = 20
 
+# ── Tier 2: LambdaMART learned reranker (Phase N) ─────────────────────────────
+# A LightGBM lambdarank model re-scores the top candidates using the shared
+# feature vector (lib.lambdamart_features). Fully optional: gated behind
+# SFU_FEATURE_LAMBDAMART_ENABLED and a no-op when lightgbm OR the model file is
+# absent, so a fresh checkout / deploy without the trained weights never breaks.
+# The embed feature (f5) is computed by the SAME _compute_semantic_scores path the
+# heuristic Stage-1 uses, so train/infer parity holds only when the trained model's
+# embed checkpoint matches production SFU_EMBEDDING_MODEL_PATH (recorded in the
+# model's *.feature_importance.json sidecar by the trainer).
+_LAMBDAMART_MODEL = Path(__file__).resolve().parents[2] / "models" / "lambdamart_v1.txt"
+_lambdamart = None  # None = not yet tried; False = unavailable
+
 
 def _get_cross_encoder():
     global _cross_encoder
@@ -298,6 +310,74 @@ def rerank_with_crossencoder(docs: list[dict], query: str, limit: int) -> list[d
         return result
     except Exception as e:
         logger.warning("CrossEncoder scoring failed (%s), using pre-CE order", e)
+        return docs[:limit]
+
+
+def _get_lambdamart(model_path: str | None = None):
+    """Lazy-load the LambdaMART booster. Returns None when unavailable.
+
+    Mirrors _get_cross_encoder's sentinel pattern: module global is None until the
+    first attempt, then either a lgb.Booster or False (unavailable). Unavailable
+    covers both "lightgbm not installed" and "model file not present".
+    """
+    global _lambdamart
+    if _lambdamart is None:
+        try:
+            import lightgbm as lgb
+            path = Path(model_path) if model_path else _LAMBDAMART_MODEL
+            if not path.exists():
+                logger.info("LambdaMART model not found at %s, skipping Tier 2", path)
+                _lambdamart = False
+            else:
+                _lambdamart = lgb.Booster(model_file=str(path))
+                logger.info("LambdaMART loaded: %s", path)
+        except Exception as e:
+            logger.warning("LambdaMART unavailable (%s), skipping Tier 2", e)
+            _lambdamart = False
+    return _lambdamart if _lambdamart is not False else None
+
+
+def rerank_with_lambdamart(
+    docs: list[dict], query: str, limit: int, model_path: str | None = None
+) -> list[dict]:
+    """Tier 2 learned reranker: re-score the top candidates with LambdaMART.
+
+    Scores the top _CE_CANDIDATE_POOL docs using the shared feature vector
+    (lib.lambdamart_features.doc_features) and re-sorts. The embed feature is
+    computed via _compute_semantic_scores — the exact path Stage-1 uses — so it
+    matches the training-time embedding as long as the same checkpoint is configured.
+
+    Fully fallback-safe: returns docs[:limit] unchanged when the model or lightgbm
+    is unavailable, or on any scoring error.
+    """
+    model = _get_lambdamart(model_path)
+    if model is None:
+        return docs[:limit]
+
+    from lib.lambdamart_features import doc_features
+
+    pool = docs[:_CE_CANDIDATE_POOL]
+    norms = [_normalize_for_rerank(d) for d in pool]
+    cosines = _compute_semantic_scores(query, pool, model_path=None)
+    if not cosines:
+        cosines = [0.0] * len(pool)
+
+    try:
+        import numpy as np
+        X = np.array(
+            [
+                doc_features(n, d.get("cited_by_count", 0), c)
+                for n, d, c in zip(norms, pool, cosines)
+            ],
+            dtype=np.float32,
+        )
+        scores = model.predict(X).tolist()
+        ranked = sorted(zip(scores, range(len(pool)), pool), key=lambda x: (x[0], -x[1]), reverse=True)
+        result = [d for _, _, d in ranked[:limit]]
+        logger.info("lambdamart: scored %d candidates -> %d results", len(pool), len(result))
+        return result
+    except Exception as e:
+        logger.warning("LambdaMART scoring failed (%s), using pre-LM order", e)
         return docs[:limit]
 
 

@@ -91,6 +91,10 @@ class ServerConfig:
         # Structured query log for LambdaMART training data collection (Phase O.3).
         # Writes (query, ranked docs, latency) to query_log_path as JSONL.
         "query_log_enabled": False,
+        # Tier 2 LambdaMART learned reranker (Phase N). Off by default until the
+        # NDCG eval (data/eval_results/lambdamart_eval.json) confirms a win — and a
+        # no-op anyway unless lightgbm + models/lambdamart_v1.txt are both present.
+        "lambdamart_enabled": False,
         # Phase P: OpenSearch / SPLADE feature flags.
         # Master switch — OpenSearch path (P.1 container must be running).
         # Default-on as of 2026-05-16 after the 120-query Phase P.11 eval; the
@@ -142,6 +146,10 @@ class ServerConfig:
 
     # Query log for LambdaMART training data (O.3); empty = disabled
     query_log_path: str = ""
+
+    # Trained LambdaMART model (Phase N); empty = use reranker default
+    # (models/lambdamart_v1.txt). Only consulted when lambdamart_enabled.
+    lambdamart_model_path: str = ""
 
     # Tool metrics log; empty = disabled (in-memory only, resets on restart)
     metrics_log_path: str = ""
@@ -230,6 +238,7 @@ def load_config() -> ServerConfig:
         "rrf_enabled": False,
         "crossencoder_enabled": True,
         "query_log_enabled": False,
+        "lambdamart_enabled": False,
         "local_opensearch_enabled": True,
         "splade_enabled": False,
         "federated_search_enabled": True,
@@ -278,6 +287,7 @@ def load_config() -> ServerConfig:
             "sentence-transformers/all-MiniLM-L6-v2",
         ),
         query_log_path=os.environ.get("SFU_QUERY_LOG_PATH", ""),
+        lambdamart_model_path=os.environ.get("SFU_LAMBDAMART_MODEL_PATH", ""),
         metrics_log_path=os.environ.get("SFU_METRICS_LOG_PATH", ""),
         opensearch_url=os.environ.get("SFU_OPENSEARCH_URL", "http://localhost:9200"),
         opensearch_index=os.environ.get("SFU_OPENSEARCH_INDEX", "openalex_works"),
