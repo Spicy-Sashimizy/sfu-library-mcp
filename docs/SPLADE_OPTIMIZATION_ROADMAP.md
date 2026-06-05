@@ -1,6 +1,7 @@
 # SPLADE Optimization Roadmap
 
-**Last updated:** 2026-05-17  
+**Last updated:** 2026-06-05 (reconciled against commits through `48f5a36`)  
+**Status snapshot:** Q1 ✅ · Q2.1 ✅ · Q2.2 ✅ · Q2.3 ⬜ open · Q2.4 ⬜ open · Q3.1 ✅ · Q3.2 ✅ (local, free) · Q3.3 ⬜ prep-only/never-run  
 **Baseline:** LLM-judged 120-query benchmark, 2026-05-16 (see `docs/LLM_BENCHMARK_RESULTS_2026-05-16.md`)  
 **Pre-Q1 scores:** SPLADE 0.6534 | RRF 0.6362 | BM25F 0.6249 | OpenAlex 0.5391 (mean NDCG@10)  
 **Post-Q1 scores (2026-05-16 23:41):** SPLADE 0.8245 | RRF 0.7229 | BM25F 0.6627 (mean NDCG@10)
@@ -95,9 +96,10 @@ Model: `cross-encoder/ms-marco-MiniLM-L-6-v2` (~6ms per doc-pair on CPU)
 ## Phase Q2 — Medium Effort, No Cloud Cost
 
 ### Q2.1 — Zero-Coverage Subject Fallback
+**Status:** DONE (`fae67d7`, 2026-05-24) — `ALWAYS_LIVE_SUBJECTS` (15 subjects) in `src/lib/federated_search.py:32`; call-site wiring via `detect_subject()` in `src/lib/tools.py:947-961` (the 05-24 "plumbing follow-up" caveat is now resolved).  
 **Expected gain:** Prevents 15 subjects returning blank results  
 **Effort:** 1 day  
-**File:** `src/lib/federated_search_router.py`
+**File:** `src/lib/federated_search.py` (the plan originally named `federated_search_router.py`; the routing lives in `federated_search.py`)
 
 Implement routing logic for the 15 subjects with 0.0 local NDCG. When a query's detected subject has no local coverage, route directly to `LIVE_API` without attempting local retrieval.
 
@@ -125,18 +127,20 @@ def route(self, query: str, subject_hint: str = "") -> RouteDecision:
 ---
 
 ### Q2.2 — Subject-Aware Routing for Edge Cases
+**Status:** DONE (`fae67d7`, 2026-05-24) — `SOFT_LIVE_SUBJECTS = {"Anthropology"}` prefers live by default, overridable via `prefer_local`.  
 **Expected gain:** +0.01–0.03 on Anthropology  
 **Effort:** 1 day  
-**File:** `src/lib/federated_search_router.py`
+**File:** `src/lib/federated_search.py`
 
 Anthropology (RRF 0.898 vs OpenAlex 0.931) is the one subject where OpenAlex live is better than local RRF. Add it to a soft-route list that prefers live by default but can be overridden.
 
 ---
 
 ### Q2.3 — SPLADE Model Swap
+**Status:** OPEN. Indexer still defaults to `prithivida/Splade_PP_en_v1` (`scripts/splade_indexer.py:95`); the 2026-05-29 full reindex re-encoded with that same model. A swap now means re-encoding the **full 150M-doc / 406 GB index (~2.4 h local on the 4070 Ti)** — the "~11 min for 1M docs" estimate below predates the full-corpus build.  
 **Expected gain:** +0.015–0.03 NDCG  
-**Effort:** 3 hours + 11 min re-index  
-**Requires:** Re-running SPLADE indexer (existing TRT pipeline, ~11 min for 1M docs)
+**Effort:** 3 hours + ~2.4 h full re-encode (was "11 min" against the old ~1M pilot)  
+**Requires:** Re-running SPLADE indexer (existing TRT pipeline)
 
 Current model: `prithivida/Splade_PP_en_v1` (2021 vintage)  
 Recommended: `naver/splade-cocondenser-ensembledistil` (2022 TREC winner, 2-4 pts better on BEIR benchmarks)
@@ -189,8 +193,9 @@ python scripts/splade_indexer.py --input data/openalex_snapshot/expansion/
 Training is on the table. DO credits are approximately: H100 ~$8/hr (~25hrs), A100 ~$3.57/hr (~57hrs), L40S ~$2.49/hr (~82hrs).
 
 ### Q3.1 — Mine Hard Negatives from Local Index (Free — CPU here)
+**Status:** DONE (`7b247d2`; atomic-write hardening `fe3051a`, 2026-05-24) — now mines from local OpenSearch; 9,932-record pool → 9,135 query-doc triplets (`scripts/build_ce_triplets.py`).  
 **Effort:** 2 hours  
-**Script:** `scripts/mine_hard_negatives.py` (currently uses BM25 via live API — upgrade to local OpenSearch)
+**Script:** `scripts/mine_hard_negatives.py` (upgraded to local OpenSearch)
 
 Hard negatives are training examples where a paper scores high under a retriever but is actually irrelevant. Forcing the model to distinguish these teaches finer semantic boundaries.
 
@@ -225,8 +230,9 @@ python scripts/merge_negatives.py \
 ---
 
 ### Q3.2 — Cross-Encoder Fine-Tuning on SFU Triplets
-**Expected gain:** +0.04–0.08 NDCG on reranked results  
-**DO cost:** ~$12–15 (5-6 GPU hours on L40S at $2.49/hr)  
+**Status:** DONE — **trained locally on the 4070 Ti (free, ~2-4 min), not on DO.** CE v1 wired in `reranker.py` with exists()-fallback to base (`8639b14`); eval +9.5% NDCG@10 (0.7405 vs base 0.6763, `58fef5f`). Bonus: **embedder v5** re-fine-tuned + wired (`eb67a2d`, +23.8% vs v4). Control confirms it's the mined data: old citation-pair triplets *regressed* −0.016.  
+**Expected gain:** +0.04–0.08 NDCG on reranked results (realized: +0.064 CE eval)  
+**DO cost:** ~$12–15 estimated — **not incurred; ran free locally**  
 **Best first training target** — highest ROI from DO credits
 
 A cross-encoder trained on SFU-specific triplets learns SFU vocabulary: "Musqueam", "Secwépemc", "Métis", "Trudeau", "BC Hydro", "Site C", "First Nations", "UNDRIP" — terms that are rare in the base MS MARCO training data but common in SFU queries.
@@ -256,6 +262,7 @@ After training: deploy to `src/lib/reranker.py`, run 120-query benchmark to conf
 ---
 
 ### Q3.3 — SPLADE Fine-Tuning on SFU Corpus
+**Status:** PREP-ONLY, NEVER RUN. Cloud orchestrator `scripts/cloud/run_splade_finetune.sh` + `finetune_splade.py` are launch-ready (`0d9e8f1`); local hardened pipeline `scripts/run_splade_pipeline_local.sh` (`59d01c0`, ~4-5 h, $0) also ready but not run. **Run-time prereqs unmet:** install `doctl` + Write-scope DO token + `--ssh-key-id` (cloud), or just launch the local script.  
 **Expected gain:** +0.03–0.06 NDCG on sparse encoding  
 **DO cost:** ~$5–8 expected (3-5 GPU hours on L40S 48GB at $1.57/hr); **≤$15.70 worst-case** at the 600-min soft budget; **hard ceiling $17.27** at the 11h deadline (refuses to launch above `--max-cost $20`)  
 **Do this after Q3.2 confirms training pipeline works**
@@ -305,19 +312,19 @@ After training: re-index all 1M docs with new model (~11 min), run full benchmar
 
 ## Summary: Ordered Action Plan
 
-| # | Step | Cost | Expected NDCG gain | Time |
-|---|------|------|--------------------|------|
-| Q1.1 | RRF k-param tuning (k=20-40) | $0 | +0.02–0.04 | 2 hrs |
-| Q1.2 | BM25F most_fields + tie_breaker | $0 | +0.01–0.02 on BM25 leg | 30 min |
-| Q1.3 | SPLADE top_k=64 + scaling_factor=4 | $0 | +0.01–0.03 | 30 min |
-| Q1.4 | Flip cross-encoder flag ON | $0 | +0.03–0.06 | 15 min |
-| Q2.1 | Zero-coverage subject fallback routing | $0 | Prevents blank results for 15 subjects | 1 day |
-| Q2.2 | Subject-aware routing (Anthropology edge case) | $0 | +0.01–0.03 for Anthropology | 1 day |
-| Q2.3 | SPLADE model swap → Naver cocondenser | $0, re-index 11 min | +0.015–0.03 | 3 hrs |
-| Q2.4 | Index expansion (arXiv stat/urban, PMC bio) | $0 data, compute only | +0.05–0.15 for expanded subjects | 1-2 wks |
-| Q3.1 | Mine hard negatives from local index | $0 (CPU) | (enables Q3.2/Q3.3) | 2 hrs |
-| Q3.2 | Cross-encoder fine-tune on SFU triplets | **~$12–15 DO** | +0.04–0.08 on reranked results | 5-6 GPU hrs |
-| Q3.3 | SPLADE fine-tune on SFU corpus | **~$30–36 DO** | +0.03–0.06 on sparse encoding | 8-10 GPU hrs |
+| # | Step | Status | Cost | Expected NDCG gain | Time |
+|---|------|--------|------|--------------------|------|
+| Q1.1 | RRF k-param tuning (k=20-40) | ✅ done | $0 | +0.02–0.04 | 2 hrs |
+| Q1.2 | BM25F most_fields + tie_breaker | ✅ done | $0 | +0.01–0.02 on BM25 leg | 30 min |
+| Q1.3 | SPLADE top_k=64 + scaling_factor=4 | ✅ done | $0 | +0.01–0.03 | 30 min |
+| Q1.4 | Flip cross-encoder flag ON | ✅ done | $0 | +0.03–0.06 | 15 min |
+| Q2.1 | Zero-coverage subject fallback routing | ✅ done (`fae67d7`) | $0 | Prevents blank results for 15 subjects | 1 day |
+| Q2.2 | Subject-aware routing (Anthropology edge case) | ✅ done (`fae67d7`) | $0 | +0.01–0.03 for Anthropology | 1 day |
+| Q2.3 | SPLADE model swap → Naver cocondenser | ⬜ **open** | $0, re-index ~2.4 h (150M) | +0.015–0.03 | 3 hrs |
+| Q2.4 | Index expansion (arXiv stat/urban, PMC bio) | ⬜ **open** | $0 data, compute only | +0.05–0.15 for expanded subjects | 1-2 wks |
+| Q3.1 | Mine hard negatives from local index | ✅ done | $0 (CPU) | (enables Q3.2/Q3.3) | 2 hrs |
+| Q3.2 | Cross-encoder fine-tune on SFU triplets | ✅ done (local, **$0**) | ~$12–15 DO est. (not incurred) | +0.04–0.08 (realized +0.064) | ~3 min local |
+| Q3.3 | SPLADE fine-tune on SFU corpus | ⬜ **prep-only, never run** | ~$5–8 DO (≤$15.70) or $0 local | +0.03–0.06 on sparse encoding | 3-5 GPU hrs |
 
 **Total DO spend for full training path: ~$42–51** (leaves ~$154 from 205 credits for second runs or A/B testing)
 
