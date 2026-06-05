@@ -556,4 +556,4 @@ Phase L per-subject results revealed persistent weak subjects (estimated from MR
 | L — Training (BGE-small) | ✅ Done | v4-bge+RRF = 0.6689 NDCG@10 (+1.5%) |
 | M — Eval methodology | 🔲 Next | Expand to 120 queries; confirm CI |
 | O — Post-M production | 🔲 Gated on M | Model swap, CrossEncoder, query logs |
-| N — Deferred | 🔲 Deferred | LambdaMART, latency budget, query logs |
+| N — Framework shipped | ✅ Wired (2026-06-05) | LambdaMART Tier 2 behind default-off flag + GUI tracking layer; training deferred (needs lightgbm + judged dataset). See docs/MASTER_TODO.md Phase N. |

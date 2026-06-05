@@ -5,9 +5,12 @@ Production entry point serving the same MCP server over HTTP
 instead of stdio. Used for remote access from Claude Desktop via mcp-remote.
 
 Endpoints:
-  POST /mcp    — MCP JSON-RPC (Streamable HTTP transport)
-  GET  /mcp    — SSE stream for server-initiated messages
-  GET  /health — Health check (returns {"status": "ok", "tools": <count>})
+  POST /mcp        — MCP JSON-RPC (Streamable HTTP transport)
+  GET  /mcp        — SSE stream for server-initiated messages
+  GET  /health     — Health check (returns {"status": "ok", "tools": <count>})
+  GET  /analytics  — Research-analytics dashboard data bundle (Phase N GUI tracking).
+                     Optional ?panel=<name> for a single panel.
+  POST /engagement — Record click-through / engagement events (one or a batch).
 """
 
 import contextlib
@@ -51,6 +54,28 @@ async def health_check(request: Request) -> JSONResponse:
     return JSONResponse({"status": "ok", "tools": len(TOOL_DEFINITIONS)})
 
 
+async def analytics(request: Request) -> JSONResponse:
+    """Read-only analytics bundle for the research-analytics GUI."""
+    from lib.analytics import build_analytics_bundle
+    panel = request.query_params.get("panel")
+    try:
+        return JSONResponse(build_analytics_bundle(panel))
+    except Exception as e:
+        logger.exception("Analytics bundle failed")
+        return JSONResponse({"error": str(e)}, status_code=500)
+
+
+async def engagement(request: Request) -> JSONResponse:
+    """Capture click-through / engagement events (single object or batch)."""
+    from lib.engagement import record_engagement
+    try:
+        payload = await request.json()
+    except Exception:
+        return JSONResponse({"error": "invalid JSON body"}, status_code=400)
+    n = record_engagement(payload)
+    return JSONResponse({"recorded": n})
+
+
 session_manager = StreamableHTTPSessionManager(
     app=mcp_server,
     json_response=True,
@@ -66,7 +91,11 @@ async def lifespan(app: Starlette) -> AsyncIterator[None]:
 
 _starlette = Starlette(
     lifespan=lifespan,
-    routes=[Route("/health", health_check, methods=["GET"])],
+    routes=[
+        Route("/health", health_check, methods=["GET"]),
+        Route("/analytics", analytics, methods=["GET"]),
+        Route("/engagement", engagement, methods=["POST"]),
+    ],
 )
 
 

@@ -95,6 +95,10 @@ class ServerConfig:
         # NDCG eval (data/eval_results/lambdamart_eval.json) confirms a win — and a
         # no-op anyway unless lightgbm + models/lambdamart_v1.txt are both present.
         "lambdamart_enabled": False,
+        # Emit per-rank result impressions to the engagement log on each search
+        # (the propensity denominators for the analytics position-bias panel).
+        # Click/action events are ingested via /engagement regardless of this flag.
+        "engagement_log_enabled": False,
         # Phase P: OpenSearch / SPLADE feature flags.
         # Master switch — OpenSearch path (P.1 container must be running).
         # Default-on as of 2026-05-16 after the 120-query Phase P.11 eval; the
@@ -239,6 +243,7 @@ def load_config() -> ServerConfig:
         "crossencoder_enabled": True,
         "query_log_enabled": False,
         "lambdamart_enabled": False,
+        "engagement_log_enabled": False,
         "local_opensearch_enabled": True,
         "splade_enabled": False,
         "federated_search_enabled": True,

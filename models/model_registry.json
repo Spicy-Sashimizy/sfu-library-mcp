@@ -1,0 +1,18 @@
+{
+  "_comment": "Model-versions registry backing the Admin 'Model Versions' table (activate/rollback). Status: active | archived | fallback | pending. ndcg is NDCG@10 on the 120-query LLM-judged eval where available. Maintained by hand + src/lib/model_registry.py.",
+  "updated": "2026-06-05",
+  "components": {
+    "embedder": [
+      {"version": "v5", "date": "2026-05-24", "base": "sfu-academic-embed-v4-bge", "train_examples": 9234, "ndcg": 0.7717, "mrr": 0.8375, "status": "active", "path": "models/sfu-academic-embed-v5"},
+      {"version": "v4-bge", "date": "2026-05-04", "base": "BAAI/bge-small-en", "train_examples": 9234, "ndcg": 0.6233, "status": "archived", "path": "models/sfu-academic-embed-v4-bge"},
+      {"version": "base", "date": null, "base": "sentence-transformers/all-MiniLM-L6-v2", "train_examples": null, "ndcg": null, "status": "fallback"}
+    ],
+    "cross_encoder": [
+      {"version": "v1", "date": "2026-05-24", "base": "cross-encoder/ms-marco-MiniLM-L-6-v2", "train_examples": 9234, "ndcg": 0.7405, "mrr": 0.7942, "status": "active", "path": "models/sfu-cross-encoder-v1"},
+      {"version": "base", "date": null, "base": "cross-encoder/ms-marco-MiniLM-L-6-v2", "train_examples": null, "ndcg": 0.6763, "status": "fallback"}
+    ],
+    "lambdamart": [
+      {"version": "v1", "date": null, "base": "lightgbm-lambdarank", "train_examples": null, "ndcg": null, "status": "pending", "path": "models/lambdamart_v1.txt", "note": "Framework wired (Phase N); train via scripts/train_lambdamart.py once judged dataset + lightgbm are available."}
+    ]
+  }
+}

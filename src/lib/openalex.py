@@ -539,6 +539,35 @@ class OpenAlexClient:
         data = self._get(f"/works/{bare}", {})
         return normalize_work(data) if data and "id" in data else None
 
+    def get_works_batch(self, ids: list[str]) -> dict[str, dict]:
+        """Fetch many works by OpenAlex ID in one paged sweep.
+
+        Uses the ``openalex_id:W1|W2|...`` filter (up to 50 ids/page) so N works
+        cost ~N/50 calls instead of N. Returns ``{bare_id: normalize_work(...)}``;
+        ids that 404 or fall outside the corpus are simply absent from the result.
+
+        Reuses the client's budget tracker / cache / circuit breaker, so a large
+        offline sweep (e.g. the LambdaMART dataset builder) inherits all rate-limit
+        protection. Not on the live search path.
+        """
+        def _bare(wid: str) -> str:
+            return wid.rsplit("/", 1)[-1] if wid else wid
+
+        bare_ids = [_bare(i) for i in ids if i]
+        out: dict[str, dict] = {}
+        for start in range(0, len(bare_ids), 50):
+            chunk = bare_ids[start : start + 50]
+            data = self._get(
+                "/works",
+                {"filter": "openalex_id:" + "|".join(chunk), "per_page": 50},
+            )
+            if not data:
+                continue
+            for work in data.get("results", []):
+                norm = normalize_work(work)
+                out[_bare(norm.get("openalex_id", ""))] = norm
+        return out
+
     def search_by_author(
         self, author_name: str, per_page: int = 10
     ) -> dict:

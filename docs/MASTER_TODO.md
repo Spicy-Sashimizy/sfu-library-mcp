@@ -19,7 +19,7 @@ Last updated: 2026-06-05 (reconciled against commit history through `48f5a36`, 2
 | Phase | Description | Status | Blocked By |
 |---|---|---|---|
 | M | Expand eval to 120 queries; MRR@10/Recall@10; stat-sig gate | **DONE** — LLM-judged benchmark complete 2026-05-16 | — |
-| N | LambdaMART, latency budget, query logs | Deferred | Phase O |
+| N | LambdaMART (Tier 2) + GUI tracking layer | **FRAMEWORK SHIPPED** (2026-06-05) — wired behind default-off `lambdamart_enabled`; training deferred (needs lightgbm + judged dataset run) | — |
 | O | Deploy v4-bge; CrossEncoder Tier 1.5; query-log feedback | Largely superseded — CE v1 + embedder v5 wired (Q3.2); query-log loop still open | — |
 | P | SPLADE + OpenSearch (Federated Hybrid) | **DONE** — RRF wired, benchmark confirms +0.097 vs OpenAlex | — |
 | Q | SPLADE optimization (k-tuning, model swap, training) | **IN PROGRESS** — Q1 ✅, Q2.1/Q2.2 ✅, Q3.1/Q3.2 ✅; **open: Q2.3, Q2.4, Q3.3** | — |
@@ -39,6 +39,33 @@ Key finding: citation-count proxy was understating local index quality by 2.5×.
 - [x] LLM-judged topical relevance (Claude Haiku, TREC 0-3 scale)
 - [x] OpenAlex live included as fourth comparison method
 - [x] Stat-sig confirmed: RRF beats OpenAlex by +0.097 NDCG (71/120 wins, 34% ties, 7% losses)
+
+---
+
+## Phase N — LambdaMART Tier 2 + GUI Tracking — FRAMEWORK SHIPPED (2026-06-05)
+
+The learned-reranker (Tier 2 stacking) framework is now wired end-to-end behind a
+default-off flag, plus the analytics tracking layer the GUI dashboard consumes.
+**Training is deferred** — it needs `lightgbm` installed and a judged dataset built
+(OpenSearch was down / no real query log when this landed).
+
+**Reranker (default off; no-op without lightgbm + `models/lambdamart_v1.txt`):**
+- [x] `src/lib/lambdamart_features.py` — shared 6-feature vector (train == infer single source of truth). `bm25_rank_score` deliberately dropped (positional signal with no judge-set equivalent).
+- [x] `src/lib/reranker.py` — `rerank_with_lambdamart` + lazy-load sentinel (mirrors the cross-encoder pattern).
+- [x] `src/lib/tools.py` — Stage 3 in `_maybe_rerank` (after the cross-encoder); retrieval pool widened.
+- [x] `src/lib/config.py` — `SFU_FEATURE_LAMBDAMART_ENABLED` (default off) + `SFU_LAMBDAMART_MODEL_PATH`.
+
+**Training pipeline (run when lightgbm is available):**
+- [x] `scripts/build_lambdamart_dataset.py` — joins LLM-judge grades → OpenAlex metadata → shared features → JSONL. Offline dry-run verified (120 q / 1256 rows via eval cache).
+- [x] `scripts/train_lambdamart.py` reworked — judged-grade primary path, citation-proxy query-log fallback, `--eval` GroupKFold NDCG@10 vs semantic baseline, feature-importance sidecar.
+- [x] `src/lib/openalex.py` — `get_works_batch` (paged batch fetch for the builder).
+- [ ] **TODO (deferred):** `sudo .venv/bin/pip install lightgbm`; run `build_lambdamart_dataset.py` (full fetch) + `train_lambdamart.py --eval`; flip the flag only on a positive delta.
+
+**GUI tracking layer (from the Claude Design analytics dashboard handoff):**
+- [x] `src/lib/engagement.py` — validated click-through event log; impressions = propensity denominators.
+- [x] `src/lib/analytics.py` — `build_analytics_bundle()`: ndcg-by-subject, reranker-signal, position-bias/propensity, model-versions, session-replay, KPIs (non-LambdaMART panels are explicit stubs).
+- [x] `src/lib/model_registry.{json,py}` — model-versions table (Admin activate/rollback).
+- [x] `record_engagement` MCP tool + `GET /analytics` + `POST /engagement` (`src/sfu_library_mcp_http.py`).
 
 ---
 

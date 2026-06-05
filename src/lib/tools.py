@@ -129,6 +129,15 @@ def _log_query(query: str, results: list[dict], latency_ms: float, handler: str)
     Enable via:  SFU_FEATURE_QUERY_LOG_ENABLED=true  SFU_QUERY_LOG_PATH=/path/to/query_log.jsonl
     """
     config = _get_config()
+    # Engagement impressions are emitted independently of the LambdaMART query log:
+    # they are the per-rank propensity denominators for the analytics position-bias
+    # panel. Client click/action events arrive via /engagement.
+    if _get_features().get("engagement_log_enabled") and results:
+        try:
+            from lib.engagement import log_impressions
+            log_impressions("server", query, results)
+        except Exception:
+            logger.debug("Impression logging failed (non-fatal)")
     if not _get_features().get("query_log_enabled"):
         return
     log_path = config.query_log_path
@@ -793,6 +802,41 @@ TOOL_DEFINITIONS: list[Tool] = [
         description="Check today's OpenAlex API call usage against the daily budget limit.",
         inputSchema={"type": "object", "properties": {}},
     ),
+    Tool(
+        name="record_engagement",
+        description=(
+            "Record a click-through / engagement event for the research-analytics GUI. "
+            "Captures which results users open and how deeply they engage, feeding the "
+            "position-bias/propensity panel, the session-replay tree, and (later) "
+            "implicit-relevance labels for the LambdaMART reranker.\n\n"
+            "Send one event, or a batch via `events: [...]`. Each event needs `session_id` "
+            "and `kind`; 'action' events also need `action_type`."
+        ),
+        inputSchema={
+            "type": "object",
+            "properties": {
+                "session_id": {"type": "string", "description": "Stable id for the user's session"},
+                "kind": {
+                    "type": "string",
+                    "enum": ["query", "result_click", "action"],
+                    "description": "query=searched, result_click=opened a result, action=engaged",
+                },
+                "query": {"type": "string", "description": "The query text this event belongs to"},
+                "doc_id": {"type": "string", "description": "DOI or OpenAlex id of the result"},
+                "rank": {"type": "integer", "description": "1-based rank of the result when clicked"},
+                "action_type": {
+                    "type": "string",
+                    "enum": ["abstract", "tldr", "pdf", "citation", "zotero"],
+                    "description": "Depth-of-engagement (required when kind=action)",
+                },
+                "events": {
+                    "type": "array",
+                    "description": "Optional batch of event objects (same shape as above)",
+                    "items": {"type": "object"},
+                },
+            },
+        },
+    ),
 ]
 
 
@@ -869,6 +913,20 @@ async def handle_tool_call(
         _record_metric(name, time.time() - start_time, success)
 
 
+async def _handle_record_engagement(args: dict[str, Any]) -> list[TextContent]:
+    """Record click-through / engagement events for the analytics GUI (Phase N).
+
+    Accepts a single event or a batch (`events: [...]`). Each event needs
+    `session_id` and `kind` ('query' | 'result_click' | 'action'); 'action' events
+    also need `action_type`. Feeds the position-bias/propensity panel and the
+    session-replay tree, and is the future implicit-relevance source for LambdaMART.
+    """
+    from lib.engagement import record_engagement
+    payload = args.get("events", args)
+    n = record_engagement(payload)
+    return [TextContent(type="text", text=json.dumps({"recorded": n}))]
+
+
 async def _dispatch_tool(name: str, arguments: dict[str, Any]) -> list[TextContent]:
     dispatch = {
         "search_academic": _handle_search_academic,
@@ -893,6 +951,7 @@ async def _dispatch_tool(name: str, arguments: dict[str, Any]) -> list[TextConte
         "get_zotero_collection_items": _handle_get_zotero_collection_items,
         "get_zotero_status": _handle_get_zotero_status,
         "get_openalex_budget": _handle_get_openalex_budget,
+        "record_engagement": _handle_record_engagement,
     }
     handler = dispatch.get(name)
     if handler is None:

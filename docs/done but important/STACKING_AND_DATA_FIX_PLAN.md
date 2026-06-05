@@ -177,7 +177,7 @@ Decision:
 
 ## What is explicitly out of scope
 
-- **Tier 2/Tier 3 stacking (LambdaMART, learned blends)** — only worth building if RRF (Tier 1) shows the fusion approach has legs. Defer until Phase 4 results.
+- **Tier 2/Tier 3 stacking (LambdaMART, learned blends)** — only worth building if RRF (Tier 1) shows the fusion approach has legs. Defer until Phase 4 results. *(Update 2026-06-05: RRF shipped and won, so the LambdaMART Tier 2 framework is now wired behind a default-off flag — see docs/MASTER_TODO.md Phase N. Training still gated on a confirmed NDCG win.)*
 - **Scraping SFU full-text content** — license forbids bulk scraping; titles+abstracts via OpenAlex are sufficient.
 - **Switching base model to BGE-base** — only revisit if Phase 7 shows MiniLM has plateaued.
 - **Real query-log training** — the highest-quality signal but requires the model to be deployed first. Future work, not blocking.
