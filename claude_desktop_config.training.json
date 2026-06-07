@@ -1,0 +1,14 @@
+{
+  "mcpServers": {
+    "sfu-library-training": {
+      "command": "docker",
+      "args": [
+        "exec",
+        "-i",
+        "claudebox-sfu-library-mcp-training-app",
+        "/workspaces/sfu-library-mcp-training/.venv/bin/python3",
+        "/workspaces/sfu-library-mcp-training/src/sfu_library_mcp_server.py"
+      ]
+    }
+  }
+}
