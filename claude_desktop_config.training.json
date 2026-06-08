@@ -6,8 +6,11 @@
         "exec",
         "-i",
         "claudebox-sfu-library-mcp-training-app",
-        "/workspaces/sfu-library-mcp-training/.venv/bin/python3",
-        "/workspaces/sfu-library-mcp-training/src/sfu_library_mcp_server.py"
+        "mcp-remote",
+        "http://127.0.0.1:8080/mcp",
+        "--allow-http",
+        "--transport",
+        "http-only"
       ]
     }
   }
