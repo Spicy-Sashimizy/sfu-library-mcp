@@ -34,6 +34,14 @@ Merge `claude_desktop_config.training.json` into
 - `nginx-proxy-manager` — not required for this path; the tunnel can hit the MCP
   port directly.
 
+> **Automated:** `scripts/setup_cloudflare_mcp.sh` performs Steps 1–2 idempotently
+> from `.env` (needs `CLOUDFLARE_API_TOKEN` with `Cloudflare Tunnel:Edit`,
+> `DNS:Edit`, `WAF:Edit`, `Account:Read`). It merges the tunnel ingress
+> (preserving existing hostnames), creates the DNS CNAME, and creates the WAF
+> allowlist — auto-creating the `http_request_firewall_custom` entrypoint ruleset
+> if the zone has never had a custom rule. The manual dashboard steps below are
+> the equivalent if you prefer clicking.
+
 ### Step 1 — add a tunnel public hostname (Cloudflare Zero Trust dashboard)
 `Networks → Tunnels → (your tunnel) → Public Hostname → Add a public hostname`
 - **Subdomain:** `mcp`   **Domain:** `<YOURDOMAIN>`
