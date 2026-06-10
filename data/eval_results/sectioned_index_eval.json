@@ -1,0 +1,236 @@
+{
+  "config": {
+    "base_index": "lexcomp_base",
+    "subset_docs": 1000000,
+    "section_config": "combined (zstd6 + nosrc_splade + freqs + noid)",
+    "archive": "NDJSON + zstd-19 long-distance (window 128MB), incl. sparse_field",
+    "home_section": "social_sciences",
+    "offrequest_section": "med_bio"
+  },
+  "sections": {
+    "social_sciences": {
+      "index": "lexsec_social_sciences",
+      "docs": 233699,
+      "live_mb": 348.0,
+      "packed_mb": 203.3,
+      "pack_secs": 137.1,
+      "path": "/workspaces/sfu-library-mcp-training/data/sectioned/social_sciences.jsonl.zst"
+    },
+    "med_bio": {
+      "index": "lexsec_med_bio",
+      "docs": 114496,
+      "live_mb": 213.0,
+      "packed_mb": 90.6,
+      "pack_secs": 94.0,
+      "path": "/workspaces/sfu-library-mcp-training/data/sectioned/med_bio.jsonl.zst"
+    },
+    "phys_eng": {
+      "index": "lexsec_phys_eng",
+      "docs": 54838,
+      "live_mb": 106.1,
+      "packed_mb": 45.2,
+      "pack_secs": 66.8,
+      "path": "/workspaces/sfu-library-mcp-training/data/sectioned/phys_eng.jsonl.zst"
+    },
+    "cs_math": {
+      "index": "lexsec_cs_math",
+      "docs": 102821,
+      "live_mb": 196.7,
+      "packed_mb": 82.8,
+      "pack_secs": 93.8,
+      "path": "/workspaces/sfu-library-mcp-training/data/sectioned/cs_math.jsonl.zst"
+    },
+    "other": {
+      "index": "lexsec_other",
+      "docs": 494146,
+      "live_mb": 651.3,
+      "packed_mb": 505.4,
+      "pack_secs": 333.4,
+      "path": "/workspaces/sfu-library-mcp-training/data/sectioned/other.jsonl.zst"
+    }
+  },
+  "unpack_drill": {
+    "index": "lexsec_med_bio_restored",
+    "docs": 114496,
+    "decompress_secs": 1.5,
+    "bulk_secs": 54.4,
+    "refresh_secs": 0.9,
+    "unpack_total_secs": 56.8
+  },
+  "parity_restored_vs_original": {
+    "runs": 20,
+    "same_id_set": 20,
+    "same_score_multiset": 20,
+    "max_score_diff": 0.0
+  },
+  "personas": {
+    "political_science": {
+      "hot_sections": [
+        "social_sciences"
+      ],
+      "hot_live_mb": 348.0,
+      "cold_sections_packed_mb": 724.0,
+      "footprint_mb": 1072.0,
+      "saved_vs_all_live_pct": 29.2,
+      "peak_mb_during_unpack": 1723.3,
+      "cold_ranking_by_packed_size": [
+        {
+          "section": "other",
+          "packed_mb": 505.4,
+          "live_when_unpacked_mb": 651.3,
+          "docs": 494146
+        },
+        {
+          "section": "med_bio",
+          "packed_mb": 90.6,
+          "live_when_unpacked_mb": 213.0,
+          "docs": 114496
+        },
+        {
+          "section": "cs_math",
+          "packed_mb": 82.8,
+          "live_when_unpacked_mb": 196.7,
+          "docs": 102821
+        },
+        {
+          "section": "phys_eng",
+          "packed_mb": 45.2,
+          "live_when_unpacked_mb": 106.1,
+          "docs": 54838
+        }
+      ],
+      "footprint_gb_scaled": {
+        "full_150M": 161.2,
+        "laptop_15M": 16.1
+      }
+    },
+    "computer_science": {
+      "hot_sections": [
+        "cs_math"
+      ],
+      "hot_live_mb": 196.7,
+      "cold_sections_packed_mb": 844.5,
+      "footprint_mb": 1041.2,
+      "saved_vs_all_live_pct": 31.3,
+      "peak_mb_during_unpack": 1692.5,
+      "cold_ranking_by_packed_size": [
+        {
+          "section": "other",
+          "packed_mb": 505.4,
+          "live_when_unpacked_mb": 651.3,
+          "docs": 494146
+        },
+        {
+          "section": "social_sciences",
+          "packed_mb": 203.3,
+          "live_when_unpacked_mb": 348.0,
+          "docs": 233699
+        },
+        {
+          "section": "med_bio",
+          "packed_mb": 90.6,
+          "live_when_unpacked_mb": 213.0,
+          "docs": 114496
+        },
+        {
+          "section": "phys_eng",
+          "packed_mb": 45.2,
+          "live_when_unpacked_mb": 106.1,
+          "docs": 54838
+        }
+      ],
+      "footprint_gb_scaled": {
+        "full_150M": 156.6,
+        "laptop_15M": 15.6
+      }
+    },
+    "health_science": {
+      "hot_sections": [
+        "med_bio"
+      ],
+      "hot_live_mb": 213.0,
+      "cold_sections_packed_mb": 836.7,
+      "footprint_mb": 1049.7,
+      "saved_vs_all_live_pct": 30.7,
+      "peak_mb_during_unpack": 1701.0,
+      "cold_ranking_by_packed_size": [
+        {
+          "section": "other",
+          "packed_mb": 505.4,
+          "live_when_unpacked_mb": 651.3,
+          "docs": 494146
+        },
+        {
+          "section": "social_sciences",
+          "packed_mb": 203.3,
+          "live_when_unpacked_mb": 348.0,
+          "docs": 233699
+        },
+        {
+          "section": "cs_math",
+          "packed_mb": 82.8,
+          "live_when_unpacked_mb": 196.7,
+          "docs": 102821
+        },
+        {
+          "section": "phys_eng",
+          "packed_mb": 45.2,
+          "live_when_unpacked_mb": 106.1,
+          "docs": 54838
+        }
+      ],
+      "footprint_gb_scaled": {
+        "full_150M": 157.9,
+        "laptop_15M": 15.7
+      }
+    },
+    "interdisciplinary_cogsci": {
+      "hot_sections": [
+        "med_bio",
+        "cs_math",
+        "social_sciences"
+      ],
+      "hot_live_mb": 757.7,
+      "cold_sections_packed_mb": 550.6,
+      "footprint_mb": 1308.3,
+      "saved_vs_all_live_pct": 13.6,
+      "peak_mb_during_unpack": 1959.6,
+      "cold_ranking_by_packed_size": [
+        {
+          "section": "other",
+          "packed_mb": 505.4,
+          "live_when_unpacked_mb": 651.3,
+          "docs": 494146
+        },
+        {
+          "section": "phys_eng",
+          "packed_mb": 45.2,
+          "live_when_unpacked_mb": 106.1,
+          "docs": 54838
+        }
+      ],
+      "footprint_gb_scaled": {
+        "full_150M": 196.8,
+        "laptop_15M": 19.6
+      }
+    }
+  },
+  "scenario_polisci_user": {
+    "live_home_mb": 348.0,
+    "packed_others_mb": 724.0,
+    "scenario_total_mb": 1072.0,
+    "all_sections_live_mb": 1515.1,
+    "saved_vs_all_live_pct": 29.2,
+    "unpack_docs_per_sec": 2016,
+    "scaled_gb": {
+      "full_150M": {
+        "scenario": 161.2,
+        "all_live": 227.9
+      },
+      "laptop_15M": {
+        "scenario": 16.1,
+        "all_live": 22.7
+      }
+    }
+  }
+}
