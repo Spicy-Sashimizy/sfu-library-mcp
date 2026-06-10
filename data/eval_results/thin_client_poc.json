@@ -1,0 +1,38 @@
+{
+  "config": {
+    "docs": 100000,
+    "queries": 20,
+    "top_k": 50,
+    "corpus_source": "lexcomp_base",
+    "splade_encoder": "production ONNX (models/splade_onnx)"
+  },
+  "engines": [
+    {
+      "engine": "tantivy 0.26 (BM25F lexical)",
+      "build_secs": 0.0,
+      "index_mb": 65.0,
+      "ms_per_query": 8.02,
+      "filtered_query_works": true
+    },
+    {
+      "engine": "seismic 0.5 (SPLADE sparse)",
+      "build_secs": 0.0,
+      "index_mb": 314.9,
+      "ms_per_query": 4.41,
+      "note": "no native filters; filter post-hoc or partition indexes"
+    },
+    {
+      "engine": "usearch 2.25 b1+fp32-rescore (dense)",
+      "build_secs": 1.6,
+      "index_mb": 19.7,
+      "ms_per_query": 0.34,
+      "recall@10_vs_exact": 0.975,
+      "note": "rescore vectors (fp32/int8) live on disk, mmap-served"
+    }
+  ],
+  "fusion": {
+    "fused_lists": 20,
+    "avg_lexical_sparse_overlap@50": 6.8,
+    "note": "tantivy+seismic fused with the production RRF (k=60); dense leg uses the dense-POC corpus so it is benchmarked separately"
+  }
+}

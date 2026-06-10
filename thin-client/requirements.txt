@@ -11,3 +11,7 @@ requests
 sentence-transformers>=5.0  # dense query encoding (sfu-academic-embed-v5)
 onnxruntime>=1.20           # SPLADE query encoding (models/splade_onnx)
 transformers>=4.40
+
+# SPLADE leg — BMP recommended over pyseismic for end-user machines
+# (Windows wheels, small RAM; see docs/THIN_CLIENT_STACK_RESEARCH.md)
+bmp==0.2.6
