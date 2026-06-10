@@ -106,12 +106,16 @@ services:
 
   opensearch:
     container_name: claudebox-sfu-library-mcp-training-opensearch
-    image: opensearchproject/opensearch:2
+    # 3.7.0 upgrade prepared 2026-06-10 — BEFORE recreating this container, take the
+    # cold volume backup per docs/OPENSEARCH3_UPGRADE.md (only rollback path: Lucene 10
+    # segments are unreadable by 2.x). Pre-flight audit passed; zstd index opens in 3.x.
+    image: opensearchproject/opensearch:3.7.0
     restart: unless-stopped
     environment:
       - discovery.type=single-node
       - OPENSEARCH_JAVA_OPTS=-Xms2g -Xmx2g
       - DISABLE_SECURITY_PLUGIN=true
+      - DISABLE_INSTALL_DEMO_CONFIG=true
       - plugins.query.size_limit=10000
       - http.max_content_length=500mb
     ulimits:
