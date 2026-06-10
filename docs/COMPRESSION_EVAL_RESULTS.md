@@ -32,14 +32,33 @@ All mapping/_source changes require ONE full reindex (~13 h at measured 3,137 do
 pipeline throughput; pure server-side `_reindex` is faster since sparse_field is in
 `_source` today — that is exactly the double-storage being removed).
 
-### Researched but not yet tested (lossless)
+### Round 2 — researched levers, now MEASURED (12-variant run, 2026-06-10)
+
+| Method | Measured | Parity | Verdict |
+|---|---|---|---|
+| Index sorting (`index.sort: publication_year` desc) | **0.4%** | ✅ 80/80 lossless | not worth the reindex on this corpus |
+| doc_values off (year/type/is_oa) | **−0.0%** | ✅ 80/80 lossless | negligible; skip |
+| 2 shards vs 1 (live index has 2) | 1→2 costs **0.7%**; single-shard saves ~0.7% | ❌ **40/80 score-multiset** — per-shard IDF shifts BM25 scores, confirmed empirically | small win but NOT strictly lossless; re-validate evals if done |
+| `combined2` (combined + sortyear + dvoff) | **48.4%** → **141.3 GB** | ✅ 79/80 exact, 80/80 scores | new lossless ceiling, +0.4pp over `combined` |
+
+### Top-3 lossless levers by measured savings (single methods)
+
+1. **`_source.excludes: sparse_field` — 35.0%** (274 → 178 GB). The SPLADE weights
+   were stored twice; postings keep serving search identically.
+2. **`index_options: freqs` (drop text positions) — 8.6%** (→ 250 GB). Lossless for
+   every query shape the stack issues (no phrase/span queries anywhere).
+3. **zstd level 6 — 4.4%** (→ 262 GB). One settings change. (force_merge to 1 segment
+   is worth a similar ~4% and stacks with everything.)
+
+(`extern_display` at **58.7%** beats them all but is "lossless + sidecar": ranking
+identical, abstracts served from an external store — rank it #1 if the sidecar is
+acceptable.) All stacked = `combined2` **48.4%**, or ~62% with externalized display.
+
+### Still-untested lossless (research-only)
 
 | Method | Expected | Notes |
 |---|---|---|
-| **BP doc-ID reordering** (`BPIndexReorderer`, Lucene 9.8+ misc) | 1.5–10% of postings | The only remaining postings-size lever. Offline Lucene tool on the read-only artifact; adds land unordered until re-run. Expert effort |
-| Index sorting (`index.sort: publication_year`) | low single-digit % | Set at index creation; monthly adds keep working (sorted at flush/merge); 40–50% ingest slowdown worst-case |
-| Single shard (2→1, shrink+merge) | low single-digit % | ⚠️ BM25 IDF becomes global instead of per-shard — scores shift slightly (arguably more correct). Re-validate evals |
-| doc_values off on year/type/is_oa | <1% | Loses future facets/sorts; only bundle into a planned reindex |
+| **BP doc-ID reordering** (`BPIndexReorderer`, Lucene 9.8+ misc) | 1.5–10% of postings | Offline Lucene tool on the read-only artifact; adds land unordered until re-run. Expert effort |
 | Shipping: `_flush` + `tar \| zstd --long` | 5–15% transport-only | Snapshot `compress:true` is metadata-only — not a lever |
 | Ruled out | — | norms removal (changes BM25), `match_only_text` (constant TF), alternative postings formats (Bloom/Direct/FST: bigger or RAM-bound, no back-compat), `_field_names`, compound format, FM-index/succinct self-indexes (substring search ≠ ranked retrieval; postings can't be FM-indexed; zstd already beats it on stored text) |
 

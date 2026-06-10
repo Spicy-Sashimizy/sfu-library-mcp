@@ -12,15 +12,15 @@
       "docs": 150413098,
       "live_store_gb": 274.0
     },
-    "note_force_merge": "base pre-merge 2459.9 MB vs merged 2358.3 MB isolates force_merge's own contribution"
+    "note_force_merge": "base pre-merge 2449.6 MB vs merged 2358.5 MB isolates force_merge's own contribution"
   },
   "results": [
     {
       "variant": "base",
       "docs": 1000000,
-      "pre_merge_mb": 2459.9,
-      "post_merge_mb": 2358.3,
-      "bytes_per_doc": 2358.3,
+      "pre_merge_mb": 2449.6,
+      "post_merge_mb": 2358.5,
+      "bytes_per_doc": 2358.5,
       "saved_vs_base_pct": 0.0,
       "est_full_scale_gb": 274.0,
       "parity": null
@@ -28,9 +28,9 @@
     {
       "variant": "zstd6",
       "docs": 1000000,
-      "pre_merge_mb": 2353.0,
-      "post_merge_mb": 2253.4,
-      "bytes_per_doc": 2253.4,
+      "pre_merge_mb": 2338.2,
+      "post_merge_mb": 2253.7,
+      "bytes_per_doc": 2253.7,
       "saved_vs_base_pct": 4.4,
       "est_full_scale_gb": 261.8,
       "parity": {
@@ -44,11 +44,27 @@
     {
       "variant": "zstd_no_dict",
       "docs": 1000000,
-      "pre_merge_mb": 2479.4,
-      "post_merge_mb": 2383.2,
-      "bytes_per_doc": 2383.2,
-      "saved_vs_base_pct": -1.1,
-      "est_full_scale_gb": 276.9,
+      "pre_merge_mb": 2514.4,
+      "post_merge_mb": 2382.7,
+      "bytes_per_doc": 2382.7,
+      "saved_vs_base_pct": -1.0,
+      "est_full_scale_gb": 276.8,
+      "parity": {
+        "queries": 80,
+        "exact_order": 77,
+        "same_id_set": 80,
+        "same_score_multiset": 80,
+        "max_score_diff": 0.0
+      }
+    },
+    {
+      "variant": "nosrc_splade",
+      "docs": 1000000,
+      "pre_merge_mb": 1963.3,
+      "post_merge_mb": 1532.2,
+      "bytes_per_doc": 1532.2,
+      "saved_vs_base_pct": 35.0,
+      "est_full_scale_gb": 178.0,
       "parity": {
         "queries": 80,
         "exact_order": 76,
@@ -58,32 +74,16 @@
       }
     },
     {
-      "variant": "nosrc_splade",
-      "docs": 1000000,
-      "pre_merge_mb": 2193.3,
-      "post_merge_mb": 1488.3,
-      "bytes_per_doc": 1488.3,
-      "saved_vs_base_pct": 36.9,
-      "est_full_scale_gb": 172.9,
-      "parity": {
-        "queries": 80,
-        "exact_order": 79,
-        "same_id_set": 80,
-        "same_score_multiset": 80,
-        "max_score_diff": 0.0
-      }
-    },
-    {
       "variant": "extern_display",
       "docs": 1000000,
-      "pre_merge_mb": 1868.3,
-      "post_merge_mb": 960.4,
-      "bytes_per_doc": 960.4,
-      "saved_vs_base_pct": 59.3,
-      "est_full_scale_gb": 111.6,
+      "pre_merge_mb": 1952.1,
+      "post_merge_mb": 973.8,
+      "bytes_per_doc": 973.8,
+      "saved_vs_base_pct": 58.7,
+      "est_full_scale_gb": 113.1,
       "parity": {
         "queries": 80,
-        "exact_order": 79,
+        "exact_order": 74,
         "same_id_set": 80,
         "same_score_multiset": 80,
         "max_score_diff": 0.0
@@ -92,14 +92,14 @@
     {
       "variant": "freqs",
       "docs": 1000000,
-      "pre_merge_mb": 2220.2,
-      "post_merge_mb": 2155.6,
-      "bytes_per_doc": 2155.6,
+      "pre_merge_mb": 2232.0,
+      "post_merge_mb": 2155.4,
+      "bytes_per_doc": 2155.4,
       "saved_vs_base_pct": 8.6,
       "est_full_scale_gb": 250.4,
       "parity": {
         "queries": 80,
-        "exact_order": 77,
+        "exact_order": 75,
         "same_id_set": 80,
         "same_score_multiset": 80,
         "max_score_diff": 0.0
@@ -108,11 +108,27 @@
     {
       "variant": "noid",
       "docs": 1000000,
-      "pre_merge_mb": 2426.6,
-      "post_merge_mb": 2334.8,
-      "bytes_per_doc": 2334.8,
+      "pre_merge_mb": 2420.8,
+      "post_merge_mb": 2334.5,
+      "bytes_per_doc": 2334.5,
       "saved_vs_base_pct": 1.0,
-      "est_full_scale_gb": 271.3,
+      "est_full_scale_gb": 271.2,
+      "parity": {
+        "queries": 80,
+        "exact_order": 74,
+        "same_id_set": 80,
+        "same_score_multiset": 80,
+        "max_score_diff": 0.0
+      }
+    },
+    {
+      "variant": "combined",
+      "docs": 1000000,
+      "pre_merge_mb": 1931.4,
+      "post_merge_mb": 1226.4,
+      "bytes_per_doc": 1226.4,
+      "saved_vs_base_pct": 48.0,
+      "est_full_scale_gb": 142.5,
       "parity": {
         "queries": 80,
         "exact_order": 77,
@@ -122,16 +138,64 @@
       }
     },
     {
-      "variant": "combined",
+      "variant": "sortyear",
       "docs": 1000000,
-      "pre_merge_mb": 1982.3,
-      "post_merge_mb": 1226.5,
-      "bytes_per_doc": 1226.5,
-      "saved_vs_base_pct": 48.0,
-      "est_full_scale_gb": 142.5,
+      "pre_merge_mb": 2433.8,
+      "post_merge_mb": 2347.9,
+      "bytes_per_doc": 2347.9,
+      "saved_vs_base_pct": 0.4,
+      "est_full_scale_gb": 272.8,
+      "parity": {
+        "queries": 80,
+        "exact_order": 79,
+        "same_id_set": 80,
+        "same_score_multiset": 80,
+        "max_score_diff": 0.0
+      }
+    },
+    {
+      "variant": "dvoff",
+      "docs": 1000000,
+      "pre_merge_mb": 2478.8,
+      "post_merge_mb": 2359.0,
+      "bytes_per_doc": 2359.0,
+      "saved_vs_base_pct": -0.0,
+      "est_full_scale_gb": 274.1,
       "parity": {
         "queries": 80,
         "exact_order": 77,
+        "same_id_set": 80,
+        "same_score_multiset": 80,
+        "max_score_diff": 0.0
+      }
+    },
+    {
+      "variant": "shards2",
+      "docs": 1000000,
+      "pre_merge_mb": 2497.6,
+      "post_merge_mb": 2374.6,
+      "bytes_per_doc": 2374.6,
+      "saved_vs_base_pct": -0.7,
+      "est_full_scale_gb": 275.9,
+      "parity": {
+        "queries": 80,
+        "exact_order": 40,
+        "same_id_set": 55,
+        "same_score_multiset": 40,
+        "max_score_diff": 1.368000000000002
+      }
+    },
+    {
+      "variant": "combined2",
+      "docs": 1000000,
+      "pre_merge_mb": 1844.3,
+      "post_merge_mb": 1216.3,
+      "bytes_per_doc": 1216.3,
+      "saved_vs_base_pct": 48.4,
+      "est_full_scale_gb": 141.3,
+      "parity": {
+        "queries": 80,
+        "exact_order": 79,
         "same_id_set": 80,
         "same_score_multiset": 80,
         "max_score_diff": 0.0
