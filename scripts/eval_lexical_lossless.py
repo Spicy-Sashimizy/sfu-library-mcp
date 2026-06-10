@@ -164,7 +164,19 @@ def force_merge(index: str) -> None:
         logger.info("  forcemerge HTTP timeout; polling segments…")
         while store_bytes(index)[1] > 1:
             time.sleep(15)
+    # Old segments are deleted asynchronously after the merge; measuring too
+    # early double-counts old+new. Flush, then wait for the store size to
+    # stabilize (two consecutive identical readings) with 1 segment.
+    req("POST", f"{index}/_flush", timeout=120)
     req("POST", f"{index}/_refresh", timeout=60)
+    prev = -1
+    for _ in range(60):
+        size, segs = store_bytes(index)
+        if segs <= 1 and size == prev:
+            return
+        prev = size
+        time.sleep(5)
+    logger.warning("  %s store size did not stabilize; last=%d bytes", index, prev)
 
 
 def build_variant_index(name: str, subset_docs: int) -> dict:
@@ -176,7 +188,15 @@ def build_variant_index(name: str, subset_docs: int) -> dict:
         req("PUT", index, variant_config(name), timeout=60)
         src = SOURCE_INDEX if name == "base" else f"{PREFIX}_base"
         reindex(src, index, subset_docs if name == "base" else None)
+    req("POST", f"{index}/_flush", timeout=120)
     req("POST", f"{index}/_refresh", timeout=120)
+    prev = -1
+    for _ in range(24):  # let post-reindex background merges/deletes settle
+        pre_bytes, pre_segs = store_bytes(index)
+        if pre_bytes == prev:
+            break
+        prev = pre_bytes
+        time.sleep(5)
     pre_bytes, pre_segs = store_bytes(index)
     if pre_segs > 1:
         logger.info("  force_merge %s (%d segments, %.1f MB)…", index, pre_segs, pre_bytes / 1e6)

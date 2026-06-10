@@ -1,0 +1,141 @@
+{
+  "config": {
+    "source_index": "openalex_works",
+    "subset_docs": 1000000,
+    "parity_queries": 40,
+    "parity_modes": [
+      "bm25f",
+      "splade"
+    ],
+    "top_k": 50,
+    "full_scale": {
+      "docs": 150413098,
+      "live_store_gb": 274.0
+    },
+    "note_force_merge": "base pre-merge 2512.4 MB vs merged 2359.2 MB isolates force_merge's own contribution"
+  },
+  "results": [
+    {
+      "variant": "base",
+      "docs": 1000000,
+      "pre_merge_mb": 2512.4,
+      "post_merge_mb": 2359.2,
+      "bytes_per_doc": 2359.2,
+      "saved_vs_base_pct": 0.0,
+      "est_full_scale_gb": 274.0,
+      "parity": null
+    },
+    {
+      "variant": "zstd6",
+      "docs": 1000000,
+      "pre_merge_mb": 2855.6,
+      "post_merge_mb": 2552.8,
+      "bytes_per_doc": 2552.8,
+      "saved_vs_base_pct": -8.2,
+      "est_full_scale_gb": 296.5,
+      "parity": {
+        "queries": 80,
+        "exact_order": 78,
+        "same_id_set": 80,
+        "same_score_multiset": 80,
+        "max_score_diff": 0.0
+      }
+    },
+    {
+      "variant": "zstd_no_dict",
+      "docs": 1000000,
+      "pre_merge_mb": 2469.1,
+      "post_merge_mb": 4853.5,
+      "bytes_per_doc": 4853.5,
+      "saved_vs_base_pct": -105.7,
+      "est_full_scale_gb": 563.7,
+      "parity": {
+        "queries": 80,
+        "exact_order": 77,
+        "same_id_set": 80,
+        "same_score_multiset": 80,
+        "max_score_diff": 0.0
+      }
+    },
+    {
+      "variant": "nosrc_splade",
+      "docs": 1000000,
+      "pre_merge_mb": 2200.0,
+      "post_merge_mb": 1587.8,
+      "bytes_per_doc": 1587.8,
+      "saved_vs_base_pct": 32.7,
+      "est_full_scale_gb": 184.4,
+      "parity": {
+        "queries": 80,
+        "exact_order": 77,
+        "same_id_set": 80,
+        "same_score_multiset": 80,
+        "max_score_diff": 0.0
+      }
+    },
+    {
+      "variant": "extern_display",
+      "docs": 1000000,
+      "pre_merge_mb": 1831.5,
+      "post_merge_mb": 1121.9,
+      "bytes_per_doc": 1121.9,
+      "saved_vs_base_pct": 52.4,
+      "est_full_scale_gb": 130.3,
+      "parity": {
+        "queries": 80,
+        "exact_order": 76,
+        "same_id_set": 80,
+        "same_score_multiset": 80,
+        "max_score_diff": 0.0
+      }
+    },
+    {
+      "variant": "freqs",
+      "docs": 1000000,
+      "pre_merge_mb": 2256.3,
+      "post_merge_mb": 3981.7,
+      "bytes_per_doc": 3981.7,
+      "saved_vs_base_pct": -68.8,
+      "est_full_scale_gb": 462.4,
+      "parity": {
+        "queries": 80,
+        "exact_order": 76,
+        "same_id_set": 80,
+        "same_score_multiset": 80,
+        "max_score_diff": 0.0
+      }
+    },
+    {
+      "variant": "noid",
+      "docs": 1000000,
+      "pre_merge_mb": 2776.9,
+      "post_merge_mb": 2335.9,
+      "bytes_per_doc": 2335.9,
+      "saved_vs_base_pct": 1.0,
+      "est_full_scale_gb": 271.3,
+      "parity": {
+        "queries": 80,
+        "exact_order": 77,
+        "same_id_set": 80,
+        "same_score_multiset": 80,
+        "max_score_diff": 0.0
+      }
+    },
+    {
+      "variant": "combined",
+      "docs": 1000000,
+      "pre_merge_mb": 1594.8,
+      "post_merge_mb": 1278.8,
+      "bytes_per_doc": 1278.8,
+      "saved_vs_base_pct": 45.8,
+      "est_full_scale_gb": 148.5,
+      "parity": {
+        "queries": 80,
+        "exact_order": 79,
+        "same_id_set": 80,
+        "same_score_multiset": 80,
+        "max_score_diff": 0.0
+      }
+    }
+  ]
+}
