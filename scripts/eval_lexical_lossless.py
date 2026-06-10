@@ -151,9 +151,11 @@ def reindex(src: str, dest: str, max_docs: int | None) -> None:
 
 
 def store_bytes(index: str) -> tuple[int, int]:
-    s = req("GET", f"{index}/_stats/store,segments", timeout=60)
-    prim = s["indices"][index]["primaries"]
-    return prim["store"]["size_in_bytes"], prim["segments"]["count"]
+    """Sum LIVE segment sizes via _cat/segments — unlike _stats/store this never
+    counts superseded segment files that linger on disk awaiting deletion
+    (which double-counted merged indices in earlier runs)."""
+    segs = req("GET", f"_cat/segments/{index}?format=json&bytes=b", timeout=60)
+    return sum(int(s["size"]) for s in segs), len(segs)
 
 
 def force_merge(index: str) -> None:
