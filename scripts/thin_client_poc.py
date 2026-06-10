@@ -181,7 +181,7 @@ def bench_tantivy(corpus: Path, queries: list[str], top_k: int) -> tuple[dict, l
 # ── Leg 2: seismic SPLADE ───────────────────────────────────────────────────────
 
 def bench_seismic(corpus: Path, queries: list[str], top_k: int) -> tuple[dict, list[list[str]]]:
-    from seismic import SeismicIndex
+    from seismic import SeismicIndex, get_seismic_string
     from lib.opensearch_retriever import encode_splade
 
     seismic_jsonl = WORK_DIR / "seismic_input.jsonl"
@@ -207,7 +207,7 @@ def bench_seismic(corpus: Path, queries: list[str], top_k: int) -> tuple[dict, l
 
     # Encode queries with the production SPLADE ONNX encoder.
     enc = [encode_splade(q, SPLADE_ONNX) for q in queries]
-    string_type = f"U{max(1, max((len(t) for e in enc for t in e), default=1))}"
+    string_type = get_seismic_string()  # binding requires exactly this dtype (e.g. U30)
     results: list[list[str]] = []
     t0 = time.perf_counter()
     for e in enc:
