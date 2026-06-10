@@ -1,0 +1,13 @@
+# Thin-client search stack (versions smoke-tested in the parent repo 2026-06-10)
+tantivy==0.26.0
+pyseismic-lsr==0.5.0
+usearch==2.25.3
+faiss-cpu==1.14.2          # alternative dense leg / eval ground truth
+numpy>=2.0
+zstandard==0.25.0          # section pack/unpack archives
+requests
+
+# Query encoders (same models as the server stack)
+sentence-transformers>=5.0  # dense query encoding (sfu-academic-embed-v5)
+onnxruntime>=1.20           # SPLADE query encoding (models/splade_onnx)
+transformers>=4.40
