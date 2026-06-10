@@ -62,38 +62,63 @@ SUBSET_DOCS = 1_000_000
 FULL_SCALE_DOCS = 150_413_098
 LAPTOP_TIER_DOCS = 15_000_000
 
-# Priority-ordered: a doc is assigned to the FIRST section whose phrases match
-# its `concepts` field; `other` catches the rest. Phrases are OpenAlex concept
-# names (concepts is a text field on lexcomp_base, which retains positions).
-SECTIONS: list[tuple[str, list[str]]] = [
-    ("social_sciences", ["political science", "sociology", "economics", "law",
-                         "education", "psychology", "history", "philosophy",
-                         "business", "geography"]),
-    ("med_bio", ["medicine", "biology", "biochemistry", "genetics",
-                 "neuroscience", "immunology", "microbiology"]),
-    ("phys_eng", ["physics", "engineering", "materials science", "chemistry",
-                  "environmental science", "geology"]),
-    ("cs_math", ["computer science", "mathematics"]),
+# IMPORTANT: the live index has NO subject metadata — `concepts`/`topics` were
+# never populated by the indexer (splade_indexer.py writes only id/doi/title/
+# abstract/publication_year/type/openalex_id/sparse_field), and the OpenAlex
+# snapshot JSONL itself omits them. So sections are derived from the TEXT that
+# exists (title+abstract) via OR-of-terms matchers — which is also how a
+# deployed router lacking concept tags would actually classify docs.
+#
+# Each section is a `multi_match` over title^2+abstract on a domain vocabulary.
+# Assignment is PRIORITY-ORDERED DISJOINT: a doc lands in the first section it
+# matches (higher-priority sections subtracted via must_not); `other` catches
+# everything unmatched.
+SECTIONS: list[tuple[str, str]] = [
+    ("social_sciences",
+     "political politics policy sociology economic economics social society "
+     "education psychology law legal governance democracy election cultural "
+     "anthropology history philosophy geography business management finance"),
+    ("med_bio",
+     "patient clinical disease cancer tumor cell gene protein medical health "
+     "therapy treatment diagnosis biology biological neural brain immune "
+     "infection molecular genetic physiology pharmacology"),
+    ("phys_eng",
+     "quantum physics material chemical chemistry molecular energy optical "
+     "thermal mechanical engineering electron magnetic photon nanoparticle "
+     "semiconductor fluid mechanics structural"),
+    ("cs_math",
+     "algorithm software computational machine learning network data model "
+     "computer programming optimization mathematical theorem matrix graph "
+     "statistical simulation"),
 ]
 HOME_SECTION = "social_sciences"   # the political-science student's hot section
 OFFREQ_SECTION = "med_bio"         # the off-domain request drill
 PARITY_QUERIES = 10
 PARITY_TOP_K = 20
 
+# Student personas → which sections are HOT (kept live) vs COLD (packed). A major
+# maps to its home section(s); everything else is cold and unpacked on demand.
+# `other` is always cold (cross-domain catch-all, rarely a student's core).
+PERSONAS: dict[str, list[str]] = {
+    "political_science": ["social_sciences"],
+    "computer_science": ["cs_math"],
+    "health_science": ["med_bio"],
+    "interdisciplinary_cogsci": ["med_bio", "cs_math", "social_sciences"],
+}
+
 
 def section_query(idx: int) -> dict:
     """bool query assigning docs to SECTIONS[idx] disjointly (or `other` if
-    idx == len(SECTIONS): matches none of the section phrases)."""
-    def phrases(terms: list[str]) -> list[dict]:
-        return [{"match_phrase": {"concepts": t}} for t in terms]
+    idx == len(SECTIONS): matches none of the section vocabularies)."""
+    def matcher(terms: str) -> dict:
+        return {"multi_match": {"query": terms, "fields": ["title^2", "abstract"]}}
 
     if idx < len(SECTIONS):
         _, terms = SECTIONS[idx]
-        must_not = [p for i in range(idx) for p in phrases(SECTIONS[i][1])]
-        return {"bool": {"should": phrases(terms), "minimum_should_match": 1,
+        must_not = [matcher(SECTIONS[i][1]) for i in range(idx)]
+        return {"bool": {"should": [matcher(terms)], "minimum_should_match": 1,
                          "must_not": must_not}}
-    all_phrases = [p for _, terms in SECTIONS for p in phrases(terms)]
-    return {"bool": {"must_not": all_phrases}}
+    return {"bool": {"must_not": [matcher(terms) for _, terms in SECTIONS]}}
 
 
 def wait_for_base() -> None:
@@ -296,6 +321,35 @@ def main() -> None:
     def scale(mb: float, docs: int) -> float:
         return round(mb / 1e3 * docs / SUBSET_DOCS, 1)  # → GB at target corpus size
 
+    # ── Per-persona hot/cold footprint ──
+    personas_out: dict[str, dict] = {}
+    for persona, hot in PERSONAS.items():
+        hot_live = sum(sections[s]["live_mb"] for s in hot)
+        cold = [n for n in names if n not in hot]
+        cold_packed = sum(sections[n]["packed_mb"] for n in cold)
+        footprint = hot_live + cold_packed
+        # Cold ranking by packed size (what a user would unpack and how big each is).
+        cold_rank = sorted(
+            [{"section": n, "packed_mb": sections[n]["packed_mb"],
+              "live_when_unpacked_mb": sections[n]["live_mb"],
+              "docs": sections[n]["docs"]} for n in cold],
+            key=lambda d: d["packed_mb"], reverse=True)
+        # Worst-case peak: home live + the single largest cold section unpacked live.
+        peak = footprint + max((sections[n]["live_mb"] for n in cold), default=0.0)
+        personas_out[persona] = {
+            "hot_sections": hot,
+            "hot_live_mb": round(hot_live, 1),
+            "cold_sections_packed_mb": round(cold_packed, 1),
+            "footprint_mb": round(footprint, 1),
+            "saved_vs_all_live_pct": round((1 - footprint / all_live_mb) * 100, 1),
+            "peak_mb_during_unpack": round(peak, 1),
+            "cold_ranking_by_packed_size": cold_rank,
+            "footprint_gb_scaled": {
+                "full_150M": scale(footprint, FULL_SCALE_DOCS),
+                "laptop_15M": scale(footprint, LAPTOP_TIER_DOCS),
+            },
+        }
+
     out = {
         "config": {
             "base_index": BASE_INDEX, "subset_docs": SUBSET_DOCS,
@@ -306,6 +360,7 @@ def main() -> None:
         "sections": sections,
         "unpack_drill": unpack,
         "parity_restored_vs_original": par,
+        "personas": personas_out,
         "scenario_polisci_user": {
             "live_home_mb": live_mb,
             "packed_others_mb": round(packed_others_mb, 1),
@@ -349,6 +404,22 @@ def main() -> None:
           f"{sc['scaled_gb']['laptop_15M']['all_live']} GB all-live; "
           f"full 150M {sc['scaled_gb']['full_150M']['scenario']} GB vs "
           f"{sc['scaled_gb']['full_150M']['all_live']} GB")
+    print("=" * 100)
+
+    print("\nPER-PERSONA FOOTPRINT (home section live + all other sections packed)")
+    print("-" * 100)
+    print(f"{'persona':<24} {'hot (live)':<16} {'footprint':>10} {'peak*':>8} "
+          f"{'saved':>7} {'15M tier':>9} {'150M':>8}")
+    print("-" * 100)
+    for persona, p in personas_out.items():
+        print(f"{persona:<24} {','.join(p['hot_sections'])[:15]:<16} "
+              f"{p['footprint_mb']:>8.0f}MB {p['peak_mb_during_unpack']:>6.0f}MB "
+              f"{p['saved_vs_all_live_pct']:>6.1f}% "
+              f"{p['footprint_gb_scaled']['laptop_15M']:>7.1f}GB "
+              f"{p['footprint_gb_scaled']['full_150M']:>6.1f}GB")
+    print("-" * 100)
+    print("* peak = home-live + largest cold section temporarily unpacked. footprint = steady state.")
+    print("  15M tier / 150M = footprint scaled to laptop subset / full corpus (lexical leg only).")
     print("=" * 100)
 
     if not args.keep_indices:
