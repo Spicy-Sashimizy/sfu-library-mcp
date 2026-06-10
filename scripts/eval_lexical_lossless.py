@@ -116,13 +116,28 @@ def variant_config(name: str) -> dict:
     if name in ("freqs", "combined"):
         for f in ("title", "abstract", "concepts"):
             props[f]["index_options"] = "freqs"
-    if name in ("noid", "combined"):
+    if name in ("noid", "combined", "combined2"):
         props["id"] = {"type": "keyword", "index": False, "doc_values": False}
+    if name in ("sortyear", "combined2"):
+        settings["sort.field"] = "publication_year"
+        settings["sort.order"] = "desc"
+    if name in ("dvoff", "combined2"):
+        for f in ("type", "is_oa"):
+            props[f]["doc_values"] = False
+        if name == "dvoff":  # combined2 keeps year doc_values for index.sort
+            props["publication_year"]["doc_values"] = False
+    if name == "shards2":
+        settings["number_of_shards"] = 2
+    if name == "combined2":  # combined + sortyear + dvoff
+        settings["codec.compression_level"] = 6
+        mappings["_source"] = {"excludes": ["sparse_field"]}
+        for f in ("title", "abstract", "concepts"):
+            props[f]["index_options"] = "freqs"
     return {"settings": {"index": settings}, "mappings": mappings}
 
 
 VARIANTS = ["base", "zstd6", "zstd_no_dict", "nosrc_splade", "extern_display",
-            "freqs", "noid", "combined"]
+            "freqs", "noid", "combined", "sortyear", "dvoff", "shards2", "combined2"]
 
 
 # ── Index plumbing ──────────────────────────────────────────────────────────────
