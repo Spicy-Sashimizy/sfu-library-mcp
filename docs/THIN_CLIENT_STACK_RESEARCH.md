@@ -18,6 +18,22 @@ ONNX SPLADE encoder. Results (`data/eval_results/thin_client_poc.json`):
 | usearch 2.25 b1 binary + fp32 rescore (dense) | 1.6 s | 20 MB | 0.34 ms/q | **recall@10 = 0.975 vs exact** |
 | RRF fusion (production k=60) | — | — | — | works; lexical∩sparse overlap@50 = 6.8 (legs are complementary) |
 
+### Head-to-head vs OpenSearch (same 100k corpus, same 20 BM25F queries, matched role)
+
+A lexical-only OpenSearch index was built with identical content to the tantivy index
+(BM25 title/abstract + filter fields, no SPLADE postings, no stored text):
+
+| | OpenSearch 2.19 (1 shard, force-merged, zstd) | tantivy 0.26 (mmap) |
+|---|---|---|
+| Index size | 209 MB¹ | **65 MB** |
+| BM25F latency (top-50) | 19.7 ms/query² | **4.4 ms/query** |
+| Process RAM | 2,048 MB heap (configured) + off-heap | **45 MB peak RSS** |
+
+¹ OpenSearch copy still carries `doi`/`id` dynamic fields in `_source` (~tens of MB).
+² Includes HTTP+JSON transport (inherent to its architecture; tantivy is in-process);
+measured while the cluster had background reindex load, so treat as indicative —
+the RAM column is the structural difference that matters for the thin client.
+
 Extrapolation to a 15M-doc laptop tier: tantivy ~10 GB (shrinkable: positions off,
 no stored text → metadata in SQLite), sparse leg ~9–13 GB RAM if Seismic
 (disqualifying) vs single-GB-scale with BMP, dense ~3 GB on disk (0.7 GB hot).
