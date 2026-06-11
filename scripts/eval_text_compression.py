@@ -244,10 +244,15 @@ def measure_blocks(name: str, docs: list[dict], order: list[int],
 
 # ── token-id recoding ────────────────────────────────────────────────────────
 
-def run_tokenid_variant(docs: list[dict]) -> dict:
+def _wordpiece_tokenizer():
+    from lib.opensearch_retriever import _resolve_tokenizer_dir
     from transformers import AutoTokenizer
-    tok_dir = REPO_ROOT / "models" / "splade_onnx"
-    tok = AutoTokenizer.from_pretrained(str(tok_dir))
+    return AutoTokenizer.from_pretrained(
+        str(_resolve_tokenizer_dir(str(REPO_ROOT / "models" / "splade_onnx"))))
+
+
+def run_tokenid_variant(docs: list[dict]) -> dict:
+    tok = _wordpiece_tokenizer()
 
     def varint(ids: list[int]) -> bytes:
         out = bytearray()
@@ -371,8 +376,7 @@ def run_slm_variant(docs: list[dict], n_docs: int) -> dict:
 # ── lossy variants + degradation metrics ─────────────────────────────────────
 
 def run_lossy_variants(docs: list[dict], measure_degradation: bool) -> list[dict]:
-    from transformers import AutoTokenizer
-    tok = AutoTokenizer.from_pretrained(str(REPO_ROOT / "models" / "splade_onnx"))
+    tok = _wordpiece_tokenizer()
     z19 = zstandard.ZstdCompressor(level=19)
 
     def stopword_drop(text: str) -> str:
