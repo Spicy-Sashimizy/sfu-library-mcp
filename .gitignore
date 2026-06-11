@@ -158,3 +158,16 @@ data/openalex_eval_cache.json
 data/training/
 
 .claude/.session_start_head
+
+# Pommel daemon binaries (53 MB, provisioned by ClaudeBox — not source)
+.pommel-bin/
+
+# Runtime state mutated by every server/eval/migration run — never commit.
+# (Blanket `git add .` staging of files like these produced ~47 GB of
+# orphaned git objects; see the CLAUDE.md staging rule.)
+benchmark_results.json
+data/solr_cache.json
+data/eval_results/llm_judge_cache.json
+data/openalex_snapshot/download_checkpoint.json
+data/openalex_snapshot/indexer_checkpoint.json
+data/openalex_cite_cache.json

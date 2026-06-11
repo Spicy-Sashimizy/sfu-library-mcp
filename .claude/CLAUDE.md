@@ -12,16 +12,24 @@ Step 2: Only THEN proceed with edits
 
 ### IMMEDIATELY AFTER Any Edit/Write Tool Call:
 ```
-Step 3: Run `git add .`
+Step 3: Run `git add <the specific files you changed>`  — NEVER `git add .`
 Step 4: Run `git commit -m "description"`
 Step 5: Run `git push` (if remote configured)
 ```
 
 ### REQUIRED SEQUENCE (No Exceptions):
-1. `git pull` -> 2. Edit file -> 3. `git add . && git commit && git push`
+1. `git pull` -> 2. Edit file -> 3. `git add <files> && git commit && git push`
+
+**STAGE EXPLICITLY — NEVER `git add .` / `git add -A`:**
+This working tree always contains multi-GB runtime state (index artifacts,
+spools, caches, checkpoints). Blanket staging writes every touched file into
+git's object store even if the commit is later undone — measured 2026-06-11:
+~47 GB of orphaned objects in .git from exactly this. Stage only the files
+you actually edited; `git status --short` first if unsure.
 
 **DO NOT:**
 - Skip the pull step
+- Use `git add .`, `git add -A`, or `git commit -a`
 - Make multiple edits without committing
 - Forget to push after committing
 - Say "I'll commit later" - commit IMMEDIATELY
@@ -304,8 +312,8 @@ Access via the **Git Management** button in the dashboard header.
 # Before starting work
 git pull
 
-# After making changes
-git add .
+# After making changes (stage the specific files — never `git add .`)
+git add <files you changed>
 git commit -m "$(cat <<'EOF'
 Description of changes
 
