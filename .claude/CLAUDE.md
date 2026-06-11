@@ -30,6 +30,71 @@ Step 5: Run `git push` (if remote configured)
 
 ---
 
+## MANDATORY: Documentation Freshness & Efficacy Recording
+
+**History: docs drifted from code and gave the user contradictory/stale answers.
+These rules exist so that never happens again. They are as binding as the git
+workflow above.**
+
+### Source-of-truth hierarchy (use when docs conflict or when answering questions)
+
+1. **The code is always right.** If a doc contradicts the code, the code wins —
+   fix the doc in the same session you noticed the conflict.
+2. `docs/README.md` is the **index** of all documentation. `docs/THIN_CLIENT_SWAP.md`
+   is the **canonical current-architecture doc** ("start here").
+3. Newer measured numbers supersede older ones. The superseded doc gets a dated
+   status note pointing at the newer doc — never leave two live docs disagreeing
+   silently.
+4. Anything in `docs/archive/` (historical) or `docs/deprecated/` (OpenSearch-era,
+   obsolete for this container) is NOT current — never answer user questions from
+   those without saying so.
+
+### Same-commit doc rule
+
+A commit that changes any of the following MUST update the affected doc **in the
+same commit** (not "later", not next session):
+
+| Change | Doc that must be updated |
+|---|---|
+| Architecture, engines, index layout, serving path, env-var gates, MCP tools | `docs/THIN_CLIENT_SWAP.md` |
+| Storage/size numbers, compression levers, quantization params | `docs/STORAGE_BUDGET_150M.md` (and the research doc that measured it) |
+| New/moved/deleted doc | `docs/README.md` index |
+| Defaults changed in code (e.g. QUANT_SCALE, bsize, alpha/beta) | every doc + docstring that states the old value — `grep -rn '<old value>' docs/ src/ scripts/` before committing |
+
+### New-module efficacy rule
+
+A new module, lever, or feature is **not done** until its measured efficacy is
+recorded in the appropriate doc:
+
+- WHAT was measured (metric + dataset/corpus size), the NUMBERS (before → after),
+  the eval script path, the results-file path under `data/eval_results/`, and the
+  absolute date.
+- "Should improve X" without numbers is forbidden in docs. Unmeasured claims must
+  be explicitly marked `*est.*` or "unmeasured / design only".
+- If a module ships before its eval, the doc entry must say "IMPLEMENTED,
+  EFFICACY UNMEASURED" so stale optimism can't masquerade as a result.
+
+### Session-end doc sync (major pushes)
+
+Before ending any session that pushed multiple feature/research commits:
+
+1. Re-read `docs/THIN_CLIENT_SWAP.md` and `docs/README.md` against what was
+   actually built this session; update anything the session made stale.
+2. Move superseded docs to `archive/` or `deprecated/` **with a dated
+   `> **SUPERSEDED**` banner** at the top explaining what replaced them, and
+   repoint every reference (`grep -rln '<filename>' docs/ src/ scripts/`).
+3. Use absolute dates only (e.g. 2026-06-11), never "today"/"recently".
+4. Commit the doc sync (it may be its own commit at session end, but it ships
+   in the same push as the work it documents).
+
+### Freshness check when answering the user from docs
+
+Before quoting a doc, compare its last-modified date (`git log -1 --format=%ci
+-- <doc>`) against recent code commits touching the same subsystem. If code
+moved after the doc, verify the claim in code first — and fix the doc.
+
+---
+
 ## MANDATORY: Virtual Environment (venv)
 
 **The MCP server runs using the project venv, NOT the system Python.**
