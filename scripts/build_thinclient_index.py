@@ -34,11 +34,20 @@ import os
 import shutil
 import sys
 import time
-from concurrent.futures import ThreadPoolExecutor, as_completed
+from concurrent.futures import ProcessPoolExecutor, ThreadPoolExecutor, as_completed
 from pathlib import Path
 
 import requests
 import zstandard
+
+try:  # ~6x faster JSON for the 150M-doc stream
+    import orjson
+    _loads = orjson.loads
+    def _dumps(o) -> str:
+        return orjson.dumps(o).decode()
+except ImportError:
+    _loads = json.loads
+    _dumps = json.dumps
 
 logging.basicConfig(level=logging.INFO,
                     format="%(asctime)s %(levelname)s %(message)s")
@@ -99,7 +108,7 @@ class SectionSpool:
         return self._writers[section][1]
 
     def write(self, section: str, doc: dict) -> None:
-        self._writer(section).write((json.dumps(doc) + "\n").encode())
+        self._writer(section).write((_dumps(doc) + "\n").encode())
 
     def close(self) -> None:
         for fh, zw in self._writers.values():
@@ -126,7 +135,7 @@ def export_slice(spool_dir: Path, slice_id: int, max_slices: int,
         r = requests.post(f"{SOURCE_URL}/{SOURCE_INDEX}/_search?scroll=10m",
                           json=body, timeout=120)
         r.raise_for_status()
-        data = r.json()
+        data = _loads(r.content)
         scroll_id = data["_scroll_id"]
         t0 = time.perf_counter()
         try:
@@ -144,9 +153,10 @@ def export_slice(spool_dir: Path, slice_id: int, max_slices: int,
                 if n % 200_000 < SCROLL_BATCH:
                     rate = n / max(time.perf_counter() - t0, 1)
                     logger.info("slice %d: %s docs (%.0f docs/s)", slice_id, f"{n:,}", rate)
-                data = requests.post(f"{SOURCE_URL}/_search/scroll",
-                                     json={"scroll": "10m", "scroll_id": scroll_id},
-                                     timeout=120).json()
+                data = _loads(requests.post(
+                    f"{SOURCE_URL}/_search/scroll",
+                    json={"scroll": "10m", "scroll_id": scroll_id},
+                    timeout=120).content)
                 scroll_id = data.get("_scroll_id", scroll_id)
         finally:
             requests.delete(f"{SOURCE_URL}/_search/scroll",
@@ -197,15 +207,65 @@ def iter_spool(spool_dir: Path, section: str):
                 *lines, buf = buf.split(b"\n")
                 for ln in lines:
                     if ln:
-                        yield json.loads(ln)
+                        yield _loads(ln)
             if buf.strip():
-                yield json.loads(buf)
+                yield _loads(buf)
+
+
+def build_section_worker(root_str: str, section: str, hot: bool,
+                         keep_spool: bool, bmp_shard_docs: int) -> dict:
+    """Process-pool worker: builds one section with its OWN meta db
+    (meta_<section>.sqlite, merged into meta.sqlite afterwards)."""
+    import sqlite3
+
+    root = Path(root_str)
+    spool_dir = root / "spool"
+    live = root / "sections" / section
+    if live.exists():
+        shutil.rmtree(live)
+
+    meta_path = root / f"meta_{section}.sqlite"
+    meta_path.unlink(missing_ok=True)
+    meta_db = sqlite3.connect(str(meta_path))
+    meta_db.executescript(
+        "PRAGMA journal_mode=OFF; PRAGMA synchronous=OFF;"
+        "CREATE TABLE IF NOT EXISTS docs ("
+        "  id TEXT PRIMARY KEY, title TEXT, doi TEXT, year INTEGER,"
+        "  type TEXT, is_oa INTEGER, section TEXT);"
+    )
+    t0 = time.perf_counter()
+    builder = SectionBuilder(root, section, hot=hot, meta_db=meta_db,
+                             bmp_shard_docs=bmp_shard_docs)
+    for doc in iter_spool(spool_dir, section):
+        builder.add(doc)
+    info = builder.finish()
+    meta_db.close()
+    info["build_secs"] = round(time.perf_counter() - t0, 1)
+    if not keep_spool:
+        shutil.rmtree(spool_dir / section, ignore_errors=True)
+    return info
+
+
+def merge_section_meta(root: Path, sections: list[str]) -> None:
+    main = open_meta_db(root)
+    for section in sections:
+        part = root / f"meta_{section}.sqlite"
+        if not part.exists():
+            continue
+        main.execute("ATTACH DATABASE ? AS part", (str(part),))
+        main.execute("INSERT OR REPLACE INTO docs SELECT * FROM part.docs")
+        main.commit()
+        main.execute("DETACH DATABASE part")
+        part.unlink()
+        logger.info("meta: merged %s", section)
+    main.close()
 
 
 def phase_build(root: Path, status: dict, hot_sections: list[str],
-                keep_spool: bool, bmp_shard_docs: int) -> None:
+                keep_spool: bool, bmp_shard_docs: int,
+                build_workers: int) -> None:
     spool_dir = root / "spool"
-    meta_db = open_meta_db(root)
+    todo = []
     for section in SECTION_NAMES:
         if section in status["sections_built"]:
             continue
@@ -214,25 +274,23 @@ def phase_build(root: Path, status: dict, hot_sections: list[str],
             status["sections_built"].append(section)
             save_status(root, status)
             continue
-        # interrupted mid-section -> rebuild from scratch
-        live = root / "sections" / section
-        if live.exists():
-            logger.info("BUILD: removing partial section dir %s", live)
-            shutil.rmtree(live)
-        logger.info("BUILD: section %s (hot=%s)", section, section in hot_sections)
-        t0 = time.perf_counter()
-        builder = SectionBuilder(root, section, hot=section in hot_sections,
-                                 meta_db=meta_db, bmp_shard_docs=bmp_shard_docs)
-        for doc in iter_spool(spool_dir, section):
-            builder.add(doc)
-        info = builder.finish()
-        info["build_secs"] = round(time.perf_counter() - t0, 1)
-        status.setdefault("section_info", {})[section] = info
-        status["sections_built"].append(section)
-        save_status(root, status)
-        if not keep_spool:
-            shutil.rmtree(spool_dir / section, ignore_errors=True)
-    meta_db.close()
+        todo.append(section)
+    if todo:
+        # Largest sections first so the long pole starts immediately.
+        todo.sort(key=lambda s: -sum(f.stat().st_size
+                                     for f in (spool_dir / s).glob("*")))
+        logger.info("BUILD: %s with %d workers", todo, build_workers)
+        with ProcessPoolExecutor(max_workers=build_workers) as pool:
+            futs = {pool.submit(build_section_worker, str(root), s,
+                                s in hot_sections, keep_spool, bmp_shard_docs): s
+                    for s in todo}
+            for fut in as_completed(futs):
+                section = futs[fut]
+                info = fut.result()
+                status.setdefault("section_info", {})[section] = info
+                status["sections_built"].append(section)
+                save_status(root, status)
+        merge_section_meta(root, todo)
     status["phase"] = "pack"
     save_status(root, status)
 
@@ -303,6 +361,8 @@ def main() -> None:
     parser.add_argument("--slices", type=int, default=8)
     parser.add_argument("--workers", type=int, default=4)
     parser.add_argument("--bmp-shard-docs", type=int, default=2_000_000)
+    parser.add_argument("--build-workers", type=int, default=3,
+                        help="parallel section builds (RAM-bound: ~5-6 GB each)")
     parser.add_argument("--keep-spool", action="store_true")
     args = parser.parse_args()
 
@@ -318,7 +378,8 @@ def main() -> None:
                 root, args.persona, ",".join(hot), status["phase"])
 
     phase_export(root, status, args.slices, args.workers, args.limit)
-    phase_build(root, status, hot, args.keep_spool, args.bmp_shard_docs)
+    phase_build(root, status, hot, args.keep_spool, args.bmp_shard_docs,
+                args.build_workers)
     phase_pack(root, status, hot)
     phase_dense(root, status)
     write_manifest(root, args.persona, hot, status)
