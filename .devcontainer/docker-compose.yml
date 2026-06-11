@@ -1,14 +1,14 @@
-# ClaudeBox Project: sfu-library-mcp-training (training branch of sfu-library-mcp)
-name: claudebox-sfu-library-mcp-training
+# ClaudeBox Project: sfu-library-thinclient (training branch of sfu-library-mcp)
+name: claudebox-sfu-library-thinclient
 
 services:
   app:
-    container_name: claudebox-sfu-library-mcp-training-app
+    container_name: claudebox-sfu-library-thinclient-app
     build:
       context: .
       dockerfile: Dockerfile
     volumes:
-      - ..:/workspaces/sfu-library-mcp-training:cached
+      - ..:/workspaces/sfu-library-thinclient:cached
       - claude-config:/home/vscode/.claude:cached
       - pommel_data:/home/vscode/.pommel-data:cached
       - gh-cli-config:/home/vscode/.config/gh:cached
@@ -28,25 +28,25 @@ services:
     environment:
       - DATABASE_URL=postgresql://${DB_USER:-dev}:${DB_PASSWORD:-dev}@postgres:5432/${DB_NAME:-app_dev}
       - REDIS_URL=redis://:${REDIS_PASSWORD:-dev}@redis:6379/0
-      - SFU_OPENSEARCH_URL=http://claudebox-sfu-library-mcp-training-opensearch:9200
-      - PYTHONPATH=/workspaces/sfu-library-mcp-training
+      - SFU_OPENSEARCH_URL=http://claudebox-sfu-library-thinclient-opensearch:9200
+      - PYTHONPATH=/workspaces/sfu-library-thinclient
       - CLAUDE_CONFIG_DIR=/home/vscode/.claude
       - CLAUDE_BACKEND=${CLAUDE_BACKEND:-anthropic}
       - CLAUDEBOX_CREDENTIALS_FILE=/home/vscode/.claudebox-credentials/credentials.json
       - OLLAMA_HOST=http://host.docker.internal:11434
       - POMMEL_DATA_DIR=/home/vscode/.pommel-data
-      - PROJECT_NAME=sfu-library-mcp-training
-      - POMMEL_HOST=claudebox-sfu-library-mcp-training-pommel
+      - PROJECT_NAME=sfu-library-thinclient
+      - POMMEL_HOST=claudebox-sfu-library-thinclient-pommel
       - POMMEL_PORT=7420
       - NVIDIA_VISIBLE_DEVICES=all
       - NVIDIA_DRIVER_CAPABILITIES=compute,utility
     networks:
-      - claudebox-sfu-library-mcp-training-net
+      - claudebox-sfu-library-thinclient-net
       - claudebox-shared
     extra_hosts:
       - "host.docker.internal:host-gateway"
     labels:
-      - "com.claudebox.project=sfu-library-mcp-training"
+      - "com.claudebox.project=sfu-library-thinclient"
       - "com.claudebox.service=app"
       - "com.claudebox.managed=true"
     deploy:
@@ -65,7 +65,7 @@ services:
         condition: service_healthy
 
   cloudflared:
-    container_name: claudebox-sfu-library-mcp-training-tunnel
+    container_name: claudebox-sfu-library-thinclient-tunnel
     image: cloudflare/cloudflared:latest
     restart: unless-stopped
     env_file:
@@ -74,16 +74,16 @@ services:
     depends_on:
       - app
     networks:
-      - claudebox-sfu-library-mcp-training-net
+      - claudebox-sfu-library-thinclient-net
     labels:
-      - "com.claudebox.project=sfu-library-mcp-training"
+      - "com.claudebox.project=sfu-library-thinclient"
       - "com.claudebox.service=tunnel"
       - "com.claudebox.managed=true"
     profiles:
       - tunnel
 
   postgres:
-    container_name: claudebox-sfu-library-mcp-training-db
+    container_name: claudebox-sfu-library-thinclient-db
     image: postgres:16
     restart: unless-stopped
     environment:
@@ -93,9 +93,9 @@ services:
     volumes:
       - postgres_data:/var/lib/postgresql/data
     networks:
-      - claudebox-sfu-library-mcp-training-net
+      - claudebox-sfu-library-thinclient-net
     labels:
-      - "com.claudebox.project=sfu-library-mcp-training"
+      - "com.claudebox.project=sfu-library-thinclient"
       - "com.claudebox.service=database"
       - "com.claudebox.managed=true"
     healthcheck:
@@ -105,7 +105,7 @@ services:
       retries: 5
 
   opensearch:
-    container_name: claudebox-sfu-library-mcp-training-opensearch
+    container_name: claudebox-sfu-library-thinclient-opensearch
     # 3.7.0 upgrade prepared 2026-06-10 — BEFORE recreating this container, take the
     # cold volume backup per docs/OPENSEARCH3_UPGRADE.md (only rollback path: Lucene 10
     # segments are unreadable by 2.x). Pre-flight audit passed; zstd index opens in 3.x.
@@ -128,11 +128,11 @@ services:
     volumes:
       - opensearch_data:/usr/share/opensearch/data
     ports:
-      - "9200:9200"
+      - "9201:9200"
     networks:
-      - claudebox-sfu-library-mcp-training-net
+      - claudebox-sfu-library-thinclient-net
     labels:
-      - "com.claudebox.project=sfu-library-mcp-training"
+      - "com.claudebox.project=sfu-library-thinclient"
       - "com.claudebox.service=opensearch"
       - "com.claudebox.managed=true"
     healthcheck:
@@ -143,16 +143,16 @@ services:
       start_period: 60s
 
   redis:
-    container_name: claudebox-sfu-library-mcp-training-redis
+    container_name: claudebox-sfu-library-thinclient-redis
     image: redis:7-alpine
     command: ["redis-server", "--requirepass", "${REDIS_PASSWORD:-dev}"]
     restart: unless-stopped
     volumes:
       - redis_data:/data
     networks:
-      - claudebox-sfu-library-mcp-training-net
+      - claudebox-sfu-library-thinclient-net
     labels:
-      - "com.claudebox.project=sfu-library-mcp-training"
+      - "com.claudebox.project=sfu-library-thinclient"
       - "com.claudebox.service=cache"
       - "com.claudebox.managed=true"
     healthcheck:
@@ -162,11 +162,11 @@ services:
       retries: 5
 
 networks:
-  claudebox-sfu-library-mcp-training-net:
-    name: claudebox-sfu-library-mcp-training-net
+  claudebox-sfu-library-thinclient-net:
+    name: claudebox-sfu-library-thinclient-net
     driver: bridge
     labels:
-      - "com.claudebox.project=sfu-library-mcp-training"
+      - "com.claudebox.project=sfu-library-thinclient"
       - "com.claudebox.managed=true"
   claudebox-shared:
     external: true
@@ -174,35 +174,35 @@ networks:
 
 volumes:
   postgres_data:
-    name: claudebox-sfu-library-mcp-training-postgres
+    name: claudebox-sfu-library-thinclient-postgres
     labels:
-      com.claudebox.project: sfu-library-mcp-training
+      com.claudebox.project: sfu-library-thinclient
       com.claudebox.managed: "true"
   redis_data:
-    name: claudebox-sfu-library-mcp-training-redis
+    name: claudebox-sfu-library-thinclient-redis
     labels:
-      com.claudebox.project: sfu-library-mcp-training
+      com.claudebox.project: sfu-library-thinclient
       com.claudebox.managed: "true"
   pommel_data:
-    name: claudebox-sfu-library-mcp-training-pommel
+    name: claudebox-sfu-library-thinclient-pommel
     labels:
-      com.claudebox.project: sfu-library-mcp-training
+      com.claudebox.project: sfu-library-thinclient
       com.claudebox.managed: "true"
   gh-cli-config:
-    name: claudebox-sfu-library-mcp-training-gh-cli
+    name: claudebox-sfu-library-thinclient-gh-cli
     labels:
-      com.claudebox.project: sfu-library-mcp-training
+      com.claudebox.project: sfu-library-thinclient
       com.claudebox.managed: "true"
   claude-config:
     name: claudebox-shared-config
     external: true
   claude-local:
-    name: claudebox-sfu-library-mcp-training-local
+    name: claudebox-sfu-library-thinclient-local
     labels:
-      com.claudebox.project: sfu-library-mcp-training
+      com.claudebox.project: sfu-library-thinclient
       com.claudebox.managed: "true"
   opensearch_data:
-    name: claudebox-sfu-library-mcp-training-opensearch
+    name: claudebox-sfu-library-thinclient-opensearch
     labels:
-      com.claudebox.project: sfu-library-mcp-training
+      com.claudebox.project: sfu-library-thinclient
       com.claudebox.managed: "true"
