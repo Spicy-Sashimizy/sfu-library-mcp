@@ -59,7 +59,8 @@ sys.path.insert(0, str(REPO_ROOT / "src"))
 from lib.thinclient.builder import (BMP_BLOCK_SIZE, META_SCHEMA, QUANT_SCALE,  # noqa: E402
                                     SectionBuilder, build_dense_leg, open_meta_db)
 from lib.thinclient.packer import pack_section  # noqa: E402
-from lib.thinclient.sections import PERSONAS, SECTION_NAMES, classify_doc  # noqa: E402
+from lib.thinclient.sections import (ERAS, PERSONAS, SECTION_NAMES,  # noqa: E402
+                                     SUBSECTION_NAMES, classify_doc, era_of)
 
 SOURCE_URL = os.environ.get("SFU_MIGRATION_SOURCE",
                             "http://host.docker.internal:9200").rstrip("/")
@@ -219,33 +220,45 @@ def iter_spool(spool_dir: Path, section: str):
                 yield _loads(buf)
 
 
-def build_section_worker(root_str: str, section: str, hot: bool,
+def build_section_worker(root_str: str, section: str, hot_subs: list[str],
                          keep_spool: bool, bmp_shard_docs: int) -> dict:
-    """Process-pool worker: builds one section with its OWN meta db
+    """Process-pool worker: builds one BASE section's spool into its two era
+    sub-sections (sections/<base>__<era>/), with its OWN meta db
     (meta_<section>.sqlite, merged into meta.sqlite afterwards)."""
     import sqlite3
 
     root = Path(root_str)
     spool_dir = root / "spool"
-    live = root / "sections" / section
-    if live.exists():
-        shutil.rmtree(live)
+    for era in ERAS:
+        live = root / "sections" / f"{section}__{era}"
+        if live.exists():
+            shutil.rmtree(live)
 
     meta_path = root / f"meta_{section}.sqlite"
     meta_path.unlink(missing_ok=True)
     meta_db = sqlite3.connect(str(meta_path))
     meta_db.executescript(META_SCHEMA)
     t0 = time.perf_counter()
-    builder = SectionBuilder(root, section, hot=hot, meta_db=meta_db,
-                             bmp_shard_docs=bmp_shard_docs)
+    builders: dict[str, SectionBuilder] = {}
     for doc in iter_spool(spool_dir, section):
-        builder.add(doc)
-    info = builder.finish()
+        era = era_of(int(doc.get("publication_year") or 0))
+        b = builders.get(era)
+        if b is None:
+            sub = f"{section}__{era}"
+            b = builders[era] = SectionBuilder(
+                root, sub, hot=sub in hot_subs, meta_db=meta_db,
+                bmp_shard_docs=bmp_shard_docs)
+        b.add(doc)
+    infos: dict[str, dict] = {}
+    for era, b in builders.items():
+        infos[f"{section}__{era}"] = b.finish()
     meta_db.close()
-    info["build_secs"] = round(time.perf_counter() - t0, 1)
+    secs = round(time.perf_counter() - t0, 1)
+    for info in infos.values():
+        info["build_secs"] = secs
     if not keep_spool:
         shutil.rmtree(spool_dir / section, ignore_errors=True)
-    return info
+    return infos
 
 
 def merge_section_meta(root: Path, sections: list[str]) -> None:
@@ -286,12 +299,12 @@ def phase_build(root: Path, status: dict, hot_sections: list[str],
         logger.info("BUILD: %s with %d workers", todo, build_workers)
         with ProcessPoolExecutor(max_workers=build_workers) as pool:
             futs = {pool.submit(build_section_worker, str(root), s,
-                                s in hot_sections, keep_spool, bmp_shard_docs): s
+                                hot_sections, keep_spool, bmp_shard_docs): s
                     for s in todo}
             for fut in as_completed(futs):
                 section = futs[fut]
-                info = fut.result()
-                status.setdefault("section_info", {})[section] = info
+                infos = fut.result()   # {sub_section: info} (per era)
+                status.setdefault("section_info", {}).update(infos)
                 status["sections_built"].append(section)
                 save_status(root, status)
     # Over ALL sections, not just this run's: a crash between a section build
@@ -305,7 +318,7 @@ def phase_build(root: Path, status: dict, hot_sections: list[str],
 # ── phase 3: pack cold sections ──────────────────────────────────────────────
 
 def phase_pack(root: Path, status: dict, hot_sections: list[str]) -> None:
-    for section in SECTION_NAMES:
+    for section in SUBSECTION_NAMES:
         if section in hot_sections or section in status["sections_packed"]:
             continue
         if not (root / "sections" / section).is_dir():
@@ -349,7 +362,7 @@ def write_manifest(root: Path, persona: str, hot_sections: list[str],
                               f"bsize={BMP_BLOCK_SIZE}, clustered)",
                     "dense": "usearch b1 + int8 rescore (binary+rescore 32x)"},
     })
-    for section in SECTION_NAMES:
+    for section in SUBSECTION_NAMES:
         entry = manifest["sections"].setdefault(section, {})
         if "state" not in entry:
             entry["state"] = "live" if (root / "sections" / section).is_dir() else "absent"

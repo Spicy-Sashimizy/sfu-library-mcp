@@ -1030,7 +1030,8 @@ async def _handle_get_index_status(args: dict[str, Any]) -> list[TextContent]:
 
 
 async def _handle_list_personas(args: dict[str, Any]) -> list[TextContent]:
-    from lib.thinclient.sections import PERSONAS, SECTION_NAMES
+    from lib.thinclient.sections import (ERA_BOUNDARY_YEAR, PERSONAS,
+                                         SECTION_NAMES, SUBSECTION_NAMES)
     tc = _get_thinclient_retriever()
     live = []
     if tc is not None:
@@ -1038,11 +1039,15 @@ async def _handle_list_personas(args: dict[str, Any]) -> list[TextContent]:
             live = tc.live_sections()
         except Exception:
             pass
+    # Era-qualified names on the new layout; legacy indexes report base names.
+    known = SUBSECTION_NAMES if any("__" in s for s in live) else SECTION_NAMES
     out = {
         "personas": PERSONAS,
         "sections": SECTION_NAMES,
+        "era_subsections": SUBSECTION_NAMES,
+        "era_boundary_year": ERA_BOUNDARY_YEAR,
         "live_sections": live,
-        "cold_sections": [s for s in SECTION_NAMES if s not in live],
+        "cold_sections": [s for s in known if s not in live],
         "active_profile": _get_config().active_profile,
     }
     return [TextContent(type="text", text=json.dumps(out, indent=2))]
@@ -1052,11 +1057,12 @@ async def _handle_request_section_unpack(args: dict[str, Any]) -> list[TextConte
     tc, err = _require_thinclient()
     if err:
         return err
-    from lib.thinclient.sections import SECTION_NAMES
+    from lib.thinclient.sections import SECTION_NAMES, SUBSECTION_NAMES
     section = args.get("section", "")
-    if section not in SECTION_NAMES:
+    valid = SUBSECTION_NAMES + SECTION_NAMES   # era-qualified + legacy names
+    if section not in valid:
         return [TextContent(type="text", text=(
-            f"Unknown section '{section}'. Valid: {', '.join(SECTION_NAMES)}"))]
+            f"Unknown section '{section}'. Valid: {', '.join(valid)}"))]
     if section in tc.live_sections():
         return [TextContent(type="text", text=f"Section '{section}' is already live.")]
     with _jobs_lock():

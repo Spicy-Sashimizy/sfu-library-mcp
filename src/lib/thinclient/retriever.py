@@ -32,7 +32,7 @@ import time
 from pathlib import Path
 from typing import Any
 
-from lib.thinclient.sections import classify_query
+from lib.thinclient.sections import ERA_BOUNDARY_YEAR, ERAS, classify_query
 
 logger = logging.getLogger("sfu_library_mcp")
 
@@ -189,13 +189,23 @@ class ThinClientRetriever:
         self._load()
         return sorted(self._sections)
 
-    def cold_section_hint(self, query: str) -> str | None:
-        """Section this query classifies to when that section is NOT live —
-        i.e. results may be missing because the home section is packed/absent.
+    def cold_section_hint(self, query: str,
+                          filters: dict | None = None) -> str | None:
+        """Sub-section this query classifies to when it is NOT live — i.e.
+        results may be missing because the home (sub-)section is packed/absent.
+        Era-aware: a year filter that excludes an era suppresses hints for it.
         Used for routing telemetry and client-visible unpack hints."""
         self._load()
-        section = classify_query(query)
-        return None if section in self._sections else section
+        base = classify_query(query)
+        if base in self._sections:          # legacy era-less layout
+            return None
+        f = _normalize_filters(filters)
+        for era in ERAS:                    # recent first: the era axis leads
+            sub = f"{base}__{era}"
+            if sub in self._sections or _era_skip(sub, f):
+                continue
+            return sub
+        return None
 
     def metrics(self) -> dict:
         """Per-leg latency/error counters + index coverage (for /health)."""
@@ -364,6 +374,8 @@ class ThinClientRetriever:
             return []
         merged: list[tuple[str, float]] = []
         for name, sec in self._sections.items():
+            if _era_skip(name, f):
+                continue
             idx, searcher = sec["index"], sec["searcher"]
             qt = idx.parse_query(text, ["title"])
             qa = idx.parse_query(text, ["abstract"])
@@ -407,6 +419,8 @@ class ThinClientRetriever:
         fetch = top_k * (OVERFETCH_FILTERED if f else 1)
         merged: list[tuple[str, float]] = []
         for name, sec in self._sections.items():
+            if _era_skip(name, f):
+                continue
             for shard in sec["bmp"]:
                 # BMP panics (Rust unwrap) when NO query term exists in the
                 # shard — skip via the vocab sidecar; guard for old builds.
@@ -567,6 +581,20 @@ def _invert_abstract(inv: dict[str, list[int]]) -> str:
         positions.extend((i, word) for i in idxs)
     positions.sort()
     return " ".join(w for _, w in positions)
+
+
+def _era_skip(section_name: str, f: dict | None) -> bool:
+    """Era pruning — the fast axis: a year-bounded query never needs the other
+    era's sub-sections, so they are skipped outright (cross-discipline pruning
+    is impossible; cross-era pruning is free)."""
+    if not f or not f.get("year_range"):
+        return False
+    lo, hi = f["year_range"]
+    if section_name.endswith("__recent"):
+        return hi < ERA_BOUNDARY_YEAR
+    if section_name.endswith("__archive"):
+        return lo >= ERA_BOUNDARY_YEAR
+    return False
 
 
 def _normalize_filters(filters: dict | None) -> dict | None:

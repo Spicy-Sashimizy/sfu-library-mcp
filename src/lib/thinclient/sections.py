@@ -35,15 +35,52 @@ SECTIONS: list[tuple[str, str]] = [
 OTHER = "other"
 SECTION_NAMES: list[str] = [name for name, _ in SECTIONS] + [OTHER]
 
-# Persona -> HOT sections (kept live with abstract sidecar); everything else is
-# COLD (packed zstd-19 artifact archives, no local abstracts).
+# ── Era split (date-range hot/cold) ──────────────────────────────────────────
+# Temporal access locality is higher than cross-discipline overlap: a
+# contemporary researcher's candidates cluster in recent decades, a historian's
+# in the archive. Each subject section is therefore BUILT as two era
+# sub-sections (sections/<base>__<era>/), and personas pick era-qualified hots.
+# The export spool stays keyed by BASE section — era routing happens at build
+# time from publication_year, so an in-flight export is unaffected.
+ERA_BOUNDARY_YEAR = 2010
+ERAS = ("recent", "archive")
+
+
+def era_of(year: int | None) -> str:
+    return "recent" if year and year >= ERA_BOUNDARY_YEAR else "archive"
+
+
+def subsection_name(base: str, year: int | None) -> str:
+    return f"{base}__{era_of(year)}"
+
+
+def base_section(name: str) -> str:
+    """'social_sciences__recent' -> 'social_sciences' (era-less names pass through)."""
+    return name.split("__", 1)[0]
+
+
+SUBSECTION_NAMES: list[str] = [f"{b}__{e}" for b in SECTION_NAMES for e in ERAS]
+
+# Persona -> HOT sub-sections (kept live with abstract sidecar); everything
+# else is COLD (packed zstd-19 artifact archives, no local abstracts).
+# Subject personas default to the contemporary era; *_historical variants
+# keep the archive era hot instead.
 PERSONAS: dict[str, list[str]] = {
-    "political_science": ["social_sciences"],
-    "computer_science": ["cs_math"],
-    "health_science": ["med_bio"],
-    "interdisciplinary_cogsci": ["med_bio", "cs_math", "social_sciences"],
+    "political_science": ["social_sciences__recent"],
+    "political_science_historical": ["social_sciences__archive"],
+    "computer_science": ["cs_math__recent"],
+    "computer_science_historical": ["cs_math__archive"],
+    "health_science": ["med_bio__recent"],
+    "health_science_historical": ["med_bio__archive"],
+    "interdisciplinary_cogsci": ["med_bio__recent", "cs_math__recent",
+                                 "social_sciences__recent"],
+    # Era-wide personas — the era axis is the PRIMARY locality axis: users
+    # cross disciplines within their era far more than they cross eras, so
+    # these keep a whole era hot across all subjects for the fastest access.
+    "contemporary": [f"{b}__recent" for b in SECTION_NAMES],
+    "historical": [f"{b}__archive" for b in SECTION_NAMES],
     # Testbed persona: everything live (no cold packing).
-    "all_hot": SECTION_NAMES,
+    "all_hot": SUBSECTION_NAMES,
 }
 
 _TOKEN_RE = re.compile(r"[a-z0-9]+")
