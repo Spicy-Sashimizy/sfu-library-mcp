@@ -311,3 +311,36 @@ Per the UTF-8 encoding ([Wikipedia/UTF-8](https://en.wikipedia.org/wiki/UTF-8)):
 - Measured, high confidence: OpenAlex API language counts (queried live 2026-06-11); Céspedes et al. JASIST 2025 verification stats; Brisaboa et al. SEA 2011 dictionary benchmarks; marisa-trie benchmark tables; BERT CJK tokenization behavior (documented code behavior); tantivy-sstable format docs.
 - Author-claimed, credible, unreproduced: brotli dictionary composition + "wins with zeroed dictionary" (brotli author, HN); Qwen chars/token rules of thumb and "higher compression in most languages."
 - Identified literature gaps (we would generate first public numbers): mixed-vs-per-language zstd dictionary dilution; Brotli per-language built-in-dict penalty table.
+
+## 8. MEASURED on this corpus (scripts/eval_text_compression.py, 2026-06-11)
+
+20,000 real abstracts (24 MB, avg 1,203 B/doc), random-access drill = 100
+random fetches (the rerank budget is 300 ms). Full JSON:
+`data/eval_results/text_compression_eval.json`.
+
+| variant | ratio | B/doc | fetch-100 | budget | lossless |
+|---|---|---|---|---|---|
+| zstd3 (today's baseline) | 1.98 | 607 | 0.5 ms | OK | yes |
+| zstd19 + per-section dicts | 2.82 | 427 | 0.5 ms | OK | yes |
+| brotli11 (builtin dict) | 2.59 | 465 | 1.3 ms | OK | yes |
+| 32 KB blocks, corpus order | 2.87 | 419 | 10.4 ms | OK | yes |
+| **32 KB blocks, clustered (section+top-SPLADE-term)** | **2.99** | **402** | 7.5 ms | OK | yes |
+| token-ID varint+zstd-dict | 2.96 | 406 | 44 ms | OK | ids-only (text re-detokenized; CJK lossy) |
+| **SLM rank coding (gpt2, LLMZip-style)** | 2.72 | 395 | **423,396 ms** | **FAIL ×1,400** | **NO** — same-machine round trip already breaks (batched-vs-incremental kernel numerics shift logits → rank mismatch), independently confirming §2's reproducibility verdict |
+| lossy stopword-drop | 2.25 | 506 | — | — | cos 0.968 → **fails the 0.98 degradation gate** |
+| lossy truncate-128tok | 4.34 | 263 | — | — | cos 0.955 → **fails the gate** |
+
+ID key column (sorted W-ids, 12 B/id raw): front coding 7.9 B (1.5×),
+**delta-varint of the numeric part 2.66 B (4.5×)** — matches §7's verdict that
+numeric encoding beats front coding for this column.
+
+Per-language (py3langid on the sample; scroll-order sample, share not
+corpus-representative): per-language dicts beat the mixed dict by **+4.7% (en)
+to +37.6% (zh), +47.7% (ru), +57.2% (tr)** — language-aware dictionary routing
+is validated and nearly free (1-byte dict id). Brotli's builtin dict loses to
+zstd own-dict for every non-English language measured.
+
+**Adopted recommendation:** hot-section abstract sidecar → zstd-19 with
+per-(section×language) trained dictionaries; consider clustered 32 KB blocks
+(+6% ratio at +7 ms/100 docs) if B/doc matters more than point-lookup
+simplicity. SLM decode: cold-tier/archival only, exactly as §2 concluded.

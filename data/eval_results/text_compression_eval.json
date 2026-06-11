@@ -1,0 +1,293 @@
+{
+  "config": {
+    "docs": 20000,
+    "raw_mb": 24.1,
+    "avg_doc_bytes": 1203,
+    "rerank_fetch": 100,
+    "budget_ms": 300,
+    "source": "http://host.docker.internal:9200/openalex_works"
+  },
+  "results": [
+    {
+      "variant": "zstd3",
+      "lossless": true,
+      "ratio": 1.983,
+      "bytes_per_doc": 606.9,
+      "encode_secs": 0.26,
+      "fetch100_ms": 0.49,
+      "fits_300ms_budget": true
+    },
+    {
+      "variant": "zstd19",
+      "lossless": true,
+      "ratio": 2.053,
+      "bytes_per_doc": 586.1,
+      "encode_secs": 3.72,
+      "fetch100_ms": 0.44,
+      "fits_300ms_budget": true
+    },
+    {
+      "variant": "zstd19_dict_per_section",
+      "lossless": true,
+      "ratio": 2.82,
+      "bytes_per_doc": 426.7,
+      "encode_secs": 5.48,
+      "fetch100_ms": 0.47,
+      "fits_300ms_budget": true
+    },
+    {
+      "variant": "brotli11",
+      "lossless": true,
+      "ratio": 2.59,
+      "bytes_per_doc": 464.7,
+      "encode_secs": 33.81,
+      "fetch100_ms": 1.27,
+      "fits_300ms_budget": true
+    },
+    {
+      "variant": "block32k_zstd19_dict_corpus_order",
+      "lossless": true,
+      "ratio": 2.873,
+      "bytes_per_doc": 418.8,
+      "encode_secs": 5.02,
+      "blocks": 712,
+      "fetch100_ms": 10.36,
+      "fits_300ms_budget": true
+    },
+    {
+      "variant": "block32k_zstd19_dict_clustered",
+      "lossless": true,
+      "ratio": 2.994,
+      "bytes_per_doc": 401.9,
+      "encode_secs": 4.64,
+      "blocks": 715,
+      "fetch100_ms": 7.51,
+      "fits_300ms_budget": true
+    },
+    {
+      "variant": "tokenid_varint_zstd_dict",
+      "lossless": false,
+      "token_lossless": true,
+      "ratio": 2.962,
+      "bytes_per_doc": 406.2,
+      "encode_secs": 18.55,
+      "fetch100_ms": 44.28,
+      "fits_300ms_budget": true,
+      "note": "ids round-trip; text re-detokenized (casing/whitespace lost)"
+    },
+    {
+      "variant": "slm_rank_zstd (gpt2, LLMZip-style)",
+      "lossless": false,
+      "docs_tested": 30,
+      "device": "cuda",
+      "ratio": 2.716,
+      "bytes_per_doc": 394.9,
+      "encode_secs": 3.79,
+      "fetch100_ms": 423395.7,
+      "fits_300ms_budget": false,
+      "note": "bit-exact ONLY with identical model/hardware/dtype \u2014 the reproducibility caveat from LEXICAL_STORAGE_RESEARCH.md; decode is 1 LM forward per token"
+    },
+    {
+      "variant": "lossy_stopword_drop",
+      "lossless": false,
+      "ratio": 2.253,
+      "bytes_per_doc": 505.9,
+      "embed_cosine_vs_original": 0.9681,
+      "degradation_flag": true
+    },
+    {
+      "variant": "lossy_trunc128tok",
+      "lossless": false,
+      "ratio": 4.338,
+      "bytes_per_doc": 262.8,
+      "embed_cosine_vs_original": 0.9547,
+      "degradation_flag": true
+    },
+    {
+      "variant": "ids_raw_terminated",
+      "lossless": true,
+      "ratio": 1.0,
+      "bytes_per_doc": 11.99,
+      "note": "",
+      "scope": "id_key_column"
+    },
+    {
+      "variant": "ids_front_coded_b16",
+      "lossless": true,
+      "ratio": 1.509,
+      "bytes_per_doc": 7.94,
+      "note": "common-prefix byte + suffix, restart every 16 (random access)",
+      "scope": "id_key_column"
+    },
+    {
+      "variant": "ids_delta_varint_numeric",
+      "lossless": true,
+      "ratio": 4.515,
+      "bytes_per_doc": 2.66,
+      "note": "sorted numeric deltas; needs digits-only ids",
+      "scope": "id_key_column"
+    },
+    {
+      "variant": "ids_zstd19_blob",
+      "lossless": true,
+      "ratio": 4.349,
+      "bytes_per_doc": 2.76,
+      "note": "no random access (whole-list blob)",
+      "scope": "id_key_column"
+    }
+  ],
+  "languages": {
+    "language_share": {
+      "en": 0.5441,
+      "zh": 0.0999,
+      "es": 0.0779,
+      "ko": 0.0582,
+      "id": 0.0478,
+      "pt": 0.0418,
+      "fa": 0.035,
+      "ru": 0.0169,
+      "fr": 0.0132,
+      "tr": 0.0115,
+      "de": 0.0067,
+      "uk": 0.0054,
+      "it": 0.0053,
+      "ms": 0.0052,
+      "ar": 0.0048,
+      "ja": 0.004,
+      "ca": 0.0026,
+      "th": 0.0021,
+      "nl": 0.0021,
+      "pl": 0.0016,
+      "hr": 0.0015,
+      "no": 0.0014,
+      "cs": 0.001,
+      "ro": 0.0008,
+      "sv": 0.0007,
+      "lt": 0.0007,
+      "la": 0.0006,
+      "da": 0.0006,
+      "ur": 0.0005,
+      "fi": 0.0004,
+      "ka": 0.0004,
+      "hu": 0.0004,
+      "af": 0.0003,
+      "mr": 0.0003,
+      "sr": 0.0003,
+      "hi": 0.0003,
+      "bs": 0.0003,
+      "he": 0.0003,
+      "nb": 0.0002,
+      "vi": 0.0002,
+      "eu": 0.0002,
+      "an": 0.0002,
+      "se": 0.0002,
+      "az": 0.0001,
+      "gl": 0.0001,
+      "tl": 0.0001,
+      "el": 0.0001,
+      "zu": 0.0001,
+      "bg": 0.0001,
+      "rw": 0.0001,
+      "qu": 0.0001,
+      "jv": 0.0001,
+      "sl": 0.0001,
+      "sk": 0.0001,
+      "ne": 0.0001,
+      "bn": 0.0001,
+      "km": 0.0001,
+      "sq": 0.0001,
+      "is": 0.0001,
+      "fo": 0.0001,
+      "ky": 0.0001,
+      "mg": 0.0001,
+      "sw": 0.0001,
+      "am": 0.0001,
+      "ps": 0.0001,
+      "ht": 0.0001,
+      "mt": 0.0001,
+      "ta": 0.0001
+    },
+    "per_language": {
+      "en": {
+        "docs": 10881,
+        "avg_doc_bytes": 1133,
+        "zstd19_mixed_dict_ratio": 2.93,
+        "zstd19_own_dict_ratio": 3.074,
+        "own_dict_gain_pct": 4.7,
+        "brotli11_ratio": 2.823
+      },
+      "zh": {
+        "docs": 1998,
+        "avg_doc_bytes": 592,
+        "zstd19_mixed_dict_ratio": 1.459,
+        "zstd19_own_dict_ratio": 2.339,
+        "own_dict_gain_pct": 37.6,
+        "brotli11_ratio": 1.821
+      },
+      "es": {
+        "docs": 1557,
+        "avg_doc_bytes": 1218,
+        "zstd19_mixed_dict_ratio": 2.582,
+        "zstd19_own_dict_ratio": 3.151,
+        "own_dict_gain_pct": 18.1,
+        "brotli11_ratio": 2.374
+      },
+      "ko": {
+        "docs": 1164,
+        "avg_doc_bytes": 1536,
+        "zstd19_mixed_dict_ratio": 2.516,
+        "zstd19_own_dict_ratio": 3.495,
+        "own_dict_gain_pct": 28.0,
+        "brotli11_ratio": 2.259
+      },
+      "id": {
+        "docs": 955,
+        "avg_doc_bytes": 1735,
+        "zstd19_mixed_dict_ratio": 3.007,
+        "zstd19_own_dict_ratio": 3.82,
+        "own_dict_gain_pct": 21.3,
+        "brotli11_ratio": 2.511
+      },
+      "pt": {
+        "docs": 835,
+        "avg_doc_bytes": 1367,
+        "zstd19_mixed_dict_ratio": 2.458,
+        "zstd19_own_dict_ratio": 3.33,
+        "own_dict_gain_pct": 26.2,
+        "brotli11_ratio": 2.213
+      },
+      "fa": {
+        "docs": 700,
+        "avg_doc_bytes": 2133,
+        "zstd19_mixed_dict_ratio": 3.505,
+        "zstd19_own_dict_ratio": 4.788,
+        "own_dict_gain_pct": 26.8,
+        "brotli11_ratio": 3.033
+      },
+      "ru": {
+        "docs": 339,
+        "avg_doc_bytes": 1437,
+        "zstd19_mixed_dict_ratio": 3.083,
+        "zstd19_own_dict_ratio": 5.896,
+        "own_dict_gain_pct": 47.7,
+        "brotli11_ratio": 3.114
+      },
+      "fr": {
+        "docs": 263,
+        "avg_doc_bytes": 1026,
+        "zstd19_mixed_dict_ratio": 2.174,
+        "zstd19_own_dict_ratio": 4.748,
+        "own_dict_gain_pct": 54.2,
+        "brotli11_ratio": 2.102
+      },
+      "tr": {
+        "docs": 230,
+        "avg_doc_bytes": 1306,
+        "zstd19_mixed_dict_ratio": 2.1,
+        "zstd19_own_dict_ratio": 4.903,
+        "own_dict_gain_pct": 57.2,
+        "brotli11_ratio": 2.166
+      }
+    }
+  }
+}
