@@ -101,8 +101,17 @@ class ThinClientRetriever:
                         vocab = None
                         if vocab_path.exists():
                             import zstandard
-                            vocab = set(zstandard.ZstdDecompressor().decompress(
-                                vocab_path.read_bytes()).decode().split("\n"))
+                            try:
+                                vocab = set(zstandard.ZstdDecompressor().decompress(
+                                    vocab_path.read_bytes()).decode().split("\n"))
+                            except Exception as e:
+                                # A corrupt sidecar must not take down the whole
+                                # index; vocab=None falls back to querying the
+                                # shard without the zero-overlap guard.
+                                logger.warning("thinclient: bad vocab sidecar %s "
+                                               "(%s) — loading shard without it",
+                                               vocab_path, e)
+                                vocab = None
                         shards.append({"searcher": bmp.Searcher(str(p)),
                                        "vocab": vocab})
                     self._sections[sdir.name] = {

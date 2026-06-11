@@ -56,7 +56,8 @@ logger = logging.getLogger("build_thinclient")
 REPO_ROOT = Path(__file__).parent.parent
 sys.path.insert(0, str(REPO_ROOT / "src"))
 
-from lib.thinclient.builder import SectionBuilder, build_dense_leg, open_meta_db  # noqa: E402
+from lib.thinclient.builder import (BMP_BLOCK_SIZE, QUANT_SCALE, SectionBuilder,  # noqa: E402
+                                    build_dense_leg, open_meta_db)
 from lib.thinclient.packer import pack_section  # noqa: E402
 from lib.thinclient.sections import PERSONAS, SECTION_NAMES, classify_doc  # noqa: E402
 
@@ -178,7 +179,10 @@ def phase_export(root: Path, status: dict, slices: int, workers: int,
         return
     logger.info("EXPORT: %d/%d slices to go (source %s/%s)",
                 len(todo), slices, SOURCE_URL, SOURCE_INDEX)
-    per_slice_limit = (limit // max(len(todo), 1)) if limit else None
+    # On resume, budget only what's left of the limit, or the rerun slices
+    # re-export a full share each and the total overshoots.
+    remaining = (max(limit - status["docs_exported"], 0) if limit else None)
+    per_slice_limit = (remaining // max(len(todo), 1)) if remaining else None
     # Processes, not threads: orjson parse + classify + spool write are
     # GIL-bound (measured: 4 threads aggregate ~1.6k docs/s, same as 1).
     pool_cls = ThreadPoolExecutor if (limit and slices == 1) else ProcessPoolExecutor
@@ -339,9 +343,10 @@ def write_manifest(root: Path, persona: str, hot_sections: list[str],
         "docs_exported": status["docs_exported"],
         "persona": persona,
         "hot_sections": hot_sections,
-        "splade_quant_scale": 100,
+        "splade_quant_scale": QUANT_SCALE,
         "engines": {"lexical": "tantivy 0.26 (BM25F title^3/abstract, freq-only)",
-                    "sparse": "bmp 0.2.6 (8-bit block-max impacts, bsize=32)",
+                    "sparse": f"bmp 0.2.6 (8-bit block-max impacts, "
+                              f"bsize={BMP_BLOCK_SIZE}, clustered)",
                     "dense": "usearch b1 + int8 rescore (binary+rescore 32x)"},
     })
     for section in SECTION_NAMES:
