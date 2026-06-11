@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Thin-client search stack POC: tantivy (BM25F) + seismic (SPLADE) + usearch
 (dense binary+rescore) — the no-JVM laptop stack recommended by
-docs/SEARCH_ENGINE_ALTERNATIVES.md — exercised on REAL project data.
+docs/THIN_CLIENT_STACK_RESEARCH.md (appendix) — exercised on REAL project data.
 
 What it measures (per engine): index build time, on-disk size, mean query
 latency, plus dense recall vs exact and a 2-leg RRF fusion smoke test

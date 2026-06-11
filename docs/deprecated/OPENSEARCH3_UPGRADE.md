@@ -106,8 +106,8 @@ docker run --rm -v sfu-library-mcp-training_opensearch_data:/dst -v /path/with/s
    `?search_pipeline=two_phase_search_pipeline`. Then re-run the NDCG@10 harness.
 2. **New dense indices get derived source by default** (3.x creation) — plan the
    full-scale dense index with `"mode": "on_disk", "compression_level": "32x"` per the
-   validated recipe in `docs/COMPRESSION_EVAL_RESULTS.md`.
-3. Apply the lossless lexical config (`docs/COMPRESSION_EVAL_RESULTS.md`) in the same
+   validated recipe in `docs/archive/COMPRESSION_EVAL_RESULTS.md`.
+3. Apply the lossless lexical config (`docs/archive/COMPRESSION_EVAL_RESULTS.md`) in the same
    reindex that adopts 3.x-native features.
 
 Sources: docs.opensearch.org/latest/breaking-changes/ · opensearch.org/blog/opensearch-3-0-what-to-expect/ ·

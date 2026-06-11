@@ -234,7 +234,7 @@ class SectionBuilder:
 def build_dense_leg(index_root: Path, vectors_npy: Path, ids_json: Path) -> dict:
     """Build the usearch dense leg from precomputed fp32 vectors.
 
-    Validated recipe (docs/COMPRESSION_EVAL_RESULTS.md): binary sign codes in
+    Validated recipe (docs/archive/COMPRESSION_EVAL_RESULTS.md): binary sign codes in
     a usearch b1 Hamming index (32x), int8 rescore matrix memmapped from disk,
     4-20x over-fetch + exact rescore => R@10 0.975-0.996 vs exact.
     """

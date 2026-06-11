@@ -9,7 +9,7 @@ Cross-section score merging:
     merge across sections/shards.
   - BM25F scores use per-section IDF, so cross-section merge is approximate
     (same caveat as multi-shard OpenSearch; measured 40/80 score-multiset drift
-    for 2-shard in docs/COMPRESSION_EVAL_RESULTS.md). RRF fusion downstream is
+    for 2-shard in docs/archive/COMPRESSION_EVAL_RESULTS.md). RRF fusion downstream is
     rank-based per leg, which absorbs most of the drift.
 
 Filters: tantivy enforces year/type/is_oa natively (fast fields); BMP/usearch
