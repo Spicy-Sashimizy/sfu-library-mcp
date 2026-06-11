@@ -1,4 +1,17 @@
 {
+  "permissions": {
+    "deny": [
+      "Read(./data/openalex_snapshot/works_part_*)",
+      "Read(./data/thin_client_poc/**)",
+      "Read(./data/openalex_eval_cache.json)",
+      "Read(./data/**/*.sqlite)",
+      "Read(./data/**/*.npy)",
+      "Read(./data/**/*.usearch)",
+      "Read(./data/**/*.bmp)",
+      "Read(./data/**/*.zst)",
+      "Read(./**/*.jsonl.gz)"
+    ]
+  },
   "hooks": {
     "SessionStart": [
       {
@@ -6,6 +19,19 @@
           {
             "type": "command",
             "command": "git -C \"${CLAUDE_PROJECT_DIR:-.}\" rev-parse HEAD > \"${CLAUDE_PROJECT_DIR:-.}/.claude/.session_start_head\" 2>/dev/null || true"
+          }
+        ]
+      }
+    ],
+    "PreToolUse": [
+      {
+        "matcher": "Read",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "\"${CLAUDE_PROJECT_DIR:-.}/.claude/hooks/big_file_read_guard.sh\"",
+            "timeout": 10,
+            "statusMessage": "Big-file read guard (>1 MB unbounded Read)"
           }
         ]
       }
