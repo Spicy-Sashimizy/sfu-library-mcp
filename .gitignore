@@ -157,3 +157,4 @@ data/openalex_eval_cache.json
 # + scripts/merge_negatives.py against the local OpenSearch index)
 data/training/
 
+.claude/.session_start_head
