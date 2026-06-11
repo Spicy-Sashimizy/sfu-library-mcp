@@ -38,6 +38,11 @@ QUANT_SCALE = 100               # must match builder.QUANT_SCALE
 SPLADE_QUERY_TERMS = 64         # top query terms, same cap as the OpenSearch leg
 OVERFETCH = 4                   # sparse/dense over-fetch multiplier (no filters)
 OVERFETCH_FILTERED = 10         # ... when post-filtering
+# BMP block-max approximation: measured on the 1M build (10 SPLADE queries,
+# 64 terms): alpha=0.8 keeps top-50 overlap 1.000 at -29% latency; beta<1.0
+# prunes query terms and visibly costs quality (0.5 -> overlap 0.80).
+BMP_ALPHA = 0.8
+BMP_BETA = 1.0
 
 
 class ThinClientRetriever:
@@ -264,7 +269,7 @@ class ThinClientRetriever:
                         continue
                 try:
                     ids, scores = shard["searcher"].search(
-                        q_here, k=fetch, alpha=1.0, beta=1.0)
+                        q_here, k=fetch, alpha=BMP_ALPHA, beta=BMP_BETA)
                 except BaseException as exc:  # pyo3 PanicException subclasses BaseException
                     if isinstance(exc, (KeyboardInterrupt, SystemExit)):
                         raise
