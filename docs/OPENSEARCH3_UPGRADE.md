@@ -1,7 +1,14 @@
 # OpenSearch 2.19.5 → 3.7.0 Upgrade Runbook
 
-**Status:** PREPARED 2026-06-10 — compose updated, pre-flight PASSED, awaiting host-side
-backup + container recreate (cannot be executed from inside the devcontainer; no docker CLI).
+**Status:** ✅ **COMPLETED 2026-06-10** (executed host-side via ClaudeBox dashboard session).
+Cold backup taken (300.2 GB tar, verified size), container recreated on 3.7.0, **all
+post-upgrade validation passed**: version 3.7.0 / Lucene 10.4.0; cluster green 14/14 shards;
+custom-codecs + knn + neural-search at 3.7.0.0; `openalex_works` count 150,413,098 exact;
+codec still zstd/3; BM25 read path (302 ms), write/refresh/search/forcemerge/delete smoke,
+kNN on `openalex_works_dense` (471 ms) all OK. `two_phase_search_pipeline` created
+(prune 0.4 / expansion 5.0 / window 10000) — re-run the NDCG@10 harness from the container.
+Backup tarball deleted post-validation per operator instruction (storage reclaimed; rollback
+to 2.19 is no longer possible — Lucene 10 segments now on the volume).
 **Why:** Lucene 10, derived source for vectors (~3× vector `_source` saving on new indices),
 disk-based binary quantization (matches our validated 32× binary+rescore recipe), two-phase
 neural sparse (up to ~9.8× SPLADE speedup, usable on the EXISTING rank_features field),
