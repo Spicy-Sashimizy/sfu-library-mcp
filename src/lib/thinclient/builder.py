@@ -26,7 +26,14 @@ logger = logging.getLogger("sfu_library_mcp")
 
 QUANT_SCALE = 100
 DEFAULT_BMP_SHARD_DOCS = 2_000_000   # RAM ceiling per BMP build shard
-BMP_BLOCK_SIZE = 32                  # bsize from the BMP paper's SPLADE config
+# bsize=256 + clustered insertion: measured −54.2% size and −61% latency at
+# EQUAL recall vs the paper's bsize=32 (eval_storage_levers.py, §9 of
+# docs/LEXICAL_STORAGE_RESEARCH.md).
+BMP_BLOCK_SIZE = 256
+# Docs are buffered and sorted by top SPLADE term in chunks before BMP
+# insertion (bounded-RAM approximation of global clustering; the win comes
+# from term locality within 256-doc blocks, which chunk-local sorting keeps).
+BMP_CLUSTER_CHUNK_DOCS = 500_000
 TANTIVY_WRITER_HEAP = 1_000_000_000
 
 
@@ -77,6 +84,7 @@ class SectionBuilder:
         self._bmp_shard_idx = 0
         self._bmp_in_shard = 0
         self._bmp_vocab: set[str] = set()
+        self._bmp_chunk: list[tuple[str, str, dict]] = []  # (top_term, id, vec)
 
         self._abstracts = (AbstractStoreWriter(self.dir / "abstracts.sqlite")
                            if hot else None)
@@ -124,11 +132,9 @@ class SectionBuilder:
             vec = {t: max(1, int(round(w * QUANT_SCALE))) for t, w in sparse.items()
                    if w > 0}
             if vec:
-                self._bmp_indexer().add_document(doc_id, vec)
-                self._bmp_vocab.update(vec)
-                self._bmp_in_shard += 1
-                if self._bmp_in_shard >= self._bmp_shard_docs:
-                    self._rotate_bmp()
+                self._bmp_chunk.append((max(vec, key=vec.get), doc_id, vec))
+                if len(self._bmp_chunk) >= BMP_CLUSTER_CHUNK_DOCS:
+                    self._flush_bmp_chunk()
 
         if self._abstracts is not None:
             self._abstracts.add(doc_id, abstract)
@@ -138,6 +144,18 @@ class SectionBuilder:
         if len(self._meta_batch) >= 5_000:
             self._flush_meta()
         self.count += 1
+
+    def _flush_bmp_chunk(self) -> None:
+        """Sort the buffered chunk by top SPLADE term, then stream into BMP
+        (mid-chunk shard rotation preserves clustered order across shards)."""
+        self._bmp_chunk.sort(key=lambda t: t[0])
+        for _, doc_id, vec in self._bmp_chunk:
+            self._bmp_indexer().add_document(doc_id, vec)
+            self._bmp_vocab.update(vec)
+            self._bmp_in_shard += 1
+            if self._bmp_in_shard >= self._bmp_shard_docs:
+                self._rotate_bmp()
+        self._bmp_chunk.clear()
 
     def _flush_meta(self) -> None:
         self._meta.executemany(
@@ -149,6 +167,7 @@ class SectionBuilder:
         self._meta.commit()
         self._writer.commit()
         self._writer.wait_merging_threads()
+        self._flush_bmp_chunk()
         self._rotate_bmp()
         n_abs = self._abstracts.finish() if self._abstracts else 0
         size = sum(f.stat().st_size for f in self.dir.rglob("*") if f.is_file())
