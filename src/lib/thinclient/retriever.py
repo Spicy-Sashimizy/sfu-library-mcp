@@ -89,6 +89,7 @@ class ThinClientRetriever:
         self._meta_numeric = False
         self._meta_lock = threading.Lock()
         self._dense: dict | None = None
+        self._dense_cache = None   # query-driven warm cache (dense_cache.py)
         self._loaded = False
 
     # ── lazy loading ────────────────────────────────────────────────────────
@@ -159,6 +160,16 @@ class ThinClientRetriever:
                     "rescore": np.load(dense_dir / "rescore_int8.npy", mmap_mode="r"),
                     "ids": json.loads((dense_dir / "ids.json").read_text()),
                 }
+            import os
+            if os.environ.get("SFU_DENSE_WARMCACHE", "1") != "0":
+                try:
+                    from lib.thinclient.dense_cache import DenseWarmCache
+                    self._dense_cache = DenseWarmCache(
+                        dense_dir, seed_ids=(self._dense or {}).get("ids", []),
+                        model_path=self.dense_model_path)
+                except Exception as exc:
+                    logger.warning("dense warm cache unavailable: %s", exc)
+                    self._dense_cache = None
             self._loaded = True
             logger.info("thinclient: loaded %d live sections %s, dense=%s",
                         len(self._sections), sorted(self._sections),
@@ -202,6 +213,8 @@ class ThinClientRetriever:
             "live_sections": sorted(self._sections),
             "bmp_shards": {n: len(s["bmp"]) for n, s in self._sections.items()},
             "dense_vectors": len(self._dense["ids"]) if self._dense else 0,
+            "dense_warm_cache": (self._dense_cache.info()
+                                 if self._dense_cache else None),
             "meta_schema": "v2-numeric" if self._meta_numeric else "v1-text",
             "manifest": self._manifest(),
         }
@@ -211,17 +224,18 @@ class ThinClientRetriever:
         rebuild/unpack). In-flight queries finish on the old objects; the
         swap is a single attribute rebind under the load lock."""
         with self._lock:
-            old = (self._sections, self._abstract_stores, self._meta, self._dense)
+            old = (self._sections, self._abstract_stores, self._meta,
+                   self._dense, self._dense_cache)
             self._sections, self._abstract_stores = {}, {}
-            self._meta, self._dense = None, None
+            self._meta, self._dense, self._dense_cache = None, None, None
             self._loaded = False
         try:
             self._load()
         except Exception:
             # Failed swap: restore the previous live objects.
             with self._lock:
-                (self._sections, self._abstract_stores,
-                 self._meta, self._dense) = old
+                (self._sections, self._abstract_stores, self._meta,
+                 self._dense, self._dense_cache) = old
                 self._loaded = True
             raise
         if old[2] is not None:
@@ -229,6 +243,8 @@ class ThinClientRetriever:
                 old[2].close()
             except sqlite3.Error:
                 pass
+        if old[4] is not None:
+            old[4].close()
         return {"live_sections": sorted(self._sections),
                 "dense_vectors": len(self._dense["ids"]) if self._dense else 0}
 
@@ -278,7 +294,8 @@ class ThinClientRetriever:
         full corpus is encoded (same partial-coverage caveat as the OpenSearch
         dense leg)."""
         self._load()
-        if not self._dense:
+        cache = self._dense_cache
+        if not self._dense and not (cache and cache.info()["docs"]):
             return []
         import numpy as np
 
@@ -289,15 +306,24 @@ class ThinClientRetriever:
         f = _normalize_filters(filters)
         fetch = top_k * (OVERFETCH_FILTERED if f else OVERFETCH)
         qbits = np.packbits((q > 0).astype(np.uint8))
-        hits = self._dense["index"].search(qbits, fetch)
-        keys = np.asarray(hits.keys, dtype=np.int64).ravel()
-        if keys.size == 0:
+        merged: dict[str, float] = {}
+        if self._dense:
+            hits = self._dense["index"].search(qbits, fetch)
+            keys = np.asarray(hits.keys, dtype=np.int64).ravel()
+            if keys.size:
+                rescore = self._dense["rescore"]
+                scores = (rescore[keys].astype(np.float32) / 127.0) @ q
+                ids_all = self._dense["ids"]
+                for i in range(keys.size):
+                    merged[ids_all[int(keys[i])]] = float(scores[i])
+        if cache:
+            # Warm-cache delta: exact same int8·fp32 scoring — merges by score.
+            for did, score in cache.search(qbits, q, fetch):
+                if score > merged.get(did, float("-inf")):
+                    merged[did] = score
+        if not merged:
             return []
-        rescore = self._dense["rescore"]
-        scores = (rescore[keys].astype(np.float32) / 127.0) @ q
-        order = np.argsort(-scores)
-        ids_all = self._dense["ids"]
-        ranked = [(ids_all[int(keys[i])], float(scores[i])) for i in order]
+        ranked = sorted(merged.items(), key=lambda t: -t[1])
         if f:
             ranked = self._post_filter(ranked, f)
         ms = (time.perf_counter() - t0) * 1000
@@ -406,9 +432,14 @@ class ThinClientRetriever:
     # ── helpers ───────────────────────────────────────────────────────────────
 
     def _meta_rows(self, ids: list[str]) -> dict[str, tuple]:
-        if self._meta is None or not ids:
+        if not ids:
             return {}
         out: dict[str, tuple] = {}
+        if self._meta is None:
+            if self._dense_cache is not None:
+                out.update(self._dense_cache.metadata_rows(ids))
+            return out
+        # (warm-cache rows for ids missing from meta are filled in below)
 
         def _query(table: str, keys: list, back: dict | None) -> None:
             for start in range(0, len(keys), 500):
@@ -423,17 +454,21 @@ class ThinClientRetriever:
         with self._meta_lock:
             if not self._meta_numeric:
                 _query("docs", ids, None)
-                return out
-            from lib.thinclient.builder import encode_meta_id
-            enc: dict[int, str] = {}
-            other: list[str] = []
-            for s in ids:
-                n = encode_meta_id(s)
-                (other.append(s) if n is None else enc.__setitem__(n, s))
-            if enc:
-                _query("docs", list(enc), enc)
-            if other:
-                _query("docs_other", other, None)
+            else:
+                from lib.thinclient.builder import encode_meta_id
+                enc: dict[int, str] = {}
+                other: list[str] = []
+                for s in ids:
+                    n = encode_meta_id(s)
+                    (other.append(s) if n is None else enc.__setitem__(n, s))
+                if enc:
+                    _query("docs", list(enc), enc)
+                if other:
+                    _query("docs_other", other, None)
+        if self._dense_cache is not None:
+            missing = [i for i in ids if i not in out]
+            if missing:
+                out.update(self._dense_cache.metadata_rows(missing))
         return out
 
     def _post_filter(self, ranked: list[tuple[str, float]],
@@ -479,6 +514,10 @@ class ThinClientRetriever:
                 "type": dtype,
                 "is_oa": is_oa,
             })
+        if self._dense_cache is not None and results:
+            # Query-driven dense growth: every surfaced doc is a candidate for
+            # the warm-cache delta (fire-and-forget; dedup inside).
+            self._dense_cache.enqueue(results)
         return results
 
     def fetch_abstracts(self, ids: list[str]) -> dict[str, str]:
