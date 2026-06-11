@@ -67,6 +67,7 @@ class ThinClientRetriever:
         self._sections: dict[str, dict] = {}   # name -> {tantivy, searcher, bmp:[...]}
         self._abstract_stores: dict[str, Any] = {}
         self._meta: sqlite3.Connection | None = None
+        self._meta_numeric = False
         self._meta_lock = threading.Lock()
         self._dense: dict | None = None
         self._loaded = False
@@ -124,6 +125,11 @@ class ThinClientRetriever:
             meta_path = self.root / "meta.sqlite"
             if meta_path.exists():
                 self._meta = sqlite3.connect(str(meta_path), check_same_thread=False)
+                # v2 schema stores W-ids as INTEGER PRIMARY KEY (+ docs_other
+                # TEXT overflow); v1 indexes (e.g. thinclient_1m) are TEXT.
+                cols = {r[1]: (r[2] or "").upper() for r in
+                        self._meta.execute("PRAGMA table_info(docs)")}
+                self._meta_numeric = cols.get("id", "").startswith("INT")
             dense_dir = self.root / "dense"
             if (dense_dir / "b1.usearch").exists():
                 import numpy as np
@@ -296,14 +302,31 @@ class ThinClientRetriever:
         if self._meta is None or not ids:
             return {}
         out: dict[str, tuple] = {}
-        with self._meta_lock:
-            for start in range(0, len(ids), 500):
-                chunk = ids[start:start + 500]
+
+        def _query(table: str, keys: list, back: dict | None) -> None:
+            for start in range(0, len(keys), 500):
+                chunk = keys[start:start + 500]
                 marks = ",".join("?" * len(chunk))
                 for row in self._meta.execute(
                         f"SELECT id, title, doi, year, type, is_oa, section "
-                        f"FROM docs WHERE id IN ({marks})", chunk):
-                    out[row[0]] = row
+                        f"FROM {table} WHERE id IN ({marks})", chunk):
+                    did = back[row[0]] if back is not None else row[0]
+                    out[did] = (did,) + tuple(row[1:])
+
+        with self._meta_lock:
+            if not self._meta_numeric:
+                _query("docs", ids, None)
+                return out
+            from lib.thinclient.builder import encode_meta_id
+            enc: dict[int, str] = {}
+            other: list[str] = []
+            for s in ids:
+                n = encode_meta_id(s)
+                (other.append(s) if n is None else enc.__setitem__(n, s))
+            if enc:
+                _query("docs", list(enc), enc)
+            if other:
+                _query("docs_other", other, None)
         return out
 
     def _post_filter(self, ranked: list[tuple[str, float]],

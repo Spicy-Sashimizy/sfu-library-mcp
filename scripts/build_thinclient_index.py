@@ -56,8 +56,8 @@ logger = logging.getLogger("build_thinclient")
 REPO_ROOT = Path(__file__).parent.parent
 sys.path.insert(0, str(REPO_ROOT / "src"))
 
-from lib.thinclient.builder import (BMP_BLOCK_SIZE, QUANT_SCALE, SectionBuilder,  # noqa: E402
-                                    build_dense_leg, open_meta_db)
+from lib.thinclient.builder import (BMP_BLOCK_SIZE, META_SCHEMA, QUANT_SCALE,  # noqa: E402
+                                    SectionBuilder, build_dense_leg, open_meta_db)
 from lib.thinclient.packer import pack_section  # noqa: E402
 from lib.thinclient.sections import PERSONAS, SECTION_NAMES, classify_doc  # noqa: E402
 
@@ -234,12 +234,7 @@ def build_section_worker(root_str: str, section: str, hot: bool,
     meta_path = root / f"meta_{section}.sqlite"
     meta_path.unlink(missing_ok=True)
     meta_db = sqlite3.connect(str(meta_path))
-    meta_db.executescript(
-        "PRAGMA journal_mode=OFF; PRAGMA synchronous=OFF;"
-        "CREATE TABLE IF NOT EXISTS docs ("
-        "  id TEXT PRIMARY KEY, title TEXT, doi TEXT, year INTEGER,"
-        "  type TEXT, is_oa INTEGER, section TEXT);"
-    )
+    meta_db.executescript(META_SCHEMA)
     t0 = time.perf_counter()
     builder = SectionBuilder(root, section, hot=hot, meta_db=meta_db,
                              bmp_shard_docs=bmp_shard_docs)
@@ -261,6 +256,8 @@ def merge_section_meta(root: Path, sections: list[str]) -> None:
             continue
         main.execute("ATTACH DATABASE ? AS part", (str(part),))
         main.execute("INSERT OR REPLACE INTO docs SELECT * FROM part.docs")
+        main.execute("INSERT OR REPLACE INTO docs_other "
+                     "SELECT * FROM part.docs_other")
         main.commit()
         main.execute("DETACH DATABASE part")
         part.unlink()
@@ -297,7 +294,10 @@ def phase_build(root: Path, status: dict, hot_sections: list[str],
                 status.setdefault("section_info", {})[section] = info
                 status["sections_built"].append(section)
                 save_status(root, status)
-        merge_section_meta(root, todo)
+    # Over ALL sections, not just this run's: a crash between a section build
+    # and the merge leaves its meta_<section>.sqlite orphaned on resume
+    # (merge skips files that no longer exist, so this stays idempotent).
+    merge_section_meta(root, list(SECTION_NAMES))
     status["phase"] = "pack"
     save_status(root, status)
 

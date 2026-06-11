@@ -46,14 +46,33 @@ BMP_CLUSTER_CHUNK_DOCS = 500_000
 TANTIVY_WRITER_HEAP = 1_000_000_000
 
 
+# v2 meta schema: W-ids stored as INTEGER PRIMARY KEY (rowid alias, varint on
+# disk) — measured 166.8 -> 99.4 B/doc vs TEXT ids (storage_levers_eval, ~10 GB
+# at 150M). Ids that don't round-trip W<digits> go to the docs_other TEXT table.
+META_SCHEMA = (
+    "PRAGMA journal_mode=OFF; PRAGMA synchronous=OFF;"
+    "CREATE TABLE IF NOT EXISTS docs ("
+    "  id INTEGER PRIMARY KEY, title TEXT, doi TEXT, year INTEGER,"
+    "  type TEXT, is_oa INTEGER, section TEXT);"
+    "CREATE TABLE IF NOT EXISTS docs_other ("
+    "  id TEXT PRIMARY KEY, title TEXT, doi TEXT, year INTEGER,"
+    "  type TEXT, is_oa INTEGER, section TEXT);"
+)
+
+
+def encode_meta_id(doc_id: str) -> int | None:
+    """'W2031234567' -> 2031234567, or None when the id wouldn't round-trip
+    (no W prefix, non-digits, leading zero) and must stay TEXT."""
+    if len(doc_id) > 1 and doc_id[0] == "W":
+        digits = doc_id[1:]
+        if digits.isdigit() and digits[0] != "0":
+            return int(digits)
+    return None
+
+
 def open_meta_db(index_root: Path) -> sqlite3.Connection:
     db = sqlite3.connect(str(Path(index_root) / "meta.sqlite"))
-    db.executescript(
-        "PRAGMA journal_mode=OFF; PRAGMA synchronous=OFF;"
-        "CREATE TABLE IF NOT EXISTS docs ("
-        "  id TEXT PRIMARY KEY, title TEXT, doi TEXT, year INTEGER,"
-        "  type TEXT, is_oa INTEGER, section TEXT);"
-    )
+    db.executescript(META_SCHEMA)
     return db
 
 
@@ -73,6 +92,7 @@ class SectionBuilder:
         self.dir.mkdir(parents=True, exist_ok=True)
         self._meta = meta_db
         self._meta_batch: list[tuple] = []
+        self._meta_batch_other: list[tuple] = []
         self._bmp_shard_docs = bmp_shard_docs
 
         tantivy_dir = self.dir / "tantivy"
@@ -148,9 +168,12 @@ class SectionBuilder:
         if self._abstracts is not None:
             self._abstracts.add(doc_id, abstract)
 
-        self._meta_batch.append((doc_id, title, doc.get("doi") or "", year,
-                                 dtype, int(is_oa), self.section))
-        if len(self._meta_batch) >= 5_000:
+        nid = encode_meta_id(doc_id)
+        row = (nid if nid is not None else doc_id, title, doc.get("doi") or "",
+               year, dtype, int(is_oa), self.section)
+        (self._meta_batch if nid is not None
+         else self._meta_batch_other).append(row)
+        if len(self._meta_batch) + len(self._meta_batch_other) >= 5_000:
             self._flush_meta()
         self.count += 1
 
@@ -176,6 +199,11 @@ class SectionBuilder:
         self._meta.executemany(
             "INSERT OR REPLACE INTO docs VALUES (?,?,?,?,?,?,?)", self._meta_batch)
         self._meta_batch.clear()
+        if self._meta_batch_other:
+            self._meta.executemany(
+                "INSERT OR REPLACE INTO docs_other VALUES (?,?,?,?,?,?,?)",
+                self._meta_batch_other)
+            self._meta_batch_other.clear()
 
     def finish(self) -> dict:
         self._flush_meta()
