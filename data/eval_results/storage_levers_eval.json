@@ -1,0 +1,170 @@
+{
+  "bmp_matrix": [
+    {
+      "variant": "b32_cr_corpus",
+      "bsize": 32,
+      "compress_range": true,
+      "order": "corpus",
+      "bytes": 140475136,
+      "b_per_doc": 1404.8,
+      "build_secs": 8.4,
+      "ms_per_query": 27.2,
+      "recall@50_vs_exact": 0.966
+    },
+    {
+      "variant": "b32_cr_clustered",
+      "bsize": 32,
+      "compress_range": true,
+      "order": "clustered",
+      "bytes": 116010511,
+      "b_per_doc": 1160.1,
+      "build_secs": 8.5,
+      "ms_per_query": 13.3,
+      "recall@50_vs_exact": 0.96
+    },
+    {
+      "variant": "b64_cr_corpus",
+      "bsize": 64,
+      "compress_range": true,
+      "order": "corpus",
+      "bytes": 114489505,
+      "b_per_doc": 1144.9,
+      "build_secs": 7.5,
+      "ms_per_query": 19.7,
+      "recall@50_vs_exact": 0.967
+    },
+    {
+      "variant": "b64_cr_clustered",
+      "bsize": 64,
+      "compress_range": true,
+      "order": "clustered",
+      "bytes": 96193572,
+      "b_per_doc": 961.9,
+      "build_secs": 7.0,
+      "ms_per_query": 14.1,
+      "recall@50_vs_exact": 0.962
+    },
+    {
+      "variant": "b128_cr_corpus",
+      "bsize": 128,
+      "compress_range": true,
+      "order": "corpus",
+      "bytes": 92193741,
+      "b_per_doc": 921.9,
+      "build_secs": 6.8,
+      "ms_per_query": 13.9,
+      "recall@50_vs_exact": 0.967
+    },
+    {
+      "variant": "b128_cr_clustered",
+      "bsize": 128,
+      "compress_range": true,
+      "order": "clustered",
+      "bytes": 78950478,
+      "b_per_doc": 789.5,
+      "build_secs": 6.6,
+      "ms_per_query": 13.6,
+      "recall@50_vs_exact": 0.966
+    },
+    {
+      "variant": "b256_cr_clustered",
+      "bsize": 256,
+      "compress_range": true,
+      "order": "clustered",
+      "bytes": 64286558,
+      "b_per_doc": 642.9,
+      "build_secs": 6.3,
+      "ms_per_query": 10.7,
+      "recall@50_vs_exact": 0.967
+    },
+    {
+      "variant": "b32_nocr_corpus",
+      "bsize": 32,
+      "compress_range": false,
+      "order": "corpus",
+      "bytes": 168108368,
+      "b_per_doc": 1681.1,
+      "build_secs": 8.9,
+      "ms_per_query": 27.1,
+      "recall@50_vs_exact": 0.966
+    },
+    {
+      "variant": "b32_nocr_clustered",
+      "bsize": 32,
+      "compress_range": false,
+      "order": "clustered",
+      "bytes": 155231390,
+      "b_per_doc": 1552.3,
+      "build_secs": 8.9,
+      "ms_per_query": 15.6,
+      "recall@50_vs_exact": 0.96
+    }
+  ],
+  "bmp_best_within_recall_gate": {
+    "variant": "b256_cr_clustered",
+    "bsize": 256,
+    "compress_range": true,
+    "order": "clustered",
+    "bytes": 64286558,
+    "b_per_doc": 642.9,
+    "build_secs": 6.3,
+    "ms_per_query": 10.7,
+    "recall@50_vs_exact": 0.967
+  },
+  "tantivy_order": [
+    {
+      "order": "corpus",
+      "bytes": 40058862,
+      "b_per_doc": 400.6
+    },
+    {
+      "order": "clustered",
+      "bytes": 40356802,
+      "b_per_doc": 403.6
+    }
+  ],
+  "meta_recode": {
+    "rows": 1000000,
+    "baseline_bytes": 166838272,
+    "recoded_bytes": 99360768,
+    "ratio": 1.679,
+    "b_per_doc": 99.4,
+    "baseline_b_per_doc": 166.8,
+    "non_numeric_ids": 0,
+    "roundtrip_ok": 200
+  },
+  "abstracts_mainline_sim_zstd6_blocks": {
+    "docs": 20000,
+    "ratio": 2.204,
+    "b_per_doc": 546.0
+  },
+  "abstracts_full_config": {
+    "docs": 20000,
+    "ratio": 3.42,
+    "b_per_doc": 351.8
+  },
+  "artifact_pack_ratio": {
+    "live_mb": 128.3,
+    "packed_mb": 61.0,
+    "ratio": 2.103,
+    "pack_secs": 48.8
+  },
+  "all_levers_150M_gb": {
+    "as_built": {
+      "bmp": 167.6,
+      "tantivy": 44.5,
+      "abstracts": 64.7,
+      "meta": 24.1
+    },
+    "after": {
+      "bmp": 76.7,
+      "tantivy": 44.8,
+      "abstracts": 52.9,
+      "meta": 14.4
+    },
+    "total_before": 300.9,
+    "total_after": 188.8,
+    "saved_gb": 112.1,
+    "saved_pct": 37.3
+  }
+}

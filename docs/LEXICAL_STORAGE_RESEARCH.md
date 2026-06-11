@@ -344,3 +344,40 @@ zstd own-dict for every non-English language measured.
 per-(section×language) trained dictionaries; consider clustered 32 KB blocks
 (+6% ratio at +7 ms/100 docs) if B/doc matters more than point-lookup
 simplicity. SLM decode: cold-tier/archival only, exactly as §2 concluded.
+
+## 9. ALL-LEVERS measured matrix (scripts/eval_storage_levers.py, 2026-06-11)
+
+BMP on 100k real docs w/ production SPLADE vectors; recall@50 vs EXACT
+quantized dot-product ground truth at the production alpha=0.8:
+
+| variant | B/doc | vs b32/corpus | ms/q | R@50 |
+|---|---|---|---|---|
+| b32 corpus (as first built) | 1404.8 | — | 27.2 | 0.966 |
+| b32 clustered | 1160.1 | −17.4% | 13.3 | 0.960 |
+| b128 clustered | 789.5 | −43.8% | 13.6 | 0.966 |
+| **b256 clustered (ADOPTED)** | **642.9** | **−54.2%** | **10.7** | **0.967** |
+| b32 no-compress_range | 1681.1 | +19.7% | 27.1 | 0.966 |
+
+Larger block-max blocks shrink metadata AND speed up pruning; clustering
+(section, top-SPLADE-term) makes compress_range's doc-id ranges denser.
+recall unchanged (0.967 vs 0.966) — block size doesn't change stored scores.
+
+Other components: tantivy clustered ordering = **+0.7% (null result — skip)**;
+meta.sqlite recode (numeric PK + dict-zstd titles/DOIs + enum ints) =
+**1.679×** (166.8→99.4 B/doc, 200/200 round-trip); abstracts full config
+(clustered 32KB blocks + per-language dicts) = **351.8 B/doc (3.42×)** vs
+**546.0 B/doc** for the mainline-sim (Lucene-style 16KB zstd6 blocks, no
+dict) → the new tech beats Lucene's existing stored-fields optimization by
+**35.6%**; artifact cold-pack ratio measured **2.10×**.
+
+### Whole-DB @150M, all levers, all lossless
+bmp 167.6→76.7 · tantivy 44.5→44.8 · abstracts 64.7→52.9 · meta 24.1→14.4
+= **300.9 → 188.8 GB (−112.1 GB, −37.3%)**, recall/parity gates all green.
+
+### Mainline (Lucene combined2 141.3 GB) hypothetical with the same tech
+In-Lucene abstract storage ≈ 546 B/doc ≈ 82 GB of the 141.3. Externalizing to
+the full-config sidecar (351.8 B/doc = 52.9 GB) → **141.3 → ~112 GB (−21%),
+zero ranking change** (extern_display measured 80/80 score parity; sidecar is
+bit-exact). Remaining mainline-only lever: BP doc-ID reorder (est. 1–6 GB,
+unmeasured). Caveats: sidecar joins the update pipeline; _reindex can no
+longer rebuild abstracts from the index alone.
