@@ -417,6 +417,125 @@ def run_lossy_variants(docs: list[dict], measure_degradation: bool) -> list[dict
     return out
 
 
+# ── multilingual analysis ────────────────────────────────────────────────────
+
+def run_language_analysis(docs: list[dict]) -> dict:
+    """Per-language compression behaviour: the corpus is NOT all-English, and
+    two shortlisted methods are English-biased (Brotli built-in dict; WordPiece
+    token recoding). Measures, per detected language with >=200 samples:
+    zstd19 ratio with (a) the MIXED-corpus dict, (b) a PER-LANGUAGE dict, and
+    (c) brotli11 — quantifying dictionary dilution and English bias."""
+    try:
+        import py3langid
+    except ImportError:
+        logger.warning("py3langid not installed — skipping language analysis")
+        return {}
+    import brotli
+
+    by_lang = defaultdict(list)
+    for d in docs:
+        lang, _ = py3langid.classify(d["abstract"][:600])
+        by_lang[lang].append(d["abstract"].encode("utf-8"))
+
+    mixed_samples = [d["abstract"].encode() for d in docs[:20000]]
+    zd_mixed = zstandard.train_dictionary(DICT_SIZE, mixed_samples)
+    c_mixed = zstandard.ZstdCompressor(level=19, dict_data=zd_mixed)
+
+    out = {"language_share": {}, "per_language": {}}
+    total = len(docs)
+    for lang, payloads in sorted(by_lang.items(), key=lambda kv: -len(kv[1])):
+        out["language_share"][lang] = round(len(payloads) / total, 4)
+        if len(payloads) < 200:
+            continue
+        raw = sum(len(p) for p in payloads)
+        mixed = sum(len(c_mixed.compress(p)) for p in payloads)
+        try:
+            zd_own = zstandard.train_dictionary(DICT_SIZE, payloads[:20000])
+            c_own = zstandard.ZstdCompressor(level=19, dict_data=zd_own)
+            own = sum(len(c_own.compress(p)) for p in payloads)
+        except zstandard.ZstdError:
+            own = None
+        br = sum(len(brotli.compress(p, quality=11, mode=brotli.MODE_TEXT))
+                 for p in payloads)
+        out["per_language"][lang] = {
+            "docs": len(payloads),
+            "avg_doc_bytes": raw // len(payloads),
+            "zstd19_mixed_dict_ratio": round(raw / mixed, 3),
+            "zstd19_own_dict_ratio": round(raw / own, 3) if own else None,
+            "own_dict_gain_pct": round((mixed - own) / mixed * 100, 1) if own else None,
+            "brotli11_ratio": round(raw / br, 3),
+        }
+    return out
+
+
+# ── key-column structures (front coding — the sorted-wordlist trick) ────────
+
+def run_id_keycolumn_variants(docs: list[dict]) -> list[dict]:
+    """Storage of the SORTED OpenAlex ID key column (sidecar/meta keys).
+    Front coding = byte of common-prefix-length with the previous key + new
+    suffix (the classic sorted-dictionary incremental encoding); compared with
+    delta-varint on the numeric part and plain zstd. Random access uses 1/16
+    block restarts (offsets table), like block front coding / Lucene terms."""
+    ids = sorted(d["id"] for d in docs)
+    raw = sum(len(i) + 1 for i in ids)  # +1 terminator, like the CP/M layout
+
+    # front coding with restarts every 16
+    fc = bytearray()
+    restarts = []
+    prev = ""
+    for n, cur in enumerate(ids):
+        if n % 16 == 0:
+            restarts.append(len(fc))
+            common = 0
+        else:
+            common = 0
+            for a, b in zip(prev, cur):
+                if a != b:
+                    break
+                common += 1
+            common = min(common, 255)
+        suffix = cur[common:].encode()
+        fc.append(common)
+        fc.append(len(suffix))
+        fc.extend(suffix)
+        prev = cur
+    fc_total = len(fc) + 4 * len(restarts)
+
+    # delta-varint of numeric part (ids are 'W' + digits)
+    def varint(v: int) -> bytes:
+        out = bytearray()
+        while v >= 0x80:
+            out.append((v & 0x7F) | 0x80)
+            v >>= 7
+        out.append(v)
+        return bytes(out)
+
+    nums = sorted(int(i[1:]) for i in ids if i[1:].isdigit())
+    dv = bytearray()
+    last = 0
+    for v in nums:
+        dv.extend(varint(v - last))
+        last = v
+    dv_total = len(dv)
+
+    zs = len(zstandard.ZstdCompressor(level=19).compress("\n".join(ids).encode()))
+
+    def row(name, total, lossless=True, note=""):
+        return {"variant": name, "lossless": lossless,
+                "ratio": round(raw / total, 3),
+                "bytes_per_doc": round(total / len(ids), 2), "note": note,
+                "scope": "id_key_column"}
+
+    return [
+        row("ids_raw_terminated", raw),
+        row("ids_front_coded_b16", fc_total,
+            note="common-prefix byte + suffix, restart every 16 (random access)"),
+        row("ids_delta_varint_numeric", dv_total,
+            note="sorted numeric deltas; needs digits-only ids"),
+        row("ids_zstd19_blob", zs, note="no random access (whole-list blob)"),
+    ]
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--docs", type=int, default=20000)
@@ -444,12 +563,14 @@ def main() -> None:
     if args.slm:
         results.append(run_slm_variant(docs, args.slm_docs))
     results.extend(run_lossy_variants(docs, not args.no_degradation))
+    results.extend(run_id_keycolumn_variants(docs))
+    languages = run_language_analysis(docs)
 
     out = {"config": {"docs": len(docs), "raw_mb": round(raw_bytes / 1e6, 1),
                       "avg_doc_bytes": raw_bytes // len(docs),
                       "rerank_fetch": RERANK_FETCH, "budget_ms": 300,
                       "source": f"{SOURCE_URL}/{SOURCE_INDEX}"},
-           "results": results}
+           "results": results, "languages": languages}
     Path(args.output).parent.mkdir(parents=True, exist_ok=True)
     Path(args.output).write_text(json.dumps(out, indent=2))
 
@@ -471,6 +592,19 @@ def main() -> None:
               f"{'OK' if r.get('fits_300ms_budget') else ('FAIL' if 'fetch100_ms' in r else '—'):>7} "
               f"{str(r['lossless']):>9} {deg:>12}")
     print("=" * 100)
+    if languages:
+        print("\nLANGUAGE BREAKDOWN (zstd-dict dilution + Brotli English bias)")
+        print("-" * 100)
+        print(f"{'lang':<6} {'share':>7} {'docs':>7} {'B/doc':>6} "
+              f"{'mixed-dict':>10} {'own-dict':>9} {'own gain':>9} {'brotli11':>9}")
+        for lang, st in languages.get("per_language", {}).items():
+            print(f"{lang:<6} {languages['language_share'][lang] * 100:>6.1f}% "
+                  f"{st['docs']:>7} {st['avg_doc_bytes']:>6} "
+                  f"{st['zstd19_mixed_dict_ratio']:>10} "
+                  f"{st['zstd19_own_dict_ratio'] or '—':>9} "
+                  f"{str(st['own_dict_gain_pct']) + '%' if st['own_dict_gain_pct'] is not None else '—':>9} "
+                  f"{st['brotli11_ratio']:>9}")
+        print("-" * 100)
     logger.info("wrote %s", args.output)
 
 
