@@ -212,10 +212,17 @@ def _get_openalex() -> "OpenAlexClient":
 
 
 _federated_router = None
+_thinclient_retriever = None  # set when search_backend == "thinclient"
+
+
+def _get_thinclient_retriever():
+    """The live ThinClientRetriever, or None on a non-thinclient backend."""
+    _get_federated_router()
+    return _thinclient_retriever
 
 
 def _get_federated_router() -> "FederatedSearchRouter":
-    global _federated_router
+    global _federated_router, _thinclient_retriever
     if _federated_router is None:
         from lib.federated_search import FederatedSearchRouter
         cfg = _get_config()
@@ -226,7 +233,10 @@ def _get_federated_router() -> "FederatedSearchRouter":
                 index_root=cfg.thinclient_index_root,
                 splade_model_path=cfg.splade_model_path,
                 openalex_mailto=cfg.openalex_mailto,
+                query_log_path=(cfg.query_log_path
+                                if cfg.features.get("query_log_enabled") else ""),
             )
+            _thinclient_retriever = retriever
         else:
             from lib.opensearch_retriever import OpenSearchRetriever
             retriever = OpenSearchRetriever(
@@ -846,6 +856,50 @@ TOOL_DEFINITIONS: list[Tool] = [
             },
         },
     ),
+    # ── Thin-client index management ─────────────────────────────────────────
+    Tool(
+        name="get_index_status",
+        description=(
+            "Status of the local thin-client search index: live/packed sections, "
+            "per-leg latency metrics, dense-vector coverage, manifest metadata, "
+            "and any running section-unpack jobs."
+        ),
+        inputSchema={"type": "object", "properties": {}},
+    ),
+    Tool(
+        name="list_personas",
+        description=(
+            "List available index personas (hot-section profiles) and which "
+            "sections are currently live vs cold (packed) in the local index."
+        ),
+        inputSchema={"type": "object", "properties": {}},
+    ),
+    Tool(
+        name="request_section_unpack",
+        description=(
+            "Unpack a cold (packed) section of the local index in the background "
+            "so it becomes searchable. Returns immediately; poll get_index_status "
+            "for completion (large sections can take minutes to hours). The index "
+            "hot-reloads automatically when the unpack finishes."
+        ),
+        inputSchema={
+            "type": "object",
+            "properties": {
+                "section": {"type": "string",
+                            "description": "Section name (see list_personas)"},
+            },
+            "required": ["section"],
+        },
+    ),
+    Tool(
+        name="reload_index",
+        description=(
+            "Hot-reload the local thin-client index from disk (zero-downtime swap "
+            "after a rebuild, unpack, or migration). In-flight queries finish on "
+            "the old index."
+        ),
+        inputSchema={"type": "object", "properties": {}},
+    ),
 ]
 
 
@@ -936,6 +990,111 @@ async def _handle_record_engagement(args: dict[str, Any]) -> list[TextContent]:
     return [TextContent(type="text", text=json.dumps({"recorded": n}))]
 
 
+# ── Thin-client index management handlers ────────────────────────────────────
+
+_unpack_jobs: dict[str, dict] = {}
+_unpack_jobs_lock = None  # created lazily (threading import stays local)
+
+
+def _jobs_lock():
+    global _unpack_jobs_lock
+    if _unpack_jobs_lock is None:
+        import threading
+        _unpack_jobs_lock = threading.Lock()
+    return _unpack_jobs_lock
+
+
+def _require_thinclient():
+    tc = _get_thinclient_retriever()
+    if tc is None:
+        return None, [TextContent(type="text", text=(
+            "The local thin-client index is not active "
+            "(SFU_SEARCH_BACKEND is not 'thinclient')."))]
+    return tc, None
+
+
+async def _handle_get_index_status(args: dict[str, Any]) -> list[TextContent]:
+    tc, err = _require_thinclient()
+    if err:
+        return err
+    from lib.thinclient.packer import status as pack_status
+
+    def _collect() -> dict:
+        out = {"metrics": tc.metrics(), "pack": pack_status(tc.root)}
+        with _jobs_lock():
+            out["unpack_jobs"] = {k: dict(v) for k, v in _unpack_jobs.items()}
+        return out
+
+    out = await asyncio.get_event_loop().run_in_executor(None, _collect)
+    return [TextContent(type="text", text=json.dumps(out, indent=2, default=str))]
+
+
+async def _handle_list_personas(args: dict[str, Any]) -> list[TextContent]:
+    from lib.thinclient.sections import PERSONAS, SECTION_NAMES
+    tc = _get_thinclient_retriever()
+    live = []
+    if tc is not None:
+        try:
+            live = tc.live_sections()
+        except Exception:
+            pass
+    out = {
+        "personas": PERSONAS,
+        "sections": SECTION_NAMES,
+        "live_sections": live,
+        "cold_sections": [s for s in SECTION_NAMES if s not in live],
+        "active_profile": _get_config().active_profile,
+    }
+    return [TextContent(type="text", text=json.dumps(out, indent=2))]
+
+
+async def _handle_request_section_unpack(args: dict[str, Any]) -> list[TextContent]:
+    tc, err = _require_thinclient()
+    if err:
+        return err
+    from lib.thinclient.sections import SECTION_NAMES
+    section = args.get("section", "")
+    if section not in SECTION_NAMES:
+        return [TextContent(type="text", text=(
+            f"Unknown section '{section}'. Valid: {', '.join(SECTION_NAMES)}"))]
+    if section in tc.live_sections():
+        return [TextContent(type="text", text=f"Section '{section}' is already live.")]
+    with _jobs_lock():
+        job = _unpack_jobs.get(section)
+        if job and job.get("state") == "running":
+            return [TextContent(type="text", text=(
+                f"Unpack of '{section}' already running (started {job['started']})."))]
+        _unpack_jobs[section] = {"state": "running",
+                                 "started": time.strftime("%Y-%m-%dT%H:%M:%S")}
+
+    def _run() -> None:
+        try:
+            from lib.thinclient.packer import unpack_section
+            info = unpack_section(tc.root, section)
+            tc.reload()
+            with _jobs_lock():
+                _unpack_jobs[section].update(state="done", info=info)
+            logger.info("section %s unpacked and index reloaded", section)
+        except Exception as exc:
+            with _jobs_lock():
+                _unpack_jobs[section].update(state="failed", error=str(exc))
+            logger.error("section %s unpack failed: %s", section, exc, exc_info=True)
+
+    import threading
+    threading.Thread(target=_run, daemon=True, name=f"unpack-{section}").start()
+    return [TextContent(type="text", text=(
+        f"Unpacking '{section}' in the background (large sections can take a "
+        "while). Poll get_index_status; the index hot-reloads on completion."))]
+
+
+async def _handle_reload_index(args: dict[str, Any]) -> list[TextContent]:
+    tc, err = _require_thinclient()
+    if err:
+        return err
+    info = await asyncio.get_event_loop().run_in_executor(None, tc.reload)
+    return [TextContent(type="text", text=json.dumps({"reloaded": info}, indent=2))]
+
+
 async def _dispatch_tool(name: str, arguments: dict[str, Any]) -> list[TextContent]:
     dispatch = {
         "search_academic": _handle_search_academic,
@@ -961,6 +1120,10 @@ async def _dispatch_tool(name: str, arguments: dict[str, Any]) -> list[TextConte
         "get_zotero_status": _handle_get_zotero_status,
         "get_openalex_budget": _handle_get_openalex_budget,
         "record_engagement": _handle_record_engagement,
+        "get_index_status": _handle_get_index_status,
+        "list_personas": _handle_list_personas,
+        "request_section_unpack": _handle_request_section_unpack,
+        "reload_index": _handle_reload_index,
     }
     handler = dispatch.get(name)
     if handler is None:
@@ -1058,6 +1221,20 @@ async def _handle_search_academic(args: dict) -> list[TextContent]:
                 "[Note: the local search index is currently unavailable; "
                 "results may be incomplete.]\n\n" + text
             )
+        # Cold-section routing hint: the query's home section is packed/absent
+        # locally, so local coverage for it is reduced.
+        if _thinclient_retriever is not None:
+            try:
+                hint = _thinclient_retriever.cold_section_hint(query)
+            except Exception:
+                hint = None
+            if hint:
+                text = (
+                    f"[Note: this query maps to the '{hint}' section, which is "
+                    f"cold (packed) in the local index — local results may be "
+                    f"incomplete. request_section_unpack('{hint}') brings it "
+                    "live.]\n\n" + text
+                )
         return [TextContent(type="text", text=text)]
 
     # Default path: direct OpenAlex live API (federated_search_enabled = False).

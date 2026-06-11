@@ -28,10 +28,26 @@ import json
 import logging
 import sqlite3
 import threading
+import time
 from pathlib import Path
 from typing import Any
 
+from lib.thinclient.sections import classify_query
+
 logger = logging.getLogger("sfu_library_mcp")
+
+# Per-leg in-memory metrics (reset on restart), mirrors tools._metrics.
+_leg_metrics: dict[str, dict] = {}
+_metrics_lock = threading.Lock()
+
+
+def _record_leg(leg: str, ms: float, error: bool = False) -> None:
+    with _metrics_lock:
+        m = _leg_metrics.setdefault(leg, {"count": 0, "errors": 0, "total_ms": 0.0})
+        m["count"] += 1
+        m["total_ms"] += ms
+        if error:
+            m["errors"] += 1
 
 RRF_K = 60
 QUANT_SCALE = 70                # must match builder.QUANT_SCALE (saturation-free)
@@ -55,6 +71,7 @@ class ThinClientRetriever:
         dense_model_path: str = "",
         remote_abstracts: bool = True,
         openalex_mailto: str = "",
+        query_log_path: str = "",
     ):
         repo_root = Path(__file__).resolve().parents[3]
         self.root = Path(index_root or repo_root / "data" / "thinclient_index")
@@ -62,6 +79,8 @@ class ThinClientRetriever:
         self.dense_model_path = dense_model_path or str(repo_root / "models" / "sfu-academic-embed-v5")
         self.remote_abstracts = remote_abstracts
         self.openalex_mailto = openalex_mailto
+        self.query_log_path = query_log_path
+        self._qlog_lock = threading.Lock()
 
         self._lock = threading.Lock()
         self._sections: dict[str, dict] = {}   # name -> {tantivy, searcher, bmp:[...]}
@@ -159,6 +178,73 @@ class ThinClientRetriever:
         self._load()
         return sorted(self._sections)
 
+    def cold_section_hint(self, query: str) -> str | None:
+        """Section this query classifies to when that section is NOT live —
+        i.e. results may be missing because the home section is packed/absent.
+        Used for routing telemetry and client-visible unpack hints."""
+        self._load()
+        section = classify_query(query)
+        return None if section in self._sections else section
+
+    def metrics(self) -> dict:
+        """Per-leg latency/error counters + index coverage (for /health)."""
+        try:
+            self._load()
+        except Exception:
+            pass
+        with _metrics_lock:
+            legs = {k: dict(v) for k, v in _leg_metrics.items()}
+        for m in legs.values():
+            m["avg_ms"] = round(m["total_ms"] / max(m["count"], 1), 1)
+            m["total_ms"] = round(m["total_ms"], 1)
+        return {
+            "legs": legs,
+            "live_sections": sorted(self._sections),
+            "bmp_shards": {n: len(s["bmp"]) for n, s in self._sections.items()},
+            "dense_vectors": len(self._dense["ids"]) if self._dense else 0,
+            "meta_schema": "v2-numeric" if self._meta_numeric else "v1-text",
+            "manifest": self._manifest(),
+        }
+
+    def reload(self) -> dict:
+        """Atomically re-load the index root (zero-downtime swap after a
+        rebuild/unpack). In-flight queries finish on the old objects; the
+        swap is a single attribute rebind under the load lock."""
+        with self._lock:
+            old = (self._sections, self._abstract_stores, self._meta, self._dense)
+            self._sections, self._abstract_stores = {}, {}
+            self._meta, self._dense = None, None
+            self._loaded = False
+        try:
+            self._load()
+        except Exception:
+            # Failed swap: restore the previous live objects.
+            with self._lock:
+                (self._sections, self._abstract_stores,
+                 self._meta, self._dense) = old
+                self._loaded = True
+            raise
+        if old[2] is not None:
+            try:
+                old[2].close()
+            except sqlite3.Error:
+                pass
+        return {"live_sections": sorted(self._sections),
+                "dense_vectors": len(self._dense["ids"]) if self._dense else 0}
+
+    def _log_query(self, leg: str, query: str, n: int, ms: float,
+                   f: dict | None) -> None:
+        if not self.query_log_path:
+            return
+        try:
+            entry = {"ts": time.strftime("%Y-%m-%dT%H:%M:%S"), "leg": leg,
+                     "query": query, "results": n, "latency_ms": round(ms, 1),
+                     "filtered": bool(f), "cold_hint": self.cold_section_hint(query)}
+            with self._qlog_lock, open(self.query_log_path, "a") as fh:
+                fh.write(json.dumps(entry, ensure_ascii=False) + "\n")
+        except OSError:
+            pass  # a bad log path must never break a query
+
     def search(self, query: str, top_k: int = 50, mode: str | None = None,
                filters: dict | None = None) -> list[dict]:
         """mode: 'bm25f' (default) or 'splade' — same contract as the
@@ -167,13 +253,23 @@ class ThinClientRetriever:
         if not self._sections:
             return []
         use_splade = mode == "splade"
+        leg = "splade" if use_splade else "bm25f"
         f = _normalize_filters(filters)
-        if use_splade:
-            ranked = self._splade_leg(query, top_k, f)
-        else:
-            ranked = self._bm25f_leg(query, top_k, f)
-        return self._hydrate(ranked, source="thinclient" if not use_splade
-                             else "thinclient_splade")
+        t0 = time.perf_counter()
+        try:
+            if use_splade:
+                ranked = self._splade_leg(query, top_k, f)
+            else:
+                ranked = self._bm25f_leg(query, top_k, f)
+        except Exception:
+            _record_leg(leg, (time.perf_counter() - t0) * 1000, error=True)
+            raise
+        ms = (time.perf_counter() - t0) * 1000
+        _record_leg(leg, ms)
+        out = self._hydrate(ranked, source="thinclient" if not use_splade
+                            else "thinclient_splade")
+        self._log_query(leg, query, len(out), ms, f)
+        return out
 
     def dense_search(self, query: str, top_k: int = 50,
                      dense_index: str = "", dense_model_path: str = "",
@@ -187,6 +283,7 @@ class ThinClientRetriever:
         import numpy as np
 
         from lib.opensearch_retriever import encode_dense
+        t0 = time.perf_counter()
         q = np.asarray(encode_dense(query, dense_model_path or self.dense_model_path),
                        dtype=np.float32)
         f = _normalize_filters(filters)
@@ -203,7 +300,11 @@ class ThinClientRetriever:
         ranked = [(ids_all[int(keys[i])], float(scores[i])) for i in order]
         if f:
             ranked = self._post_filter(ranked, f)
-        return self._hydrate(ranked[:top_k], source="thinclient_dense")
+        ms = (time.perf_counter() - t0) * 1000
+        _record_leg("dense", ms)
+        out = self._hydrate(ranked[:top_k], source="thinclient_dense")
+        self._log_query("dense", query, len(out), ms, f)
+        return out
 
     def search_rrf(self, query: str, top_k: int = 50,
                    filters: dict | None = None, include_dense: bool = False) -> list[dict]:
@@ -265,7 +366,13 @@ class ThinClientRetriever:
     def _splade_leg(self, query: str, top_k: int,
                     f: dict | None) -> list[tuple[str, float]]:
         from lib.opensearch_retriever import encode_splade
-        sparse = encode_splade(query, self.splade_model_path)
+        try:
+            sparse = encode_splade(query, self.splade_model_path)
+        except Exception as exc:
+            # Missing/corrupt ONNX model must degrade the leg, not the query:
+            # RRF still fuses BM25F (+dense) while this leg mirrors BM25F.
+            logger.warning("SPLADE encoder failed (%s); falling back to BM25F leg", exc)
+            sparse = None
         if not sparse:
             logger.warning("SPLADE encoding empty; falling back to BM25F leg")
             return self._bm25f_leg(query, top_k, f)
