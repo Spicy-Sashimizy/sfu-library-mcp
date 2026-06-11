@@ -43,6 +43,14 @@ SAMPLE_OPENALEX_RESPONSE = {
     "meta": {"count": 1, "page": 1, "per_page": 10},
 }
 
+# search_academic routes through the federated router by default; these unit
+# tests exercise the direct OpenAlex path, so disable routing/rerank explicitly.
+_DIRECT_FEATURES = {
+    "federated_search_enabled": False,
+    "rerank_enabled": False,
+    "zotero_enabled": True,
+}
+
 SAMPLE_SFU_DB = {
     "id": "test123",
     "name": "PsycINFO",
@@ -60,7 +68,7 @@ SAMPLE_SFU_DB = {
 
 class TestToolDefinitions:
     def test_tool_count(self):
-        assert len(TOOL_DEFINITIONS) == 22
+        assert len(TOOL_DEFINITIONS) == 25
 
     def test_new_tool_names_present(self):
         names = {t.name for t in TOOL_DEFINITIONS}
@@ -107,7 +115,8 @@ class TestToolDefinitions:
 class TestSearchAcademic:
     @pytest.mark.asyncio
     async def test_basic_search(self):
-        with patch("lib.tools._get_openalex") as mock_oa:
+        with patch("lib.tools._get_openalex") as mock_oa, \
+             patch("lib.tools._get_features", return_value=dict(_DIRECT_FEATURES)):
             mock_oa.return_value.search_works.return_value = SAMPLE_OPENALEX_RESPONSE
             result = await handle_tool_call("search_academic", {"query": "machine learning"})
         assert len(result) == 1
@@ -120,7 +129,8 @@ class TestSearchAcademic:
 
     @pytest.mark.asyncio
     async def test_with_year_filter(self):
-        with patch("lib.tools._get_openalex") as mock_oa:
+        with patch("lib.tools._get_openalex") as mock_oa, \
+             patch("lib.tools._get_features", return_value=dict(_DIRECT_FEATURES)):
             mock_oa.return_value.search_works.return_value = SAMPLE_OPENALEX_RESPONSE
             result = await handle_tool_call(
                 "search_academic",
@@ -133,8 +143,11 @@ class TestSearchAcademic:
 
     @pytest.mark.asyncio
     async def test_no_results(self):
-        with patch("lib.tools._get_openalex") as mock_oa:
+        with patch("lib.tools._get_openalex") as mock_oa, \
+             patch("lib.tools._get_features", return_value=dict(_DIRECT_FEATURES)):
             mock_oa.return_value.search_works.return_value = {"results": [], "meta": {"count": 0}}
+            mock_oa.return_value.budget_status.return_value = {"exhausted": False}
+            mock_oa.return_value.circuit_open = False
             result = await handle_tool_call("search_academic", {"query": "xyznotreal"})
         assert "No results found" in result[0].text
 
@@ -300,7 +313,8 @@ class TestOpenAlexFallback:
     @pytest.mark.asyncio
     async def test_search_academic_falls_back_when_budget_exhausted(self):
         with patch("lib.tools._get_openalex") as mock_oa, \
-             patch("lib.tools._get_s2") as mock_s2:
+             patch("lib.tools._get_s2") as mock_s2, \
+             patch("lib.tools._get_features", return_value=dict(_DIRECT_FEATURES)):
             # Budget exhausted
             mock_oa.return_value.budget_status.return_value = {
                 "exhausted": True, "calls_today": 900, "daily_limit": 900,
@@ -318,7 +332,8 @@ class TestOpenAlexFallback:
     @pytest.mark.asyncio
     async def test_search_academic_falls_back_when_circuit_open(self):
         with patch("lib.tools._get_openalex") as mock_oa, \
-             patch("lib.tools._get_s2") as mock_s2:
+             patch("lib.tools._get_s2") as mock_s2, \
+             patch("lib.tools._get_features", return_value=dict(_DIRECT_FEATURES)):
             mock_oa.return_value.budget_status.return_value = {
                 "exhausted": False, "calls_today": 0, "daily_limit": 900,
                 "remaining": 900, "pct_used": 0.0,
@@ -335,7 +350,8 @@ class TestOpenAlexFallback:
     @pytest.mark.asyncio
     async def test_search_academic_uses_openalex_when_available(self):
         with patch("lib.tools._get_openalex") as mock_oa, \
-             patch("lib.tools._get_s2") as mock_s2:
+             patch("lib.tools._get_s2") as mock_s2, \
+             patch("lib.tools._get_features", return_value=dict(_DIRECT_FEATURES)):
             mock_oa.return_value.budget_status.return_value = {
                 "exhausted": False, "calls_today": 10, "daily_limit": 900,
                 "remaining": 890, "pct_used": 1.1,
@@ -368,7 +384,8 @@ class TestOpenAlexFallback:
     @pytest.mark.asyncio
     async def test_fallback_with_no_s2_results(self):
         with patch("lib.tools._get_openalex") as mock_oa, \
-             patch("lib.tools._get_s2") as mock_s2:
+             patch("lib.tools._get_s2") as mock_s2, \
+             patch("lib.tools._get_features", return_value=dict(_DIRECT_FEATURES)):
             mock_oa.return_value.budget_status.return_value = {
                 "exhausted": True, "calls_today": 900, "daily_limit": 900,
                 "remaining": 0, "pct_used": 100.0,

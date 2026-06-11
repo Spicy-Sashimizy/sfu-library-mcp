@@ -4,6 +4,7 @@ import asyncio
 import json
 import logging
 import time
+import weakref
 from typing import Any
 
 import requests
@@ -36,8 +37,22 @@ from lib.zotero import ZoteroClient, ZoteroError, fetch_zotero_item_types
 
 logger = logging.getLogger("sfu_library_mcp")
 
-# Semaphore to limit concurrent outbound API requests
-_request_semaphore = asyncio.Semaphore(8)
+# Semaphore to limit concurrent outbound API requests.
+# Created lazily per event loop: asyncio primitives bind to the loop that first
+# awaits them, so a module-level Semaphore breaks ("bound to a different event
+# loop") if the process ever runs more than one loop.
+_request_semaphores: "weakref.WeakKeyDictionary[asyncio.AbstractEventLoop, asyncio.Semaphore]" = (
+    weakref.WeakKeyDictionary()
+)
+
+
+def _get_request_semaphore() -> asyncio.Semaphore:
+    loop = asyncio.get_running_loop()
+    sem = _request_semaphores.get(loop)
+    if sem is None:
+        sem = asyncio.Semaphore(8)
+        _request_semaphores[loop] = sem
+    return sem
 
 # Lazy-loaded config
 _config: ServerConfig | None = None
@@ -958,6 +973,12 @@ def _excluded_tool_names() -> set[str]:
     return excluded
 
 
+def advertised_tool_count() -> int:
+    """Number of tools actually advertised to clients (after gating)."""
+    excluded = _excluded_tool_names()
+    return sum(1 for t in TOOL_DEFINITIONS if t.name not in excluded)
+
+
 async def get_tool_definitions() -> list[Tool]:
     """Return tool definitions with the item_type enum populated from the Zotero API.
 
@@ -1099,7 +1120,7 @@ def _openalex_unavailable_reason() -> str | None:
 async def _s2_fallback(query: str, limit: int, reason: str) -> list[TextContent]:
     """Search Semantic Scholar and return results with a degradation notice."""
     logger.warning("OpenAlex fallback to S2: %s", reason)
-    async with _request_semaphore:
+    async with _get_request_semaphore():
         papers = await asyncio.get_event_loop().run_in_executor(
             None,
             lambda: _get_s2().search_papers(query, limit=limit),
@@ -1159,7 +1180,7 @@ def _s2_paper_to_work(p: dict) -> dict:
 async def _s2_works_fallback(query: str, limit: int, reason: str) -> tuple[list[dict], str]:
     """Semantic Scholar fallback returning OpenAlex-shaped works and a notice."""
     logger.warning("OpenAlex fallback to S2: %s", reason)
-    async with _request_semaphore:
+    async with _get_request_semaphore():
         papers = await asyncio.get_event_loop().run_in_executor(
             None,
             lambda: _get_s2().search_papers(query, limit=limit),
@@ -1185,7 +1206,7 @@ async def _search_works(query: str, limit: int, args: dict, handler: str) -> tup
         subject_hint = detect_subject(query)
         t0 = time.monotonic()
         router = _get_federated_router()
-        async with _request_semaphore:
+        async with _get_request_semaphore():
             results = await asyncio.get_event_loop().run_in_executor(
                 None,
                 lambda: router.search(
@@ -1206,7 +1227,7 @@ async def _search_works(query: str, limit: int, args: dict, handler: str) -> tup
     if unavailable:
         return await _s2_works_fallback(query, limit, unavailable)
 
-    async with _request_semaphore:
+    async with _get_request_semaphore():
         data = await asyncio.get_event_loop().run_in_executor(
             None,
             lambda: _get_openalex().search_works(query, filters=filters, per_page=fetch_k),
@@ -1251,7 +1272,7 @@ async def _handle_search_academic(args: dict) -> list[TextContent]:
         t0 = time.monotonic()
         router = _get_federated_router()
         fetch_k = _retrieval_top_k(limit)
-        async with _request_semaphore:
+        async with _get_request_semaphore():
             results = await asyncio.get_event_loop().run_in_executor(
                 None,
                 lambda: router.search(
@@ -1278,7 +1299,7 @@ async def _handle_search_academic(args: dict) -> list[TextContent]:
     if unavailable:
         return await _s2_fallback(query, limit, unavailable)
 
-    async with _request_semaphore:
+    async with _get_request_semaphore():
         data = await asyncio.get_event_loop().run_in_executor(
             None,
             lambda: _get_openalex().search_works(
@@ -1306,7 +1327,7 @@ async def _handle_search_by_author(args: dict) -> list[TextContent]:
         return [TextContent(type="text", text="No author name provided.")]
     limit = max(1, min(args.get("limit", 10), 50))
 
-    async with _request_semaphore:
+    async with _get_request_semaphore():
         data = await asyncio.get_event_loop().run_in_executor(
             None,
             lambda: _get_openalex().search_works(
@@ -1331,7 +1352,7 @@ async def _handle_search_by_doi(args: dict) -> list[TextContent]:
     # Check work cache first
     work = _lookup_work(doi)
     if not work:
-        async with _request_semaphore:
+        async with _get_request_semaphore():
             work = await asyncio.get_event_loop().run_in_executor(
                 None,
                 lambda: _get_openalex().get_work_by_doi(doi),
@@ -1340,7 +1361,7 @@ async def _handle_search_by_doi(args: dict) -> list[TextContent]:
     if not work:
         # Fallback to CrossRef
         from lib.openalex import fetch_crossref_work
-        async with _request_semaphore:
+        async with _get_request_semaphore():
             work = await asyncio.get_event_loop().run_in_executor(
                 None, lambda: fetch_crossref_work(doi)
             )
@@ -1370,7 +1391,7 @@ async def _handle_search_by_topic(args: dict) -> list[TextContent]:
     if args.get("open_access_only"):
         filters["open_access.is_oa"] = "true"
 
-    async with _request_semaphore:
+    async with _get_request_semaphore():
         data = await asyncio.get_event_loop().run_in_executor(
             None,
             lambda: _get_openalex().search_works(
@@ -1404,7 +1425,7 @@ async def _handle_get_citations(args: dict) -> list[TextContent]:
         return [TextContent(type="text", text="No DOI provided.")]
     limit = max(1, min(args.get("limit", 20), 100))
 
-    async with _request_semaphore:
+    async with _get_request_semaphore():
         papers = await asyncio.get_event_loop().run_in_executor(
             None,
             lambda: _get_s2().get_citations(f"DOI:{doi}", limit=limit),
@@ -1421,7 +1442,7 @@ async def _handle_get_references(args: dict) -> list[TextContent]:
         return [TextContent(type="text", text="No DOI provided.")]
     limit = max(1, min(args.get("limit", 20), 100))
 
-    async with _request_semaphore:
+    async with _get_request_semaphore():
         papers = await asyncio.get_event_loop().run_in_executor(
             None,
             lambda: _get_s2().get_references(f"DOI:{doi}", limit=limit),
@@ -1437,7 +1458,7 @@ async def _handle_get_paper_summary(args: dict) -> list[TextContent]:
     if not doi:
         return [TextContent(type="text", text="No DOI provided.")]
 
-    async with _request_semaphore:
+    async with _get_request_semaphore():
         tldr = await asyncio.get_event_loop().run_in_executor(
             None,
             lambda: _get_s2().get_tldr(f"DOI:{doi}"),
@@ -1461,7 +1482,7 @@ async def _handle_find_open_access(args: dict) -> list[TextContent]:
 
     resolver = _get_resolver()
 
-    async with _request_semaphore:
+    async with _get_request_semaphore():
         result = await asyncio.get_event_loop().run_in_executor(
             None,
             lambda: resolver._check_unpaywall(doi_norm),
@@ -1508,7 +1529,7 @@ async def _handle_get_full_text_link(args: dict) -> list[TextContent]:
     # Pull cached work metadata for OA info and source URL
     work = _lookup_work(doi_norm)
     if not work:
-        async with _request_semaphore:
+        async with _get_request_semaphore():
             work = await asyncio.get_event_loop().run_in_executor(
                 None,
                 lambda: _get_openalex().get_work_by_doi(doi_norm),
@@ -1521,7 +1542,7 @@ async def _handle_get_full_text_link(args: dict) -> list[TextContent]:
     publisher = (work or {}).get("publisher", "")
     source_url = (work or {}).get("oa_url", "") or f"https://doi.org/{doi_norm}"
 
-    async with _request_semaphore:
+    async with _get_request_semaphore():
         result = await asyncio.get_event_loop().run_in_executor(
             None,
             lambda: _get_resolver().resolve(
@@ -1568,7 +1589,7 @@ async def _handle_browse_sfu_databases(args: dict) -> list[TextContent]:
     limit = max(1, min(args.get("limit", 20), 100))
 
     registry = _get_registry()
-    async with _request_semaphore:
+    async with _get_request_semaphore():
         docs = await asyncio.get_event_loop().run_in_executor(
             None,
             lambda: registry.search(
@@ -1589,7 +1610,7 @@ async def _handle_check_sfu_access(args: dict) -> list[TextContent]:
         return [TextContent(type="text", text="No database name provided.")]
 
     registry = _get_registry()
-    async with _request_semaphore:
+    async with _get_request_semaphore():
         docs = await asyncio.get_event_loop().run_in_executor(
             None,
             lambda: registry.search(query=name, limit=5),
@@ -1627,7 +1648,7 @@ async def _handle_search_biomedical(args: dict) -> list[TextContent]:
         return [TextContent(type="text", text="No query provided.")]
     limit = max(1, min(args.get("limit", 10), 25))
 
-    async with _request_semaphore:
+    async with _get_request_semaphore():
         data = await asyncio.get_event_loop().run_in_executor(
             None,
             lambda: _fetch_europe_pmc(query, limit),
@@ -1821,7 +1842,7 @@ async def _handle_generate_citation(args: dict) -> list[TextContent]:
     fmt = args.get("format", "apa").lower()
 
     if doi:
-        async with _request_semaphore:
+        async with _get_request_semaphore():
             metadata = await _fetch_work_metadata(doi)
         if not metadata:
             return [TextContent(type="text", text=f"Could not retrieve metadata for DOI: {doi}")]
@@ -1855,7 +1876,7 @@ async def _handle_batch_citations(args: dict) -> list[TextContent]:
     }
 
     async def fetch_one(doi: str) -> tuple[str, dict | None]:
-        async with _request_semaphore:
+        async with _get_request_semaphore():
             metadata = await _fetch_work_metadata(doi)
             if metadata:
                 # Run the blocking CrossRef enrichment off the event loop so all
@@ -1904,7 +1925,7 @@ async def _handle_search_and_cite(args: dict) -> list[TextContent]:
         return [TextContent(type="text", text="No results found.")]
 
     async def cite_one(work: dict) -> str:
-        async with _request_semaphore:
+        async with _get_request_semaphore():
             enriched = await asyncio.get_event_loop().run_in_executor(
                 None, enrich_metadata_from_crossref, work
             )
@@ -1973,7 +1994,7 @@ async def _handle_export_search(args: dict) -> list[TextContent]:
     export_format = args.get("format", "bibtex").lower()
     limit = max(1, min(args.get("limit", 10), 50))
 
-    async with _request_semaphore:
+    async with _get_request_semaphore():
         data = await asyncio.get_event_loop().run_in_executor(
             None,
             lambda: _get_openalex().search_works(query, per_page=limit),
@@ -2025,7 +2046,7 @@ async def _handle_export_search(args: dict) -> list[TextContent]:
 
     if export_format == "bibtex":
         # Run blocking CrossRef enrichment + formatting off the event loop.
-        async with _request_semaphore:
+        async with _get_request_semaphore():
             entries = await asyncio.get_event_loop().run_in_executor(
                 None,
                 lambda: [format_bibtex_entry(enrich_metadata_from_crossref(w)) for w in works],
@@ -2035,7 +2056,7 @@ async def _handle_export_search(args: dict) -> list[TextContent]:
 
     if export_format == "ris":
         # Run blocking CrossRef enrichment + formatting off the event loop.
-        async with _request_semaphore:
+        async with _get_request_semaphore():
             entries = await asyncio.get_event_loop().run_in_executor(
                 None,
                 lambda: [format_ris_entry(enrich_metadata_from_crossref(w)) for w in works],
@@ -2058,7 +2079,7 @@ async def _handle_save_to_zotero(args: dict) -> list[TextContent]:
     parent_collection = args.get("parent_collection", "")
 
     if doi:
-        async with _request_semaphore:
+        async with _get_request_semaphore():
             metadata = await _fetch_work_metadata(doi)
         if not metadata:
             return [TextContent(type="text", text=f"Could not retrieve metadata for DOI: {doi}")]
@@ -2146,7 +2167,7 @@ async def _handle_batch_save_to_zotero(args: dict) -> list[TextContent]:
     details = []
 
     for doi in dois:
-        async with _request_semaphore:
+        async with _get_request_semaphore():
             metadata = await _fetch_work_metadata(doi)
         if not metadata:
             details.append(f"  {doi}: FAILED — could not retrieve metadata")
