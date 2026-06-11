@@ -24,8 +24,17 @@ from pathlib import Path
 
 logger = logging.getLogger("sfu_library_mcp")
 
-QUANT_SCALE = 100
+# BMP stores impacts as u8 and SATURATES above 255 (measured: scale 1000
+# collapses recall to 0.28; scale 100 clips weights > 2.55). Scale 70 keeps
+# every SPLADE log1p weight <= 3.64 saturation-free: measured recall@50 vs
+# float-exact 0.968-0.970, identical index size. Scores are scale-invariant
+# for ranking, so retriever/index scale mismatch only rescales scores.
+QUANT_SCALE = 70
+BMP_IMPACT_MAX = 255
 DEFAULT_BMP_SHARD_DOCS = 2_000_000   # RAM ceiling per BMP build shard
+# BMP returns empty results below ~500 docs (and panics on heavy score ties);
+# never leave a tail shard smaller than this — absorb it into the previous.
+MIN_BMP_TAIL_DOCS = 5_000
 # bsize=256 + clustered insertion: measured −54.2% size and −61% latency at
 # EQUAL recall vs the paper's bsize=32 (eval_storage_levers.py, §9 of
 # docs/LEXICAL_STORAGE_RESEARCH.md).
@@ -129,8 +138,8 @@ class SectionBuilder:
 
         sparse = doc.get("sparse_field") or {}
         if sparse:
-            vec = {t: max(1, int(round(w * QUANT_SCALE))) for t, w in sparse.items()
-                   if w > 0}
+            vec = {t: min(BMP_IMPACT_MAX, max(1, int(round(w * QUANT_SCALE))))
+                   for t, w in sparse.items() if w > 0}
             if vec:
                 self._bmp_chunk.append((max(vec, key=vec.get), doc_id, vec))
                 if len(self._bmp_chunk) >= BMP_CLUSTER_CHUNK_DOCS:
@@ -145,15 +154,21 @@ class SectionBuilder:
             self._flush_meta()
         self.count += 1
 
-    def _flush_bmp_chunk(self) -> None:
+    def _flush_bmp_chunk(self, final: bool = False) -> None:
         """Sort the buffered chunk by top SPLADE term, then stream into BMP
-        (mid-chunk shard rotation preserves clustered order across shards)."""
+        (mid-chunk shard rotation preserves clustered order across shards).
+        On the final flush, a too-small tail is absorbed into the current
+        shard instead of opening a broken sub-minimum shard."""
         self._bmp_chunk.sort(key=lambda t: t[0])
-        for _, doc_id, vec in self._bmp_chunk:
+        n = len(self._bmp_chunk)
+        for pos, (_, doc_id, vec) in enumerate(self._bmp_chunk):
             self._bmp_indexer().add_document(doc_id, vec)
             self._bmp_vocab.update(vec)
             self._bmp_in_shard += 1
             if self._bmp_in_shard >= self._bmp_shard_docs:
+                remaining = n - pos - 1
+                if final and remaining < MIN_BMP_TAIL_DOCS:
+                    continue  # absorb the tail into this shard
                 self._rotate_bmp()
         self._bmp_chunk.clear()
 
@@ -167,7 +182,12 @@ class SectionBuilder:
         self._meta.commit()
         self._writer.commit()
         self._writer.wait_merging_threads()
-        self._flush_bmp_chunk()
+        self._flush_bmp_chunk(final=True)
+        if self._bmp is not None and self._bmp_in_shard < 500 and self._bmp_shard_idx == 0:
+            logger.warning(
+                "section %s: only %d sparse docs — below BMP's working minimum; "
+                "sparse leg will be empty here (tantivy still covers it)",
+                self.section, self._bmp_in_shard)
         self._rotate_bmp()
         n_abs = self._abstracts.finish() if self._abstracts else 0
         size = sum(f.stat().st_size for f in self.dir.rglob("*") if f.is_file())

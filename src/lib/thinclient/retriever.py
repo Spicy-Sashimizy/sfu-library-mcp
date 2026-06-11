@@ -34,7 +34,7 @@ from typing import Any
 logger = logging.getLogger("sfu_library_mcp")
 
 RRF_K = 60
-QUANT_SCALE = 100               # must match builder.QUANT_SCALE
+QUANT_SCALE = 70                # must match builder.QUANT_SCALE (saturation-free)
 SPLADE_QUERY_TERMS = 64         # top query terms, same cap as the OpenSearch leg
 OVERFETCH = 4                   # sparse/dense over-fetch multiplier (no filters)
 OVERFETCH_FILTERED = 10         # ... when post-filtering

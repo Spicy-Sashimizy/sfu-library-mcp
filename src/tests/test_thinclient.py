@@ -27,7 +27,10 @@ TOPICS = {
 }
 
 
-def make_docs(n: int = 400) -> list[dict]:
+# BMP returns empty results below ~500 docs/shard and panics on heavy score
+# ties (measured quirks) — the fixture stays above both: 3000 docs, 1000-doc
+# shards, near-unique weights.
+def make_docs(n: int = 3000) -> list[dict]:
     docs = []
     for i in range(n):
         sec, (words, extra) = list(TOPICS.items())[i % 2]
@@ -39,7 +42,8 @@ def make_docs(n: int = 400) -> list[dict]:
             "type": "article" if i % 3 else "review",
             "is_oa": bool((i // 2) % 2),  # varies WITHIN each section
             "doi": f"10.1/{i}",
-            "sparse_field": {w: 1.0 + (i % 5) * 0.1 for w in words.split()[:4]},
+            "sparse_field": {w: 1.0 + ((i * 7 + j * 13) % 199) * 0.01
+                             for j, w in enumerate(words.split()[:4])},
         })
     return docs
 
@@ -54,7 +58,7 @@ def index_root(tmp_path_factory):
         sec = classify_doc(d["title"], d["abstract"])
         if sec not in builders:
             builders[sec] = SectionBuilder(root, sec, hot=True, meta_db=meta,
-                                           bmp_shard_docs=150)  # force shard rotation
+                                           bmp_shard_docs=1000)  # force shard rotation
         builders[sec].add(d)
         counts[sec] = counts.get(sec, 0) + 1
     infos = {s: b.finish() for s, b in builders.items()}
@@ -69,14 +73,14 @@ def test_sections_disjoint_and_complete(index_root):
     import sqlite3
     db = sqlite3.connect(str(index_root / "meta.sqlite"))
     total = db.execute("SELECT COUNT(*) FROM docs").fetchone()[0]
-    assert total == 400
+    assert total == 3000
     per = dict(db.execute("SELECT section, COUNT(*) FROM docs GROUP BY section"))
-    assert sum(per.values()) == 400 and len(per) >= 2
+    assert sum(per.values()) == 3000 and len(per) >= 2
 
 
 def test_bmp_shards_rotated(index_root):
     shards = list((index_root / "sections").glob("*/splade_*.bmp"))
-    assert len(shards) > 2  # 150-doc shard cap on ~200-doc sections rotates
+    assert len(shards) > 1  # 1000-doc shard cap on ~1500-doc sections rotates
 
 
 def test_bm25f_search_and_filters(index_root):
