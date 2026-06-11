@@ -34,12 +34,12 @@ Step 5: Run `git push` (if remote configured)
 
 **The MCP server runs using the project venv, NOT the system Python.**
 
-- Venv path: `/workspaces/sfu-library-mcp/.venv/bin/python3`
+- Venv path: `/workspaces/sfu-library-thinclient/.venv/bin/python3`
 - The MCP server is launched via Docker exec using this venv
 - **ALL package installs MUST target the venv:**
   ```bash
   # Correct — installs into the venv
-  sudo /workspaces/sfu-library-mcp/.venv/bin/pip install <package>
+  sudo /workspaces/sfu-library-thinclient/.venv/bin/python3 -m pip install <package>
 
   # WRONG — installs into system Python, MCP server won't see it
   pip install <package>
@@ -48,7 +48,7 @@ Step 5: Run `git push` (if remote configured)
 - **After installing new packages:** The MCP server process must be restarted (restart Claude Desktop or close/reopen conversation)
 - **To verify a package is available to the MCP server:**
   ```bash
-  /workspaces/sfu-library-mcp/.venv/bin/python3 -c "import <package>; print('OK')"
+  /workspaces/sfu-library-thinclient/.venv/bin/python3 -c "import <package>; print('OK')"
   ```
 - The venv is owned by root, so `sudo` is required for pip installs
 
