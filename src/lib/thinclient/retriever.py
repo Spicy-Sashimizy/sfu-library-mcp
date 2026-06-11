@@ -1,0 +1,403 @@
+"""ThinClientRetriever — drop-in replacement for OpenSearchRetriever.
+
+Same public surface (search / dense_search / is_available, same result dict
+shape) backed by tantivy + BMP + usearch over a built index root. The
+FederatedSearchRouter and reranker need zero changes.
+
+Cross-section score merging:
+  - SPLADE (BMP) and dense scores are corpus-independent dot products — exact
+    merge across sections/shards.
+  - BM25F scores use per-section IDF, so cross-section merge is approximate
+    (same caveat as multi-shard OpenSearch; measured 40/80 score-multiset drift
+    for 2-shard in docs/COMPRESSION_EVAL_RESULTS.md). RRF fusion downstream is
+    rank-based per leg, which absorbs most of the drift.
+
+Filters: tantivy enforces year/type/is_oa natively (fast fields); BMP/usearch
+legs over-fetch and post-filter against meta.sqlite (the sidecar-mask pattern
+from docs/THIN_CLIENT_STACK_RESEARCH.md).
+
+Abstract policy: hot sections answer locally from the zstd-dict sidecar; ids
+missing locally are batch-fetched from the OpenAlex API (inverted-abstract
+parser in lib.openalex) when remote_abstracts=True — BEFORE rerank, never
+display-only.
+"""
+
+from __future__ import annotations
+
+import json
+import logging
+import sqlite3
+import threading
+from pathlib import Path
+from typing import Any
+
+logger = logging.getLogger("sfu_library_mcp")
+
+RRF_K = 60
+QUANT_SCALE = 100               # must match builder.QUANT_SCALE
+SPLADE_QUERY_TERMS = 64         # top query terms, same cap as the OpenSearch leg
+OVERFETCH = 4                   # sparse/dense over-fetch multiplier (no filters)
+OVERFETCH_FILTERED = 10         # ... when post-filtering
+
+
+class ThinClientRetriever:
+    """Retriever over a thin-client index root (tantivy + BMP + usearch)."""
+
+    def __init__(
+        self,
+        index_root: str = "",
+        splade_model_path: str = "",
+        dense_model_path: str = "",
+        remote_abstracts: bool = True,
+        openalex_mailto: str = "",
+    ):
+        repo_root = Path(__file__).resolve().parents[3]
+        self.root = Path(index_root or repo_root / "data" / "thinclient_index")
+        self.splade_model_path = splade_model_path or str(repo_root / "models" / "splade_onnx")
+        self.dense_model_path = dense_model_path or str(repo_root / "models" / "sfu-academic-embed-v5")
+        self.remote_abstracts = remote_abstracts
+        self.openalex_mailto = openalex_mailto
+
+        self._lock = threading.Lock()
+        self._sections: dict[str, dict] = {}   # name -> {tantivy, searcher, bmp:[...]}
+        self._abstract_stores: dict[str, Any] = {}
+        self._meta: sqlite3.Connection | None = None
+        self._meta_lock = threading.Lock()
+        self._dense: dict | None = None
+        self._loaded = False
+
+    # ── lazy loading ────────────────────────────────────────────────────────
+
+    def _manifest(self) -> dict:
+        p = self.root / "manifest.json"
+        return json.loads(p.read_text()) if p.exists() else {}
+
+    def _load(self) -> None:
+        if self._loaded:
+            return
+        with self._lock:
+            if self._loaded:
+                return
+            import bmp
+            import tantivy
+
+            from lib.thinclient.abstracts import AbstractStore
+
+            sections_dir = self.root / "sections"
+            if sections_dir.is_dir():
+                for sdir in sorted(sections_dir.iterdir()):
+                    if not (sdir / "tantivy" / "meta.json").exists():
+                        continue
+                    idx = tantivy.Index.open(str(sdir / "tantivy"))
+                    idx.reload()
+                    shards = [bmp.Searcher(str(p))
+                              for p in sorted(sdir.glob("splade_*.bmp"))]
+                    self._sections[sdir.name] = {
+                        "index": idx, "searcher": idx.searcher(),
+                        "schema": idx.schema, "bmp": shards,
+                    }
+                    abs_path = sdir / "abstracts.sqlite"
+                    if abs_path.exists():
+                        self._abstract_stores[sdir.name] = AbstractStore(abs_path)
+            meta_path = self.root / "meta.sqlite"
+            if meta_path.exists():
+                self._meta = sqlite3.connect(str(meta_path), check_same_thread=False)
+            dense_dir = self.root / "dense"
+            if (dense_dir / "b1.usearch").exists():
+                import numpy as np
+                from usearch.index import Index
+                view = Index.restore(str(dense_dir / "b1.usearch"), view=True)
+                self._dense = {
+                    "index": view,
+                    "rescore": np.load(dense_dir / "rescore_int8.npy", mmap_mode="r"),
+                    "ids": json.loads((dense_dir / "ids.json").read_text()),
+                }
+            self._loaded = True
+            logger.info("thinclient: loaded %d live sections %s, dense=%s",
+                        len(self._sections), sorted(self._sections),
+                        bool(self._dense))
+
+    # ── public surface (OpenSearchRetriever-compatible) ─────────────────────
+
+    def is_available(self) -> bool:
+        try:
+            self._load()
+        except Exception as exc:
+            logger.warning("thinclient index unavailable: %s", exc)
+            return False
+        return bool(self._sections)
+
+    def live_sections(self) -> list[str]:
+        self._load()
+        return sorted(self._sections)
+
+    def search(self, query: str, top_k: int = 50, mode: str | None = None,
+               filters: dict | None = None) -> list[dict]:
+        """mode: 'bm25f' (default) or 'splade' — same contract as the
+        OpenSearch retriever so FederatedSearchRouter can RRF-fuse both."""
+        self._load()
+        if not self._sections:
+            return []
+        use_splade = mode == "splade"
+        f = _normalize_filters(filters)
+        if use_splade:
+            ranked = self._splade_leg(query, top_k, f)
+        else:
+            ranked = self._bm25f_leg(query, top_k, f)
+        return self._hydrate(ranked, source="thinclient" if not use_splade
+                             else "thinclient_splade")
+
+    def dense_search(self, query: str, top_k: int = 50,
+                     dense_index: str = "", dense_model_path: str = "",
+                     filters: dict | None = None) -> list[dict]:
+        """usearch b1 + int8 rescore. Coverage = the dense POC subset until the
+        full corpus is encoded (same partial-coverage caveat as the OpenSearch
+        dense leg)."""
+        self._load()
+        if not self._dense:
+            return []
+        import numpy as np
+
+        from lib.opensearch_retriever import encode_dense
+        q = np.asarray(encode_dense(query, dense_model_path or self.dense_model_path),
+                       dtype=np.float32)
+        f = _normalize_filters(filters)
+        fetch = top_k * (OVERFETCH_FILTERED if f else OVERFETCH)
+        qbits = np.packbits((q > 0).astype(np.uint8))
+        hits = self._dense["index"].search(qbits, fetch)
+        keys = np.asarray(hits.keys, dtype=np.int64).ravel()
+        if keys.size == 0:
+            return []
+        rescore = self._dense["rescore"]
+        scores = (rescore[keys].astype(np.float32) / 127.0) @ q
+        order = np.argsort(-scores)
+        ids_all = self._dense["ids"]
+        ranked = [(ids_all[int(keys[i])], float(scores[i])) for i in order]
+        if f:
+            ranked = self._post_filter(ranked, f)
+        return self._hydrate(ranked[:top_k], source="thinclient_dense")
+
+    def search_rrf(self, query: str, top_k: int = 50,
+                   filters: dict | None = None, include_dense: bool = False) -> list[dict]:
+        """Convenience 2/3-leg RRF (k=60) — same fusion the router applies."""
+        legs = [self.search(query, top_k, mode="bm25f", filters=filters),
+                self.search(query, top_k, mode="splade", filters=filters)]
+        if include_dense and self._dense:
+            legs.append(self.dense_search(query, top_k, filters=filters))
+        scores: dict[str, float] = {}
+        by_id: dict[str, dict] = {}
+        for leg in legs:
+            for rank, doc in enumerate(leg, start=1):
+                did = doc["openalex_id"]
+                scores[did] = scores.get(did, 0.0) + 1.0 / (RRF_K + rank)
+                by_id.setdefault(did, doc)
+        out = []
+        for did in sorted(scores, key=lambda d: scores[d], reverse=True)[:top_k]:
+            doc = dict(by_id[did])
+            doc["score"] = scores[did]
+            doc["source"] = "thinclient_rrf"
+            out.append(doc)
+        return out
+
+    # ── legs ─────────────────────────────────────────────────────────────────
+
+    def _bm25f_leg(self, query: str, top_k: int,
+                   f: dict | None) -> list[tuple[str, float]]:
+        import tantivy
+        text = "".join(c if c.isalnum() or c.isspace() else " " for c in query)
+        if not text.strip():
+            return []
+        merged: list[tuple[str, float]] = []
+        for name, sec in self._sections.items():
+            idx, searcher = sec["index"], sec["searcher"]
+            qt = idx.parse_query(text, ["title"])
+            qa = idx.parse_query(text, ["abstract"])
+            clauses = [
+                (tantivy.Occur.Should, tantivy.Query.boost_query(qt, 3.0)),
+                (tantivy.Occur.Should, qa),
+            ]
+            q = tantivy.Query.boolean_query(clauses)
+            must = [(tantivy.Occur.Must, q)]
+            if f and f.get("year_range"):
+                lo, hi = f["year_range"]
+                must.append((tantivy.Occur.Must, tantivy.Query.range_query(
+                    sec["schema"], "year", tantivy.FieldType.Integer, lo, hi)))
+            if f and f.get("type"):
+                must.append((tantivy.Occur.Must, tantivy.Query.term_query(
+                    sec["schema"], "doctype", f["type"])))
+            if f and f.get("is_oa"):
+                must.append((tantivy.Occur.Must, tantivy.Query.term_query(
+                    sec["schema"], "is_oa", True)))
+            final = tantivy.Query.boolean_query(must) if len(must) > 1 else q
+            for score, addr in searcher.search(final, top_k).hits:
+                merged.append((searcher.doc(addr)["id"][0], float(score)))
+        merged.sort(key=lambda t: -t[1])
+        return merged[:top_k]
+
+    def _splade_leg(self, query: str, top_k: int,
+                    f: dict | None) -> list[tuple[str, float]]:
+        from lib.opensearch_retriever import encode_splade
+        sparse = encode_splade(query, self.splade_model_path)
+        if not sparse:
+            logger.warning("SPLADE encoding empty; falling back to BM25F leg")
+            return self._bm25f_leg(query, top_k, f)
+        top_terms = dict(sorted(sparse.items(), key=lambda x: -x[1])[:SPLADE_QUERY_TERMS])
+        qvec = {t: max(1, int(round(w * QUANT_SCALE))) for t, w in top_terms.items()}
+        fetch = top_k * (OVERFETCH_FILTERED if f else 1)
+        merged: list[tuple[str, float]] = []
+        for sec in self._sections.values():
+            for shard in sec["bmp"]:
+                ids, scores = shard.search(qvec, k=fetch, alpha=1.0, beta=1.0)
+                merged.extend(zip(ids, map(float, scores)))
+        merged.sort(key=lambda t: -t[1])
+        if f:
+            merged = self._post_filter(merged, f)
+        return merged[:top_k]
+
+    # ── helpers ───────────────────────────────────────────────────────────────
+
+    def _meta_rows(self, ids: list[str]) -> dict[str, tuple]:
+        if self._meta is None or not ids:
+            return {}
+        out: dict[str, tuple] = {}
+        with self._meta_lock:
+            for start in range(0, len(ids), 500):
+                chunk = ids[start:start + 500]
+                marks = ",".join("?" * len(chunk))
+                for row in self._meta.execute(
+                        f"SELECT id, title, doi, year, type, is_oa, section "
+                        f"FROM docs WHERE id IN ({marks})", chunk):
+                    out[row[0]] = row
+        return out
+
+    def _post_filter(self, ranked: list[tuple[str, float]],
+                     f: dict) -> list[tuple[str, float]]:
+        rows = self._meta_rows([d for d, _ in ranked])
+        keep = []
+        for did, score in ranked:
+            row = rows.get(did)
+            if row is None:
+                continue
+            _, _, _, year, dtype, is_oa, _ = row
+            if f.get("year_range"):
+                lo, hi = f["year_range"]
+                if not (year and lo <= year <= hi):
+                    continue
+            if f.get("type") and dtype != f["type"]:
+                continue
+            if f.get("is_oa") and not is_oa:
+                continue
+            keep.append((did, score))
+        return keep
+
+    def _hydrate(self, ranked: list[tuple[str, float]], source: str) -> list[dict]:
+        ids = [d for d, _ in ranked]
+        rows = self._meta_rows(ids)
+        abstracts = self.fetch_abstracts(ids)
+        results = []
+        for did, score in ranked:
+            row = rows.get(did)
+            title, doi, year, dtype, is_oa = (
+                (row[1], row[2], row[3], row[4], bool(row[5])) if row
+                else ("", "", None, "", False))
+            results.append({
+                "doi": doi,
+                "openalex_id": did,
+                "title": title,
+                "abstract": abstracts.get(did, ""),
+                "publication_year": year,
+                "date": str(year) if year is not None else "",
+                "year": year,
+                "score": score,
+                "source": source,
+                "type": dtype,
+                "is_oa": is_oa,
+            })
+        return results
+
+    def fetch_abstracts(self, ids: list[str]) -> dict[str, str]:
+        """Hot-section sidecars first; missing ids via OpenAlex API (cold-section
+        policy: fetch BEFORE rerank, ~100 docs ≈ one mget)."""
+        out: dict[str, str] = {}
+        for store in self._abstract_stores.values():
+            missing = [i for i in ids if i not in out]
+            if not missing:
+                break
+            out.update(store.fetch(missing))
+        missing = [i for i in ids if i not in out]
+        if missing and self.remote_abstracts:
+            out.update(self._fetch_remote_abstracts(missing))
+        return out
+
+    def _fetch_remote_abstracts(self, ids: list[str]) -> dict[str, str]:
+        import requests
+        out: dict[str, str] = {}
+        try:
+            for start in range(0, len(ids), 50):  # OpenAlex max 50 ids per filter
+                chunk = ids[start:start + 50]
+                params = {
+                    "filter": "openalex_id:" + "|".join(chunk),
+                    "per-page": str(len(chunk)),
+                    "select": "id,abstract_inverted_index",
+                }
+                if self.openalex_mailto:
+                    params["mailto"] = self.openalex_mailto
+                r = requests.get("https://api.openalex.org/works", params=params,
+                                 timeout=15)
+                r.raise_for_status()
+                for w in r.json().get("results", []):
+                    wid = (w.get("id") or "").rsplit("/", 1)[-1]
+                    inv = w.get("abstract_inverted_index")
+                    if wid and inv:
+                        out[wid] = _invert_abstract(inv)
+        except requests.RequestException as exc:
+            logger.warning("remote abstract fetch failed (%d ids): %s", len(ids), exc)
+        return out
+
+
+def _invert_abstract(inv: dict[str, list[int]]) -> str:
+    """OpenAlex inverted-abstract-index -> plain text."""
+    positions: list[tuple[int, str]] = []
+    for word, idxs in inv.items():
+        positions.extend((i, word) for i in idxs)
+    positions.sort()
+    return " ".join(w for _, w in positions)
+
+
+def _normalize_filters(filters: dict | None) -> dict | None:
+    """OpenAlex-style filter dict -> {year_range, type, is_oa} (mirrors
+    OpenSearchRetriever._build_filter_clauses semantics)."""
+    if not filters:
+        return None
+
+    def _to_year(value) -> int | None:
+        try:
+            return int(str(value)[:4])
+        except (ValueError, TypeError):
+            return None
+
+    out: dict = {}
+    lo, hi = None, None
+    py = filters.get("publication_year")
+    if py:
+        text = str(py)
+        if "-" in text:
+            a, _, b = text.partition("-")
+            lo, hi = _to_year(a), _to_year(b)
+        else:
+            lo = hi = _to_year(text)
+    fd = filters.get("from_publication_date")
+    if fd and lo is None:
+        lo = _to_year(fd)
+    td = filters.get("to_publication_date")
+    if td and hi is None:
+        hi = _to_year(td)
+    if lo is not None or hi is not None:
+        out["year_range"] = (lo if lo is not None else 0,
+                             hi if hi is not None else 3000)
+    if filters.get("type"):
+        out["type"] = filters["type"]
+    oa = filters.get("open_access.is_oa", filters.get("is_oa"))
+    if oa not in (None, "", False, "false"):
+        out["is_oa"] = True
+    return out or None

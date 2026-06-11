@@ -139,7 +139,13 @@ class ServerConfig:
     sfu_db_registry_cache_ttl: int = 86400   # 24 h
     sfu_db_registry_cache_file: str = "/tmp/sfu_databases_cache.json"
 
-    # OpenSearch / SPLADE (Phase P)
+    # Local search backend: "thinclient" (tantivy+BMP+usearch, no JVM — the
+    # validated laptop stack) or "opensearch" (legacy, external cluster).
+    search_backend: str = "thinclient"
+    # Thin-client index root (built by scripts/build_thinclient_index.py)
+    thinclient_index_root: str = ""
+
+    # OpenSearch / SPLADE (Phase P — legacy backend)
     opensearch_url: str = "http://localhost:9200"
     opensearch_index: str = "openalex_works"
     # Local SPLADE ONNX export dir (default) or a HF model id; used when
@@ -294,6 +300,8 @@ def load_config() -> ServerConfig:
         query_log_path=os.environ.get("SFU_QUERY_LOG_PATH", ""),
         lambdamart_model_path=os.environ.get("SFU_LAMBDAMART_MODEL_PATH", ""),
         metrics_log_path=os.environ.get("SFU_METRICS_LOG_PATH", ""),
+        search_backend=os.environ.get("SFU_SEARCH_BACKEND", "thinclient"),
+        thinclient_index_root=os.environ.get("SFU_THINCLIENT_INDEX_ROOT", ""),
         opensearch_url=os.environ.get("SFU_OPENSEARCH_URL", "http://localhost:9200"),
         opensearch_index=os.environ.get("SFU_OPENSEARCH_INDEX", "openalex_works"),
         splade_model_path=os.environ.get(

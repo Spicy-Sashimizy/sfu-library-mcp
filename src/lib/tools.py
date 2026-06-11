@@ -218,14 +218,23 @@ def _get_federated_router() -> "FederatedSearchRouter":
     global _federated_router
     if _federated_router is None:
         from lib.federated_search import FederatedSearchRouter
-        from lib.opensearch_retriever import OpenSearchRetriever
         cfg = _get_config()
-        retriever = OpenSearchRetriever(
-            url=cfg.opensearch_url,
-            index=cfg.opensearch_index,
-            splade_enabled=cfg.features.get("splade_enabled", False),
-            splade_model_path=cfg.splade_model_path,
-        )
+        if cfg.search_backend == "thinclient":
+            # No-JVM local stack: tantivy BM25F + BMP SPLADE + usearch dense.
+            from lib.thinclient.retriever import ThinClientRetriever
+            retriever = ThinClientRetriever(
+                index_root=cfg.thinclient_index_root,
+                splade_model_path=cfg.splade_model_path,
+                openalex_mailto=cfg.openalex_mailto,
+            )
+        else:
+            from lib.opensearch_retriever import OpenSearchRetriever
+            retriever = OpenSearchRetriever(
+                url=cfg.opensearch_url,
+                index=cfg.opensearch_index,
+                splade_enabled=cfg.features.get("splade_enabled", False),
+                splade_model_path=cfg.splade_model_path,
+            )
         _federated_router = FederatedSearchRouter(
             openalex_client=_get_openalex(),
             opensearch_retriever=retriever,
