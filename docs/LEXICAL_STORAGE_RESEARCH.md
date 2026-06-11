@@ -201,3 +201,113 @@ Explicitly **not** shortlisted: all LM-arithmetic-coding lossless methods (budge
 - Author-claimed, plausible, unreproduced: ts_zip "1 MB/s on RTX 4090"; Nacrith's "7× faster than PyTorch" and ratio table (single-author preprint, Feb 2026, no code); OnPair claims (Aug 2025, no public benchmarks vs FSST yet).
 - Marketing-grade / not transferable: web shared-dictionary "84–90% smaller" figures (versioned-resource deltas, not fresh text); LLMLingua "20× with little loss" (task-specific; our consumer is a cross-encoder, not GPT-4 QA).
 - All ratio expectations for *this* corpus marked (E) are exactly that — the shortlist exists to replace them with measurements.
+
+---
+
+## 7. Multilingual corpora + dictionary-structure levers (researched 2026-06-11)
+
+*(Appended extension. The "Source-quality notes" section above was the original report's §7; this section keeps the commissioned title and continues the report. Flags as before: (M) measured in cited source, (E) estimated/extrapolated, (C) author/vendor claim.)*
+
+### 7.1 The corpus is ~25–30% non-English — actual OpenAlex numbers
+
+**Live API measurement (this report, 2026-06-11, `api.openalex.org/works?group_by=language`, 295.45M works) (M):**
+
+| Lang | Share | Lang | Share | Lang | Share |
+|---|---|---|---|---|---|
+| English | **73.8%** (218.0M) | French | 3.06% | Korean | 1.09% |
+| Japanese | 4.26% | Portuguese | 1.84% | Indonesian | 1.08% |
+| German | 3.85% | Chinese | 1.70% | Italian | 0.64% |
+| Spanish | 3.44% | Russian | 1.12% | Polish/Turkish/Dutch/Ukr. | 0.4–0.5% each |
+
+**But the labels are unreliable.** Céspedes et al., *"Evaluating the linguistic coverage of OpenAlex"* (JASIST 2025, [arXiv 2409.10633](https://arxiv.org/pdf/2409.10633), [Wiley](https://asistdl.onlinelibrary.wiley.com/doi/full/10.1002/asi.24979); 6,836 hand-verified articles) (M):
+- Declared English is 75%; **corrected English is ~68%** — OpenAlex *understates* its multilinguality.
+- 14.7% of language labels are false positives. Chinese is worst: only **63.7%** of declared-Chinese is actually Chinese, and ~**5.5M Chinese-language works are mislabeled as English**, plus ~4M Russian and ~3.6M Korean. (OpenAlex runs `langdetect` on title/abstract metadata only.)
+- Practical consequence: **do not route on OpenAlex's `language` field.** Run own langid at ingest (fastText lid.176 / lingua-class) on the reconstructed abstract; misrouted docs land in a wrong dictionary and quietly compress worse (see 7.3).
+- Caveat (E): abstract *availability* skews more English than the works table (non-English records more often lack abstracts), so the sidecar's non-English share is probably between ~15% and ~26% — measure once at ingest; it sets how much the per-language machinery below is worth.
+
+### 7.2 UTF-8 expansion per script — what a "1 KB abstract" means per language
+
+Per the UTF-8 encoding ([Wikipedia/UTF-8](https://en.wikipedia.org/wiki/UTF-8)): ASCII 1 B/char; Latin-ext/Greek/**Cyrillic/Arabic/Hebrew 2 B/char**; **CJK BMP (Han, kana, Hangul) 3 B/char**; supplementary-plane 4 B/char.
+
+- **Russian/Ukrainian:** ~same character count as an equivalent English abstract but 2 B/char on letters ⇒ **~1.7–1.9× bytes/doc** for the same content (E).
+- **Chinese/Japanese:** 3 B/char, but information density is far higher per character — Qwen's own rule of thumb is 1 token ≈ 3–4 chars English vs **1.5–1.8 chars Chinese** ([Qwen tokenization note](https://github.com/QwenLM/Qwen/blob/main/tokenization_note.md), (C/M vendor)). A Chinese abstract conveys equivalent content in ~⅓–¼ the characters, so **bytes/doc roughly comparable to English, sometimes smaller** (E).
+- Net effect on the budget: per-language mean-bytes/doc differ enough (±2×) that the sidecar's bytes/doc accounting and any fixed-size block tuning (§4.1) should be computed **per language stratum**, not globally.
+
+### 7.3 zstd trained dictionaries on mixed-language corpora — dilution is real but unmeasured in literature
+
+- **No published controlled study found** comparing one mixed-language trained dictionary vs per-language dictionaries (flagged research gap — our benchmark can be a first datapoint).
+- Mechanism argues for dilution (analysis, E): COVER/fastCOVER scores candidate k-byte segments by *corpus-wide* estimated savings ([zstd dictionary system](https://deepwiki.com/facebook/zstd/5-command-line-interface), [python-zstandard docs](https://python-zstandard.readthedocs.io/en/latest/dictionaries.html)). On a 74%-English training mix, dictionary space is allocated ≈ proportional to language mass: a 110 KB dict gives Chinese ~2% ≈ 2 KB of useful history — effectively no dictionary for minority languages, while still paying full dict-management overhead.
+- Measured adjacent evidence (M): a mismatched/heterogeneous dictionary can make ratios *worse than no dictionary* ([zstd issue #1703](https://github.com/facebook/zstd/issues/1703)); vendor guidance is explicitly "one dictionary per type of content," small homogeneous samples ([zstd homepage](http://facebook.github.io/zstd/), [training-set sizing #3769](https://github.com/facebook/zstd/issues/3769)).
+- **Feasibility here:** every language ≥0.5% share has ≥750K abstracts (≫ the 10–100 MB training-set guidance) — training ~10–15 per-language (or per language×domain) dictionaries is trivial. The §3.1 design already reserves a 1-byte dict-ID per doc; language routing reuses it unchanged.
+
+### 7.4 Brotli's built-in dictionary and non-English text
+
+- The RFC 7932 static dictionary is **13,504 words of English, Spanish, Chinese, Hindi, Russian and Arabic** plus HTML/JS phrases, distilled from a 40-language corpus — i.e., less purely English-biased than folklore says, but Latin/web-weighted ([brotli author on HN, 2021](https://news.ycombinator.com/item?id=27163981)) (C, primary author).
+- Same source (C): in brotli-vs-zstd web benchmarks, brotli "wins even when the static dictionary is filled with zeros" — its density edge comes from context modeling, not the dictionary; and Google deliberately benchmarked on a 93-language corpus where only 9.5% of documents were in dictionary-covered languages.
+- **No measured per-language penalty table exists publicly** (gap). Expectation (E): the built-in dict's advantage on *short* text is mostly an English/Latin effect and shrinks toward zero on ja/zh/ru; a *custom* trained dictionary (Brotli v1.1 shared-dictionary, §3.2) re-equalizes. Action: the §6.1 item-3 head-to-head must be **stratified by language**, with per-language custom dicts as a third arm.
+
+### 7.5 Token-ID recoding is *broken*, not just worse, with an English WordPiece vocab
+
+- **bert-base-uncased disqualifier (M, documented behavior):** BERT's tokenizer space-splits every CJK-block character before WordPiece ([google-research/bert multilingual.md](https://github.com/google-research/bert/blob/master/multilingual.md)); characters absent from the 30K English vocab become **[UNK]** — WordPiece has *no byte fallback*, so recoding zh/ja abstracts through bert-base-uncased is **lossy and unrecoverable**, not merely inflationary. (Kana/Hangul fare no better: near-total [UNK] in an uncased English vocab.) Any token-recoding variant of §3.5 must therefore exclude this vocab outright.
+- Multilingual vocabs fix correctness and ratio: **XLM-R** sentencepiece (250K) achieves bytes/token compression competitive with the 1M-vocab XLM-V across languages (M, comparative studies; see fertility/compression-rate methodology in the tokenizer-evaluation literature, e.g. [language-specific tokenizer design overview](https://www.emergentmind.com/topics/language-specific-tokenizer-design)); **Qwen byte-level BPE** (151,643 vocab, byte fallback ⇒ lossless on arbitrary input) claims higher compression than competitors "in most languages" ([Qwen tech report, arXiv 2309.16609](https://arxiv.org/pdf/2309.16609)) (C/M vendor): ~3–4 chars/token English, ~1.5–1.8 chars/token Chinese.
+- Byte-fallback caveat (E): scripts poorly covered by the vocab degrade to ~1 token/byte — the token stream can *exceed* raw UTF-8 for tail languages; entropy coding claws some back. Net position unchanged from §3.5: low priority — but if ever done, **the only admissible vocab is a byte-fallback multilingual one (Qwen/XLM-R class)**, which also matches the shipped Qwen3 reranker stack.
+
+### 7.6 Language-aware compression routing
+
+- Formal literature is thin: closest hits are dictionary-selection-by-word-frequency (DSWF) in [arXiv 2412.15250](https://arxiv.org/pdf/2412.15250) and per-language codec comparisons showing codec *rankings* stay stable across languages while absolute ratios shift ([Compression of text in selected languages, PMC9460191](https://www.ncbi.nlm.nih.gov/pmc/articles/PMC9460191/)) (M, 3 languages). Treat routing as engineering practice, not research risk.
+- Design for this corpus (composes with §3.1 + §4.1): langid at ingest (not OpenAlex's field, per 7.1) → cluster docs by **(language, topic)** so compression blocks are monolingual by construction → per-(language×domain) zstd dict selected by the existing 1-byte dict-ID. Total dictionary footprint ~15 × 110 KB ≈ 1.6 MB — negligible. Language is plausibly the *strongest single clustering key* for LZ cross-doc matches (E): a mixed-language block wastes window on unmatchable bytes.
+
+### 7.7 Front coding (incremental encoding) — formal treatment and measured ratios
+
+- Folklore form = the user-cited trick ([SO 358240](https://stackoverflow.com/questions/358240), ~50–55% on sorted wordlists (M, anecdotal)): store common-prefix length + new suffix; formalized as incremental/front coding ([Wikipedia](https://en.wikipedia.org/wiki/Incremental_encoding); [Stanford IR Book, blocked storage](https://nlp.stanford.edu/IR-book/html/htmledition/blocked-storage-1.html) — k=4 blocking + front coding saved 1.2 MB + 2.4 MB on the 11.2 MB Reuters term list ≈ **~30% combined** (M)).
+- Rigorous benchmark: Brisaboa, Cánovas, Claude, Martínez-Prieto, Navarro, *Compressed String Dictionaries* (SEA 2011, [arXiv 1101.5506](https://arxiv.org/pdf/1101.5506)) (M): on 25.6M ClueWeb words / 18.5M URLs / 30.2M DBpedia URIs, best variants reach **12–30% of original size** with fast ops; **Hu-Tucker-compressed front coding (HTFC) dominates plain FC almost everywhere**; Re-Pair wins space on URLs only; FM-index loses across the board (consistent with §4.4). Production precedent: Apache Druid's segment string columns ([Imply incremental-encoding write-up](https://imply.io/blog/introducing-incremental-encoding-for-apache-druid-dictionary-encoded-columns/)).
+- **Random access** = block/bucket front coding: bucket headers stored raw, binary-search headers then sequentially decode ≤ bucket-size entries — microseconds per lookup (M, extract plots in 1101.5506). Utterly negligible vs the 300 ms budget.
+
+### 7.8 Where front coding already exists in this stack
+
+- **tantivy has it already — twice.** The term dictionary has two implementations: the default **FST** (BurntSushi's `fst` crate / the `tantivy-fst` fork) mapping term→ordinal ([tantivy termdict docs](https://docs.rs/tantivy/0.4.2/tantivy/termdict/index.html), [ARCHITECTURE.md](https://github.com/quickwit-oss/tantivy/blob/main/ARCHITECTURE.md)), and **`tantivy-sstable`** — "sorted `&[u8]` keys … encoded using incremental encoding," keys+values zstd-compressed, block-indexed via an FST of block numbers; added because FST lookups need the whole dictionary resident while SSTable gets locality/single-fetch `get` ([tantivy-sstable crate](https://lib.rs/crates/tantivy-sstable), [maintainer on HN](https://news.ycombinator.com/item?id=40942199)). **Conclusion: term-vocabulary compression is already solved upstream; no action, and per-section term vocabularies (application b) are a non-lever.**
+- **SQLite has none.** Index b-trees store the **full key in every entry** — no prefix compression, plus ~2-byte cell pointer and header varints per entry ([index key format write-up](https://dev.to/lovestaco/index-key-format-in-sqlite-40pn), [sqlite-users discussion](https://sqlite-users.sqlite.narkive.com/GpXsoNCK/tuning-a-sqlite-database-for-best-compression)). This is the §7.10(c) overhead.
+
+### 7.9 Succinct alternatives: MARISA/LOUDS tries, and what 100M keys cost
+
+- **marisa-trie** (LOUDS + recursive Patricia, [s-yata/marisa-trie](https://github.com/s-yata/marisa-trie); `pip install marisa-trie`): benchmark (M, [project docs](https://github.com/pytries/marisa-trie/blob/master/docs/benchmarks.rst)): **9,805,576 Wikipedia titles → 50.8 MB ≈ 5.2 B/key** (vs darts-clone 376 MB, tx-trie/LOUDS 127 MB); "50–100× less memory than a Python dict," µs lookups. Extrapolated (E): ~100M heterogeneous string keys ≈ 0.5–1 GB.
+- **pyahocorasick** is a multi-pattern *matching* automaton, not a compressed dictionary — not applicable to key storage here.
+- For **sorted numeric IDs** (our case, see below), succinct tries are the wrong tool: **Elias-Fano** encodes a sorted set of n integers from universe U in n·(⌈log₂(U/n)⌉ + 2) bits with O(1) `select` — the standard in PISA-class index toolkits.
+
+### 7.10 Concrete applications to THIS corpus
+
+**(a) OpenAlex ID key columns ("W" + 8–11 digits).** Strip the constant "W", treat as integers (max ~4.5×10⁹ < 2⁶³). For n = 150M sorted IDs, U ≈ 4.5×10⁹:
+- **Elias-Fano:** log₂(U/n)+2 ≈ **7 bits/key ≈ 0.9 B/key → ~130 MB** (E, formula-derived).
+- **Delta-varint:** mean gap ~30 ⇒ 1–2 B/key → **~150–300 MB** (E); sampled absolute values every 64–128 keys give near-O(1) access.
+- **Front-coded decimal strings:** prefix-len byte + ~2–3 suffix bytes ≈ 3–4 B/key → ~500–600 MB (E).
+- **Verdict: front coding loses to numeric encodings here.** The IDs are integers in costume; the sorted-wordlist trick is the right instinct but the wrong tool for this column. (M needed only if measurement is free; the ordering is robust.)
+
+**(b) Per-section term vocabularies:** already front-coded/FST'd inside tantivy (7.8); term dictionaries are MBs against a ~100 GB problem. **No action.**
+
+**(c) SQLite id→rowid key index:** a `TEXT` unique index on 150M 11-char IDs costs ≈ full key + rowid varint + cell overhead ≈ 16–20 B/entry → **~2.5–3 GB** (E from 7.8 format). Two cheaper designs, in order:
+1. **Eliminate the index entirely:** `rowid = numeric part of the work ID` (`INTEGER PRIMARY KEY`, fits 2⁶³). Lookup = clustered b-tree walk on the rowid itself, zero extra storage. Works iff sidecar rows can live in ID order.
+2. If §4.1's **cluster order** wins the layout (it should), store blobs in cluster order and keep one external **Elias-Fano(IDs) + bit-packed position permutation** (150M × 27 bits ≈ 506 MB, or ×4 B plain = 600 MB): ID → position in O(1), mmap-friendly, no SQLite b-tree at all. Net saving vs naive SQLite index: **~2–2.5 GB**, and lookups drop from b-tree page walks to two array probes.
+- **Random-access cost:** every option above is sub-µs–µs per key; 100 lookups consume < 1 ms of the 300 ms budget. The budget is irrelevant to this entire section — these are size/simplicity decisions.
+
+### 7.11 Verdict table
+
+| Method | Expected ratio / size | Random-access fit | Multilingual robustness | Worth testing here? |
+|---|---|---|---|---|
+| zstd + **per-(language×domain) dicts**, langid routing | 2–3× En; holds for non-En (E) | per-doc O(1) | **Good** (by construction) | **YES — upgrade of shortlist #1** |
+| zstd single mixed-corpus dict | 2–3× En, **degraded on ≤4%-share langs** (E; no literature — we'd be first datapoint) | per-doc O(1) | Poor (dilution, 7.3) | Only as control arm |
+| Brotli built-in dict on non-English | penalty unmeasured; edge likely →0 on ja/zh/ru (E) | per-doc O(1) | Weak built-in; fixed by custom dict | YES — stratify §6.1 #3 by language |
+| **(language, topic)-clustered blocks** + per-block dict | +5–15% over mixed-language blocks (E) | per-block (as §4.1) | **Excellent** | **YES — fold into shortlist #2** |
+| Token recoding, bert-base-uncased vocab | n/a — **[UNK]-lossy on CJK** (M) | — | **Broken** | **NO — disqualified** |
+| Token recoding, Qwen/XLM-R byte-fallback vocab | ~2× pre-entropy; lossless (M/C) | per-doc O(1) | Good (byte fallback; tail langs inflate) | Low priority (unchanged §3.5) |
+| Front coding (block FC/HTFC) on string keys | dict → 12–30% of original (M, 1101.5506) | µs (bucket scan) | n/a | NO for W-IDs (see next row); keep in toolbox for true string keys |
+| **Elias-Fano / delta-varint** numeric ID index | **~0.9–2 B/key ≈ 130–300 MB** vs ~2.5–3 GB SQLite TEXT index (E) | O(1)/near-O(1), sub-µs | n/a | **YES — or better, rowid=numeric-ID for zero cost** |
+| marisa-trie (LOUDS) key store | ~5 B/key (M, 9.8M titles) | µs | n/a | NO for numeric IDs; revisit only for DOI/alias strings |
+| SQLite native TEXT key index | baseline (no prefix compression, full key/entry) | b-tree walk | n/a | NO — replace per 7.10(c) |
+
+**Bottom line for this section:** (1) The multilingual share (~26% declared, more in truth) is large enough that the §6.1 dictionary experiments must be language-stratified and language-routed, at near-zero added complexity (1-byte dict-ID already planned); single mixed dictionaries silently tax 40M+ non-English abstracts. (2) The front-coding instinct is correct and already embodied in tantivy's term dictionary; for the one place it seems newly applicable — the W-ID key column — plain numeric encodings (rowid-as-ID, or Elias-Fano) dominate it by 3–4× and remove ~2.5 GB of SQLite index overhead. Neither lever threatens the 300 ms budget by more than ~1 ms.
+
+### 7.12 Source-quality notes for §7
+
+- Measured, high confidence: OpenAlex API language counts (queried live 2026-06-11); Céspedes et al. JASIST 2025 verification stats; Brisaboa et al. SEA 2011 dictionary benchmarks; marisa-trie benchmark tables; BERT CJK tokenization behavior (documented code behavior); tantivy-sstable format docs.
+- Author-claimed, credible, unreproduced: brotli dictionary composition + "wins with zeroed dictionary" (brotli author, HN); Qwen chars/token rules of thumb and "higher compression in most languages."
+- Identified literature gaps (we would generate first public numbers): mixed-vs-per-language zstd dictionary dilution; Brotli per-language built-in-dict penalty table.
