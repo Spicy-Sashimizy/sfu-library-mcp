@@ -1,5 +1,11 @@
 # SFU Library MCP — Thin Client Deployment Plan (v2)
 
+> **SUPERSEDED (archived 2026-06-11):** written when the backend was the Primo
+> API. Retrieval has since moved to the local no-JVM stack
+> (tantivy+BMP+usearch — see `../THIN_CLIENT_SWAP.md`) and deployment tiers to
+> `../LOCALIZED_DEPLOYMENT_PLAN.md`. Kept for the still-unbuilt client UI
+> research: local LLM query understanding, packaging, compliance.
+
 ## Executive Summary
 
 **Revised approach:** Instead of building a full MCP chat client that requires a large LLM capable of general conversation + tool calling (unreliable on local models), build a **contextual search engine** where a tiny local LLM (~1.5 GB) handles only query understanding, and deterministic code does everything else. The full MCP server remains available for power users who want to connect Claude, GPT, or other capable models.

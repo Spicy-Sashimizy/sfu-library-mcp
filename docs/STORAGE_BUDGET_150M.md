@@ -17,6 +17,14 @@ validation build (`data/thinclient_1m`), full method detail in
 | meta.sqlite | 24.1 GB | numeric PK (W-id digits) + dict-zstd titles/DOIs + enum-int type/section (1.679×) | **14.4 GB** | round-trip verified 200/200 |
 | **Total (all live, all hot)** | **300.9 GB** | | **188.8 GB** | **−112.1 GB (−37.3%), all lossless** |
 
+**Implementation status (2026-06-11 evening):** the three winning levers are now
+IN the builder, not just measured — BMP b256+clustered (`af09836`), abstracts v3
+script-bucketed 32 KB blocks + per-script dicts (`d978ba3`), meta v2 INTEGER-PK
+schema (`9a6d195`; implemented v2 measured **~10 GB** at 150M, better than the
+14.4 GB lever estimate above). The running 150M migration's build phase is armed
+to pick these up (`scripts/restart_at_build_phase.sh`). Sections have since also
+split into era sub-sections (`7fe689a`), which changes layout but not totals.
+
 Persona steady state (political_science: hot `social_sciences` live + 4 cold
 sections packed at the measured 2.10× artifact ratio): **≈ 95 GB** on disk
 (hot live ≈ 34 GB incl. abstracts, packed cold ≈ 47 GB, meta 14 GB). *Pack

@@ -1,8 +1,19 @@
 # Localized Deployment & Dynamic Warm-Cache Plan
 
-**Status:** Design / scope (not yet implemented)
-**Last updated:** 2026-05-24
-**Context:** How to deploy the SFU library MCP to client machines (incl. laptops) without shipping the full 150M-doc / 406 GB OpenSearch index. Companion to `SESSION_NOTES_2026-05-24.md`.
+**Status:** Partially superseded / partially implemented (see note)
+**Last updated:** 2026-05-24 (status note 2026-06-11)
+**Context:** How to deploy the SFU library MCP to client machines (incl. laptops) without shipping the full 150M-doc / 406 GB OpenSearch index. Companion to `archive/SESSION_NOTES_2026-05-24.md`.
+
+> **2026-06-11 status note:** Two things changed since this was written.
+> (1) The local engine is no longer OpenSearch — the laptop/subset tiers now
+> mean the no-JVM thin-client stack (tantivy+BMP+usearch, see
+> `THIN_CLIENT_SWAP.md`); footprint numbers based on the 406 GB OpenSearch
+> index are superseded by `STORAGE_BUDGET_150M.md`. (2) The §5 dynamic
+> warm-cache tier's **dense leg is now implemented**
+> (`src/lib/thinclient/dense_cache.py`, design in
+> `DENSE_WARMCACHE_RESEARCH.md`); the SPLADE/BM25 warm-cache legs and the
+> tier/bundle packaging remain unimplemented design. The tier taxonomy and
+> retrieval-vs-rerank analysis here are still the reference.
 
 ---
 

@@ -1,5 +1,11 @@
 # Thin Client — New Architecture (LLM-Optimized Academic Search)
 
+> **SUPERSEDED (archived 2026-06-11):** this Track-A design retrieves from
+> live APIs only (OpenAlex/Semantic Scholar). The project since built a LOCAL
+> index for retrieval (tantivy+BMP+usearch — see `../THIN_CLIENT_SWAP.md`);
+> the warm-cache idea here evolved into `../DENSE_WARMCACHE_RESEARCH.md`.
+> Kept for the UI, access-resolution (Solr/EZProxy) and ranking-signal research.
+
 ## Overview
 
 This document describes the thin client (Track A) architecture: a local search UI powered by a small LLM for query understanding, open academic APIs for retrieval, an LLM-optimized ranking pipeline, and SFU's Solr registry for paywall resolution. Designed to run on 8GB machines with no cloud dependencies beyond free public APIs.

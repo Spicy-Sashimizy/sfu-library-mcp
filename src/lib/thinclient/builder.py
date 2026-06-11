@@ -11,7 +11,8 @@ One pass over a section's doc stream produces:
   rows into the global meta.sqlite  (id -> title/doi/year/type/is_oa/section)
 
 BMP impact quantization: weights are floats (0..~3.5, 4-decimals); BMP takes
-integer impacts, so we scale by QUANT_SCALE=100 on both doc and query sides —
+integer impacts, so we scale by QUANT_SCALE (70, see below) on both doc and
+query sides —
 ranking is scale-invariant for dot products; BMP further quantizes to 8-bit
 block maxima internally (measured-negligible loss in the BMP paper / SIGIR'24).
 """
