@@ -28,7 +28,11 @@ services:
     environment:
       - DATABASE_URL=postgresql://${DB_USER:-dev}:${DB_PASSWORD:-dev}@postgres:5432/${DB_NAME:-app_dev}
       - REDIS_URL=redis://:${REDIS_PASSWORD:-dev}@redis:6379/0
-      - SFU_OPENSEARCH_URL=http://claudebox-sfu-library-thinclient-opensearch:9200
+      # Thin-client stack (tantivy+BMP+usearch) is the serving backend — no
+      # local OpenSearch. Eval baselines reach the ORIGINAL container's
+      # cluster (read-only) via the host gateway.
+      - SFU_SEARCH_BACKEND=thinclient
+      - SFU_OPENSEARCH_URL=http://host.docker.internal:9200
       - PYTHONPATH=/workspaces/sfu-library-thinclient
       - CLAUDE_CONFIG_DIR=/home/vscode/.claude
       - CLAUDE_BACKEND=${CLAUDE_BACKEND:-anthropic}
@@ -60,8 +64,6 @@ services:
       postgres:
         condition: service_healthy
       redis:
-        condition: service_healthy
-      opensearch:
         condition: service_healthy
 
   cloudflared:
@@ -104,43 +106,11 @@ services:
       timeout: 5s
       retries: 5
 
-  opensearch:
-    container_name: claudebox-sfu-library-thinclient-opensearch
-    # 3.7.0 upgrade prepared 2026-06-10 — BEFORE recreating this container, take the
-    # cold volume backup per docs/OPENSEARCH3_UPGRADE.md (only rollback path: Lucene 10
-    # segments are unreadable by 2.x). Pre-flight audit passed; zstd index opens in 3.x.
-    image: opensearchproject/opensearch:3.7.0
-    restart: unless-stopped
-    environment:
-      - discovery.type=single-node
-      - OPENSEARCH_JAVA_OPTS=-Xms2g -Xmx2g
-      - DISABLE_SECURITY_PLUGIN=true
-      - DISABLE_INSTALL_DEMO_CONFIG=true
-      - plugins.query.size_limit=10000
-      - http.max_content_length=500mb
-    ulimits:
-      memlock:
-        soft: -1
-        hard: -1
-      nofile:
-        soft: 65536
-        hard: 65536
-    volumes:
-      - opensearch_data:/usr/share/opensearch/data
-    ports:
-      - "9201:9200"
-    networks:
-      - claudebox-sfu-library-thinclient-net
-    labels:
-      - "com.claudebox.project=sfu-library-thinclient"
-      - "com.claudebox.service=opensearch"
-      - "com.claudebox.managed=true"
-    healthcheck:
-      test: ["CMD-SHELL", "curl -s http://localhost:9200/_cluster/health | grep -qE '\"status\":\"(green|yellow)\"'"]
-      interval: 15s
-      timeout: 10s
-      retries: 10
-      start_period: 60s
+  # OpenSearch service REMOVED (2026-06-11): this testbed runs the thin-client
+  # stack. Host-side cleanup once the container is recreated:
+  #   docker rm -f claudebox-sfu-library-thinclient-opensearch
+  #   docker volume rm claudebox-sfu-library-thinclient-opensearch
+  # (The 150M-doc cluster in the ORIGINAL sfu-library-mcp container is untouched.)
 
   redis:
     container_name: claudebox-sfu-library-thinclient-redis
@@ -201,8 +171,6 @@ volumes:
     labels:
       com.claudebox.project: sfu-library-thinclient
       com.claudebox.managed: "true"
-  opensearch_data:
-    name: claudebox-sfu-library-thinclient-opensearch
     labels:
       com.claudebox.project: sfu-library-thinclient
       com.claudebox.managed: "true"
