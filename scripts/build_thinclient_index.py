@@ -65,7 +65,7 @@ SOURCE_URL = os.environ.get("SFU_MIGRATION_SOURCE",
 SOURCE_INDEX = os.environ.get("SFU_MIGRATION_INDEX", "openalex_works")
 EXPORT_FIELDS = ["title", "abstract", "publication_year", "type", "is_oa",
                  "doi", "openalex_id", "sparse_field"]
-SCROLL_BATCH = 2000
+SCROLL_BATCH = 4000
 DENSE_VECS = REPO_ROOT / "data/dense_compression/vectors_600k.npy"
 DENSE_IDS = REPO_ROOT / "data/dense_compression/ids_600k.json"
 
@@ -179,7 +179,10 @@ def phase_export(root: Path, status: dict, slices: int, workers: int,
     logger.info("EXPORT: %d/%d slices to go (source %s/%s)",
                 len(todo), slices, SOURCE_URL, SOURCE_INDEX)
     per_slice_limit = (limit // max(len(todo), 1)) if limit else None
-    with ThreadPoolExecutor(max_workers=workers) as pool:
+    # Processes, not threads: orjson parse + classify + spool write are
+    # GIL-bound (measured: 4 threads aggregate ~1.6k docs/s, same as 1).
+    pool_cls = ThreadPoolExecutor if (limit and slices == 1) else ProcessPoolExecutor
+    with pool_cls(max_workers=workers) as pool:
         futs = {pool.submit(export_slice, spool_dir, s, slices, per_slice_limit): s
                 for s in todo}
         for fut in as_completed(futs):
