@@ -107,6 +107,64 @@ Target steady-state RAM: **<2–3 GB** including encoders — fits the
 THIN_CLIENT_PLAN's ~2.1–2.5 GB budget alongside Qwen3-1.7B only on 16 GB
 machines; on 8 GB machines run the search stack + embedding-only reranking.
 
+## Abstract storage strategy — hot/cold hybrid (decided 2026-06-11)
+
+**Measured fact:** moving abstracts out of the index causes ZERO ranking change —
+the `extern_display` lossless variant keeps abstracts *indexed* (BM25F scores
+identical: 80/80 score-multiset parity, max Δ 0.0000) and only drops the stored
+copy. **But abstracts are NOT display-only:** both rerank stages consume
+`title + abstract` for every candidate (`src/lib/reranker.py:184,302`), and the
+rerank is worth ~+0.12 NDCG@10 — so the top ~50–100 candidates' abstracts must be
+fast-fetchable per query, not just the displayed top-10.
+
+Policy per section temperature:
+- **HOT sections → local abstract sidecar** (zstd-dictionary SQLite/LMDB).
+  Cost ≈ 0.5 KB/doc compressed (measured from stored-field deltas): ~1.8 GB for a
+  typical persona's home section at the 15M tier (~17.6 GB for the largest
+  section at 150M). Keeps everyday queries fully offline at full rerank quality.
+- **COLD sections → no local abstracts; remote fetch before rerank** (one mget of
+  ~100 docs ≈ 150 KB, +100–300 ms). Off-domain queries already imply
+  connectivity/unpack; warm-cache ingest gets abstracts free from OpenAlex live
+  responses. Prefer the OpenAlex API (inverted-abstract parser already in
+  `openalex.py`) over exposing the project's OpenSearch.
+- **Never fetch-at-display-only:** reranking on titles alone for the other ~90
+  candidates is the one variant that measurably loses quality.
+
+## Hot/cold persona profiling — measured metrics (1M-doc eval, scaled)
+
+Sections (combined lossless config; classified on title+abstract — the live
+index has no concepts metadata):
+
+| Section | share | live @150M | packed @150M (ratio) |
+|---|---|---|---|
+| social_sciences | 23.4% | 52.3 GB | 30.6 GB (1.7×) |
+| med_bio | 11.4% | 32.0 GB | 13.6 GB (2.4×) |
+| phys_eng | 5.5% | 16.0 GB | 6.8 GB (2.3×) |
+| cs_math | 10.3% | 29.6 GB | 12.5 GB (2.4×) |
+| other (catch-all) | 49.4% | 98.0 GB | 76.0 GB (1.3×) |
+| **all live total** | | **227.9 GB** | **139.5 GB all-packed** |
+
+Per persona (home section live + everything else packed), lexical leg only:
+
+| Persona | steady @150M | peak* @150M | steady @15M | peak* @15M | saved |
+|---|---|---|---|---|---|
+| political_science | 161.2 GB | 259.2 GB | 16.1 GB | 25.9 GB | 29.2% |
+| computer_science | 156.6 GB | 254.6 GB | 15.6 GB | 25.4 GB | 31.3% |
+| health_science | 157.9 GB | 255.9 GB | 15.7 GB | 25.5 GB | 30.7% |
+| interdisciplinary (3 hot) | 196.8 GB | 294.8 GB | 19.6 GB | 29.4 GB | 13.6% |
+
+\* peak = steady + largest cold section (`other`) temporarily unpacked live.
+Add the dense leg: +7.2 GB binary codes (+~19 GB HNSW graph) at 150M, ~0.7+1.9 GB
+at 15M; add hot-section abstract sidecar per the policy above.
+
+Operational caveats at scale: unpack-by-rebuild ran at **2,016 docs/s**
+(114k-doc section in 57 s) → a med_bio-sized section is ~14 min at the 15M tier
+and **~2.4 h at 150M** — fine as a one-time library expansion, not per-query;
+sub-section archives (year-slices) or segment-level restore cut this. The
+`other` catch-all (49% of docs, 1.3× pack ratio) caps savings — richer section
+vocabularies or indexing real `concepts` metadata (requires snapshot re-download;
+see DATA_MANIFEST.md) is the highest-leverage improvement to this scheme.
+
 ## Risk table (top items)
 
 | Risk | Mitigation |
