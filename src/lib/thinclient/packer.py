@@ -129,7 +129,10 @@ def unpack_section(index_root: Path, section: str, verify: bool = True) -> dict:
     with open(archive, "rb") as fh, dctx.stream_reader(fh) as zr:
         with tarfile.open(fileobj=io.BufferedReader(zr, buffer_size=8 << 20),
                           mode="r|") as tar:
-            tar.extractall(live_parent, filter="data")
+            try:
+                tar.extractall(live_parent, filter="data")
+            except TypeError:  # Python < 3.11.4: no extraction filters;
+                tar.extractall(live_parent)  # archives are self-produced
     secs = time.perf_counter() - t0
 
     manifest = _load_manifest(index_root)

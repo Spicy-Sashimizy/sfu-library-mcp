@@ -76,6 +76,7 @@ class SectionBuilder:
         self._bmp = None
         self._bmp_shard_idx = 0
         self._bmp_in_shard = 0
+        self._bmp_vocab: set[str] = set()
 
         self._abstracts = (AbstractStoreWriter(self.dir / "abstracts.sqlite")
                            if hot else None)
@@ -92,6 +93,14 @@ class SectionBuilder:
     def _rotate_bmp(self) -> None:
         if self._bmp is not None:
             self._bmp.finish()
+            # Per-shard term vocabulary sidecar: BMP panics on queries whose
+            # terms are ALL absent from a shard — the retriever uses this to
+            # skip non-overlapping shards.
+            import zstandard
+            vocab_path = self.dir / f"splade_{self._bmp_shard_idx:03d}.vocab.zst"
+            vocab_path.write_bytes(zstandard.ZstdCompressor(level=9).compress(
+                "\n".join(sorted(self._bmp_vocab)).encode()))
+            self._bmp_vocab.clear()
             self._bmp = None
             self._bmp_shard_idx += 1
 
@@ -116,6 +125,7 @@ class SectionBuilder:
                    if w > 0}
             if vec:
                 self._bmp_indexer().add_document(doc_id, vec)
+                self._bmp_vocab.update(vec)
                 self._bmp_in_shard += 1
                 if self._bmp_in_shard >= self._bmp_shard_docs:
                     self._rotate_bmp()

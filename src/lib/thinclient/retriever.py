@@ -90,8 +90,16 @@ class ThinClientRetriever:
                         continue
                     idx = tantivy.Index.open(str(sdir / "tantivy"))
                     idx.reload()
-                    shards = [bmp.Searcher(str(p))
-                              for p in sorted(sdir.glob("splade_*.bmp"))]
+                    shards = []
+                    for p in sorted(sdir.glob("splade_*.bmp")):
+                        vocab_path = p.with_suffix(".vocab.zst")
+                        vocab = None
+                        if vocab_path.exists():
+                            import zstandard
+                            vocab = set(zstandard.ZstdDecompressor().decompress(
+                                vocab_path.read_bytes()).decode().split("\n"))
+                        shards.append({"searcher": bmp.Searcher(str(p)),
+                                       "vocab": vocab})
                     self._sections[sdir.name] = {
                         "index": idx, "searcher": idx.searcher(),
                         "schema": idx.schema, "bmp": shards,
@@ -245,9 +253,23 @@ class ThinClientRetriever:
         qvec = {t: max(1, int(round(w * QUANT_SCALE))) for t, w in top_terms.items()}
         fetch = top_k * (OVERFETCH_FILTERED if f else 1)
         merged: list[tuple[str, float]] = []
-        for sec in self._sections.values():
+        for name, sec in self._sections.items():
             for shard in sec["bmp"]:
-                ids, scores = shard.search(qvec, k=fetch, alpha=1.0, beta=1.0)
+                # BMP panics (Rust unwrap) when NO query term exists in the
+                # shard — skip via the vocab sidecar; guard for old builds.
+                q_here = qvec
+                if shard["vocab"] is not None:
+                    q_here = {t: w for t, w in qvec.items() if t in shard["vocab"]}
+                    if not q_here:
+                        continue
+                try:
+                    ids, scores = shard["searcher"].search(
+                        q_here, k=fetch, alpha=1.0, beta=1.0)
+                except BaseException as exc:  # pyo3 PanicException subclasses BaseException
+                    if isinstance(exc, (KeyboardInterrupt, SystemExit)):
+                        raise
+                    logger.warning("BMP shard search failed in %s: %s", name, exc)
+                    continue
                 merged.extend(zip(ids, map(float, scores)))
         merged.sort(key=lambda t: -t[1])
         if f:

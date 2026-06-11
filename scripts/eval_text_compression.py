@@ -331,8 +331,10 @@ def run_slm_variant(docs: list[dict], n_docs: int) -> dict:
     exact = True
 
     for d in sub:
-        text = d["abstract"][:1024]
-        ids = tok.encode(text)
+        # truncate by TOKENS (gpt2 position limit 1024; CJK byte-fallback BPE
+        # can exceed it even for short char counts)
+        ids = tok.encode(d["abstract"])[:512]
+        text = tok.decode(ids)
         raw += len(text.encode())
 
         t0 = time.perf_counter()
