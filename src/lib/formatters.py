@@ -132,14 +132,30 @@ def format_search_results(results: dict | None, metadata: dict | None = None) ->
     return "".join(output)
 
 
-def format_openalex_results(data: dict, query: str = "") -> str:
-    """Format OpenAlex search results for display."""
+# Per-result fields callers may select via the `fields` parameter on search tools.
+# Title and DOI are always included (DOI is the handle for follow-up tool calls).
+OPENALEX_RESULT_FIELDS = frozenset(
+    {"authors", "date", "source", "topics", "open_access", "cited_by", "abstract", "id"}
+)
+
+
+def format_openalex_results(data: dict, query: str = "", fields: list[str] | None = None) -> str:
+    """Format OpenAlex search results for display.
+
+    `fields` limits per-result output to the named fields (see
+    OPENALEX_RESULT_FIELDS); title and DOI are always included. None means full output.
+    """
     results = data.get("results", [])
     meta = data.get("meta", {})
     total = meta.get("count", len(results))
 
     if not results:
         return "No results found."
+
+    show = OPENALEX_RESULT_FIELDS.intersection(fields) if fields is not None else None
+
+    def want(field: str) -> bool:
+        return show is None or field in show
 
     output = [f"Found {total:,} total results\n", "=" * 60 + "\n"]
 
@@ -159,26 +175,29 @@ def format_openalex_results(data: dict, query: str = "") -> str:
         openalex_id = work.get("openalex_id", "")
 
         output.append(f"{i}. {title}\n")
-        if author_str:
+        if author_str and want("authors"):
             output.append(f"   Authors: {author_str}\n")
-        if date:
+        if date and want("date"):
             output.append(f"   Date: {date}\n")
-        if source:
+        if source and want("source"):
             output.append(f"   Source: {source}\n")
         if doi:
             output.append(f"   DOI: {doi}\n")
-        if topics:
+        if topics and want("topics"):
             output.append(f"   Topics: {', '.join(topics[:4])}\n")
-        output.append(f"   Open Access: {'Yes' if is_oa else 'No'}")
-        if cited:
-            output.append(f"  |  Cited by: {cited}")
-        output.append("\n")
-        if abstract:
+        status_parts = []
+        if want("open_access"):
+            status_parts.append(f"Open Access: {'Yes' if is_oa else 'No'}")
+        if cited and want("cited_by"):
+            status_parts.append(f"Cited by: {cited}")
+        if status_parts:
+            output.append("   " + "  |  ".join(status_parts) + "\n")
+        if abstract and want("abstract"):
             snippet = abstract[:250]
             if len(abstract) > 250:
                 snippet += "..."
             output.append(f"   Abstract: {snippet}\n")
-        if openalex_id:
+        if openalex_id and want("id"):
             output.append(f"   ID: {openalex_id}\n")
         output.append("\n")
 

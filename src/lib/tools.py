@@ -375,9 +375,11 @@ TOOL_DEFINITIONS: list[Tool] = [
             "- open_access_only: true to limit to freely available papers\n"
             "- type: 'article', 'book', 'dataset', 'dissertation', 'preprint'\n\n"
             "TIPS:\n"
-            "- Use the returned DOI with generate_citation, save_to_zotero, or get_full_text_link\n"
-            "- For citations/references of a specific paper use get_citations / get_references\n"
-            "- For biomedical literature add search_biomedical for PubMed coverage"
+            "- Use the returned DOI with generate_citation, save_to_zotero, or get_full_text_link; "
+            "full metadata is cached server-side per DOI, so pass only the DOI in follow-up calls\n"
+            "- If the end goal is citations or a Zotero save, prefer search_and_cite / search_and_save (one call, compact output)\n"
+            "- Use `fields` to trim per-result output when you don't need everything (e.g. fields=['authors','date'])\n"
+            "- For citations/references of a specific paper use get_citations / get_references"
         ),
         inputSchema={
             "type": "object",
@@ -385,6 +387,14 @@ TOOL_DEFINITIONS: list[Tool] = [
                 "query": {"type": "string", "description": "Search query"},
                 "limit": {"type": "integer", "description": "Results to return (default 10, max 50)", "default": 10},
                 "page": {"type": "integer", "description": "Page number (default 1)", "default": 1},
+                "fields": {
+                    "type": "array",
+                    "items": {
+                        "type": "string",
+                        "enum": ["authors", "date", "source", "topics", "open_access", "cited_by", "abstract", "id"],
+                    },
+                    "description": "Return only these per-result fields (title + DOI always included). Omit for full output.",
+                },
                 "year_from": {"type": "integer", "description": "Earliest publication year"},
                 "year_to": {"type": "integer", "description": "Latest publication year"},
                 "open_access_only": {"type": "boolean", "description": "Limit to open-access works", "default": False},
@@ -409,6 +419,14 @@ TOOL_DEFINITIONS: list[Tool] = [
             "properties": {
                 "author": {"type": "string", "description": "Author name (best: 'LastName, FirstName')"},
                 "limit": {"type": "integer", "description": "Results to return (default 10)", "default": 10},
+                "fields": {
+                    "type": "array",
+                    "items": {
+                        "type": "string",
+                        "enum": ["authors", "date", "source", "topics", "open_access", "cited_by", "abstract", "id"],
+                    },
+                    "description": "Return only these per-result fields (title + DOI always included). Omit for full output.",
+                },
             },
             "required": ["author"],
         },
@@ -424,6 +442,14 @@ TOOL_DEFINITIONS: list[Tool] = [
             "type": "object",
             "properties": {
                 "doi": {"type": "string", "description": "DOI (with or without https://doi.org/ prefix)"},
+                "fields": {
+                    "type": "array",
+                    "items": {
+                        "type": "string",
+                        "enum": ["authors", "date", "source", "topics", "open_access", "cited_by", "abstract", "id"],
+                    },
+                    "description": "Return only these fields (title + DOI always included). Omit for full output.",
+                },
             },
             "required": ["doi"],
         },
@@ -441,6 +467,14 @@ TOOL_DEFINITIONS: list[Tool] = [
                 "topic": {"type": "string", "description": "Academic topic or concept (e.g. 'machine learning', 'climate change')"},
                 "limit": {"type": "integer", "description": "Results to return (default 10)", "default": 10},
                 "open_access_only": {"type": "boolean", "description": "Limit to open-access works", "default": False},
+                "fields": {
+                    "type": "array",
+                    "items": {
+                        "type": "string",
+                        "enum": ["authors", "date", "source", "topics", "open_access", "cited_by", "abstract", "id"],
+                    },
+                    "description": "Return only these per-result fields (title + DOI always included). Omit for full output.",
+                },
             },
             "required": ["topic"],
         },
@@ -577,11 +611,37 @@ TOOL_DEFINITIONS: list[Tool] = [
     ),
     # ── Citations ──────────────────────────────────────────────────────────────
     Tool(
+        name="search_and_cite",
+        description=(
+            "Search scholarly works and return formatted citations for the top results in ONE call. "
+            "Equivalent to search_academic followed by batch_generate_citations, but skips the "
+            "intermediate result list — returns only citations plus DOIs for follow-up calls. "
+            "Prefer this over separate calls when the goal is a bibliography rather than exploration."
+        ),
+        inputSchema={
+            "type": "object",
+            "properties": {
+                "query": {"type": "string", "description": "Search query"},
+                "format": {
+                    "type": "string",
+                    "enum": ["apa", "mla", "chicago", "bibtex"],
+                    "default": "apa",
+                },
+                "limit": {"type": "integer", "description": "Citations to return (default 5, max 50)", "default": 5},
+                "year_from": {"type": "integer", "description": "Earliest publication year"},
+                "year_to": {"type": "integer", "description": "Latest publication year"},
+                "open_access_only": {"type": "boolean", "description": "Limit to open-access works", "default": False},
+            },
+            "required": ["query"],
+        },
+    ),
+    Tool(
         name="generate_citation",
         description=(
             "Generate a formatted citation for a paper. "
-            "Provide a DOI to auto-fetch metadata, OR supply raw fields (title, authors, year, etc.) "
-            "directly when no DOI is available. "
+            "Provide a DOI to auto-fetch metadata (cached server-side if the paper appeared in a "
+            "recent search — pass only the DOI), OR supply raw fields (title, authors, year, etc.) "
+            "when no DOI is available. "
             "Supports APA 7th, MLA 9th, Chicago 17th, and BibTeX formats."
         ),
         inputSchema={
@@ -641,14 +701,17 @@ TOOL_DEFINITIONS: list[Tool] = [
     ),
     Tool(
         name="batch_generate_citations",
-        description="Generate citations for multiple papers at once using their DOIs.",
+        description=(
+            "Generate citations for multiple papers at once using their DOIs. "
+            "Metadata for papers from a recent search is cached server-side — pass only the DOIs."
+        ),
         inputSchema={
             "type": "object",
             "properties": {
                 "dois": {
                     "type": "array",
                     "items": {"type": "string"},
-                    "description": "List of DOIs (max 20)",
+                    "description": "List of DOIs (max 50)",
                 },
                 "format": {
                     "type": "string",
@@ -681,11 +744,34 @@ TOOL_DEFINITIONS: list[Tool] = [
     ),
     # ── Zotero ────────────────────────────────────────────────────────────────
     Tool(
+        name="search_and_save",
+        description=(
+            "Search scholarly works and save the top results straight to a Zotero collection in ONE call. "
+            "Equivalent to search_academic followed by batch_save_to_zotero, but skips the intermediate "
+            "result list — returns a compact save summary. Checks each item for duplicates. "
+            "Prefer this over separate calls when the goal is collecting papers, not reading results."
+        ),
+        inputSchema={
+            "type": "object",
+            "properties": {
+                "query": {"type": "string", "description": "Search query"},
+                "collection_name": {"type": "string", "description": "Zotero collection name (created if it doesn't exist)"},
+                "parent_collection": {"type": "string", "description": "Parent collection name for nested collections"},
+                "limit": {"type": "integer", "description": "Results to save (default 5, max 20)", "default": 5},
+                "year_from": {"type": "integer", "description": "Earliest publication year"},
+                "year_to": {"type": "integer", "description": "Latest publication year"},
+                "open_access_only": {"type": "boolean", "description": "Limit to open-access works", "default": False},
+            },
+            "required": ["query", "collection_name"],
+        },
+    ),
+    Tool(
         name="save_to_zotero",
         description=(
             "Save a paper to the user's Zotero library. "
-            "Provide a DOI to auto-fetch metadata, OR supply raw fields (title, authors, year, etc.) "
-            "directly when no DOI is available. "
+            "Provide a DOI to auto-fetch metadata (cached server-side if the paper appeared in a "
+            "recent search — pass only the DOI), OR supply raw fields (title, authors, year, etc.) "
+            "when no DOI is available. "
             "Automatically checks for duplicates. Optionally specify a collection name."
         ),
         inputSchema={
@@ -844,25 +930,57 @@ TOOL_DEFINITIONS: list[Tool] = [
 
 _tool_definitions_cache: list[Tool] | None = None
 
+_ZOTERO_TOOL_NAMES = frozenset({
+    "search_and_save", "save_to_zotero", "list_zotero_collections",
+    "batch_save_to_zotero", "search_zotero", "get_zotero_collection_items",
+    "get_zotero_status",
+})
+
+
+def _excluded_tool_names() -> set[str]:
+    """Tools to omit from the advertised list.
+
+    Tools whose backing service is unconfigured or disabled are not listed, so
+    clients never spend context window on schemas they cannot use. Dispatch
+    still answers such tools gracefully if a client calls them anyway.
+    """
+    cfg = _get_config()
+    excluded: set[str] = set()
+    if not cfg.features.get("zotero_enabled", True) or not (
+        cfg.zotero_api_key and cfg.zotero_user_id
+    ):
+        excluded |= _ZOTERO_TOOL_NAMES
+    if not cfg.features.get("engagement_log_enabled", False):
+        excluded.add("record_engagement")
+    if not cfg.features.get("europe_pmc_enabled", False):
+        # With Europe PMC off, search_biomedical is a pure alias for search_academic.
+        excluded.add("search_biomedical")
+    return excluded
+
 
 async def get_tool_definitions() -> list[Tool]:
     """Return tool definitions with the item_type enum populated from the Zotero API.
 
-    On first call, fetches all valid item types from https://api.zotero.org/itemTypes
-    (no auth required) and patches the item_type property in generate_citation and
-    save_to_zotero with a live enum. Result is cached for the process lifetime.
-    Falls back to TOOL_DEFINITIONS with a plain string type if the API is unavailable.
+    Tools whose backing service is unconfigured (see _excluded_tool_names) are
+    omitted. On first call, fetches all valid item types from
+    https://api.zotero.org/itemTypes (no auth required) and patches the item_type
+    property in generate_citation and save_to_zotero with a live enum. Result is
+    cached for the process lifetime. Falls back to the static definitions with a
+    plain string type if the API is unavailable.
     """
     global _tool_definitions_cache
     if _tool_definitions_cache is not None:
         return _tool_definitions_cache
+
+    excluded = _excluded_tool_names()
+    advertised = [t for t in TOOL_DEFINITIONS if t.name not in excluded]
 
     item_types: list[str] = await asyncio.get_event_loop().run_in_executor(
         None, fetch_zotero_item_types
     )
 
     if not item_types:
-        _tool_definitions_cache = TOOL_DEFINITIONS
+        _tool_definitions_cache = advertised
         return _tool_definitions_cache
 
     dynamic_item_type = {
@@ -877,7 +995,7 @@ async def get_tool_definitions() -> list[Tool]:
     }
 
     patched: list[Tool] = []
-    for tool in TOOL_DEFINITIONS:
+    for tool in advertised:
         if tool.name in ("generate_citation", "save_to_zotero"):
             props = {**tool.inputSchema["properties"], "item_type": dynamic_item_type}
             patched.append(Tool(
@@ -941,6 +1059,8 @@ async def _dispatch_tool(name: str, arguments: dict[str, Any]) -> list[TextConte
         "browse_sfu_databases": _handle_browse_sfu_databases,
         "check_sfu_access": _handle_check_sfu_access,
         "search_biomedical": _handle_search_biomedical,
+        "search_and_cite": _handle_search_and_cite,
+        "search_and_save": _handle_search_and_save,
         "generate_citation": _handle_generate_citation,
         "batch_generate_citations": _handle_batch_citations,
         "export_search_results": _handle_export_search,
@@ -993,15 +1113,10 @@ async def _s2_fallback(query: str, limit: int, reason: str) -> list[TextContent]
     )]
 
 
-# ── Search handlers ───────────────────────────────────────────────────────────
+# ── Search helpers (shared by search_academic and the compound tools) ─────────
 
-async def _handle_search_academic(args: dict) -> list[TextContent]:
-    query = sanitize_search_query(args.get("query", ""))
-    if not query:
-        return [TextContent(type="text", text="Empty search query.")]
-    limit = max(1, min(args.get("limit", 10), 50))
-    page = max(args.get("page", 1), 1)
-
+def _build_search_filters(args: dict) -> dict[str, str]:
+    """Build OpenAlex filter dict from year/OA/type tool arguments."""
     filters: dict[str, str] = {}
     year_from = args.get("year_from")
     year_to = args.get("year_to")
@@ -1016,6 +1131,113 @@ async def _handle_search_academic(args: dict) -> list[TextContent]:
     work_type = args.get("type", "")
     if work_type:
         filters["type"] = work_type
+    return filters
+
+
+def _requested_fields(args: dict) -> list[str] | None:
+    """Validate the optional `fields` argument; None means full output."""
+    fields = args.get("fields")
+    if isinstance(fields, list):
+        return [f for f in fields if isinstance(f, str)]
+    return None
+
+
+def _s2_paper_to_work(p: dict) -> dict:
+    """Map a Semantic Scholar paper dict to the OpenAlex-style work shape."""
+    return {
+        "title": p.get("title", ""),
+        "authors": p.get("authors", []),
+        "creators": p.get("authors", []),
+        "date": str(p.get("year") or ""),
+        "doi": p.get("doi", ""),
+        "cited_by_count": p.get("citation_count", 0),
+        "resource_type": "article",
+        "source": "",
+    }
+
+
+async def _s2_works_fallback(query: str, limit: int, reason: str) -> tuple[list[dict], str]:
+    """Semantic Scholar fallback returning OpenAlex-shaped works and a notice."""
+    logger.warning("OpenAlex fallback to S2: %s", reason)
+    async with _request_semaphore:
+        papers = await asyncio.get_event_loop().run_in_executor(
+            None,
+            lambda: _get_s2().search_papers(query, limit=limit),
+        )
+    works = [_s2_paper_to_work(p) for p in (papers or [])]
+    _cache_works(works)
+    return works, f"{reason} Showing results from Semantic Scholar (reduced coverage)."
+
+
+async def _search_works(query: str, limit: int, args: dict, handler: str) -> tuple[list[dict], str | None]:
+    """Core search pipeline for compound tools: ranked work dicts + optional degradation note.
+
+    Mirrors _handle_search_academic's routing (federated router → OpenAlex →
+    Semantic Scholar fallback) but returns raw works instead of formatted text,
+    so compound tools can keep the intermediate result list out of the response.
+    Results are cached server-side by DOI for follow-up calls.
+    """
+    filters = _build_search_filters(args)
+    fetch_k = _retrieval_top_k(limit)
+
+    if _get_features().get("federated_search_enabled"):
+        from lib.federated_search import detect_subject
+        subject_hint = detect_subject(query)
+        t0 = time.monotonic()
+        router = _get_federated_router()
+        async with _request_semaphore:
+            results = await asyncio.get_event_loop().run_in_executor(
+                None,
+                lambda: router.search(
+                    query, filters, top_k=fetch_k,
+                    subject_hint=subject_hint, prefer_local=bool(args.get("prefer_local")),
+                ),
+            )
+        if results:
+            _cache_works(results)
+            results = _maybe_rerank(results, query, limit)
+        _log_query(query, results, (time.monotonic() - t0) * 1000, handler)
+        note = None
+        if getattr(router, "last_degraded", False):
+            note = "the local search index is currently unavailable; results may be incomplete."
+        return results, note
+
+    unavailable = _openalex_unavailable_reason()
+    if unavailable:
+        return await _s2_works_fallback(query, limit, unavailable)
+
+    async with _request_semaphore:
+        data = await asyncio.get_event_loop().run_in_executor(
+            None,
+            lambda: _get_openalex().search_works(query, filters=filters, per_page=fetch_k),
+        )
+    results = data.get("results") or []
+    if not results:
+        reason = _openalex_unavailable_reason()
+        if reason or _get_openalex().circuit_open:
+            return await _s2_works_fallback(
+                query, limit, reason or "OpenAlex returned no results (possible outage)."
+            )
+        return [], None
+
+    t0 = time.monotonic()
+    _cache_works(results)
+    results = _maybe_rerank(results, query, limit)
+    _log_query(query, results, (time.monotonic() - t0) * 1000, handler)
+    return results, None
+
+
+# ── Search handlers ───────────────────────────────────────────────────────────
+
+async def _handle_search_academic(args: dict) -> list[TextContent]:
+    query = sanitize_search_query(args.get("query", ""))
+    if not query:
+        return [TextContent(type="text", text="Empty search query.")]
+    limit = max(1, min(args.get("limit", 10), 50))
+    page = max(args.get("page", 1), 1)
+    fields = _requested_fields(args)
+
+    filters = _build_search_filters(args)
 
     # Phase P.6: route through FederatedSearchRouter when enabled.
     if _get_features().get("federated_search_enabled"):
@@ -1042,7 +1264,7 @@ async def _handle_search_academic(args: dict) -> list[TextContent]:
             results = _maybe_rerank(results, query, limit)
         _log_query(query, results, (time.monotonic() - t0) * 1000, "search_academic_federated")
         data = {"results": results, "meta": {"count": len(results)}}
-        text = format_openalex_results(data, query)
+        text = format_openalex_results(data, query, fields=fields)
         # Item #6: surface cluster degradation instead of a silent empty result.
         if getattr(router, "last_degraded", False):
             text = (
@@ -1075,7 +1297,7 @@ async def _handle_search_academic(args: dict) -> list[TextContent]:
         _cache_works(data["results"])
         data["results"] = _maybe_rerank(data["results"], query, limit)
     _log_query(query, data.get("results", []), (time.monotonic() - t0) * 1000, "search_academic")
-    return [TextContent(type="text", text=format_openalex_results(data, query))]
+    return [TextContent(type="text", text=format_openalex_results(data, query, fields=fields))]
 
 
 async def _handle_search_by_author(args: dict) -> list[TextContent]:
@@ -1096,7 +1318,9 @@ async def _handle_search_by_author(args: dict) -> list[TextContent]:
 
     if data.get("results"):
         _cache_works(data["results"])
-    return [TextContent(type="text", text=format_openalex_results(data, f"author:{author}"))]
+    return [TextContent(type="text", text=format_openalex_results(
+        data, f"author:{author}", fields=_requested_fields(args)
+    ))]
 
 
 async def _handle_search_by_doi(args: dict) -> list[TextContent]:
@@ -1126,7 +1350,9 @@ async def _handle_search_by_doi(args: dict) -> list[TextContent]:
 
     _cache_works([work])
     data = {"results": [work], "meta": {"count": 1}}
-    return [TextContent(type="text", text=format_openalex_results(data, doi))]
+    return [TextContent(type="text", text=format_openalex_results(
+        data, doi, fields=_requested_fields(args)
+    ))]
 
 
 async def _handle_search_by_topic(args: dict) -> list[TextContent]:
@@ -1617,7 +1843,7 @@ async def _handle_generate_citation(args: dict) -> list[TextContent]:
 
 
 async def _handle_batch_citations(args: dict) -> list[TextContent]:
-    dois = args.get("dois", [])[:20]
+    dois = args.get("dois", [])[:50]
     fmt = args.get("format", "apa").lower()
 
     if not dois:
@@ -1655,6 +1881,91 @@ async def _handle_batch_citations(args: dict) -> list[TextContent]:
         output.append(f"{citation}\n" if fmt == "bibtex" else f"{i}. {citation}\n")
 
     return [TextContent(type="text", text="\n".join(output))]
+
+
+# ── Compound tools (search → act in one call; intermediate results stay server-side) ──
+
+_FORMAT_NAMES = {
+    "apa": "APA 7th Edition", "mla": "MLA 9th Edition",
+    "chicago": "Chicago 17th Edition", "bibtex": "BibTeX",
+}
+
+
+async def _handle_search_and_cite(args: dict) -> list[TextContent]:
+    query = sanitize_search_query(args.get("query", ""))
+    if not query:
+        return [TextContent(type="text", text="Empty search query.")]
+    fmt = args.get("format", "apa").lower()
+    limit = max(1, min(args.get("limit", 5), 50))
+
+    works, note = await _search_works(query, limit, args, "search_and_cite")
+    works = works[:limit]
+    if not works:
+        return [TextContent(type="text", text="No results found.")]
+
+    async def cite_one(work: dict) -> str:
+        async with _request_semaphore:
+            enriched = await asyncio.get_event_loop().run_in_executor(
+                None, enrich_metadata_from_crossref, work
+            )
+        return _format_single_citation(enriched, fmt)
+
+    citations = await asyncio.gather(*[cite_one(w) for w in works], return_exceptions=True)
+
+    output = [f"--- {_FORMAT_NAMES.get(fmt, fmt)} citations for '{query}' ({len(works)} results) ---\n"]
+    if note:
+        output.insert(0, f"[Note: {note}]\n")
+    for i, (work, citation) in enumerate(zip(works, citations), 1):
+        if isinstance(citation, Exception):
+            output.append(f"{i}. [Error: {citation}]\n")
+            continue
+        if fmt == "bibtex":
+            output.append(f"{citation}\n")
+        else:
+            doi = work.get("doi", "")
+            entry = f"{i}. {citation}"
+            if doi:
+                entry += f"\n   DOI: {doi}"
+            output.append(entry + "\n")
+    return [TextContent(type="text", text="\n".join(output))]
+
+
+async def _handle_search_and_save(args: dict) -> list[TextContent]:
+    auth_err = _ensure_zotero_auth()
+    if auth_err:
+        return auth_err
+    query = sanitize_search_query(args.get("query", ""))
+    if not query:
+        return [TextContent(type="text", text="Empty search query.")]
+    collection_name = args.get("collection_name", "")
+    if not collection_name:
+        return [TextContent(type="text", text="No collection_name provided.")]
+    limit = max(1, min(args.get("limit", 5), 20))
+
+    works, note = await _search_works(query, limit, args, "search_and_save")
+    works = works[:limit]
+    if not works:
+        return [TextContent(type="text", text="No results found.")]
+
+    dois = [w["doi"] for w in works if w.get("doi")]
+    no_doi = len(works) - len(dois)
+    if not dois:
+        return [TextContent(type="text", text="Found results, but none had a DOI to save.")]
+
+    # The searched works are already in the server-side cache, so the batch save
+    # below resolves each DOI without a second metadata fetch.
+    result = await _handle_batch_save_to_zotero({
+        "dois": dois,
+        "collection_name": collection_name,
+        "parent_collection": args.get("parent_collection", ""),
+    })
+
+    prefix = f"Search: '{query}' — saving top {len(dois)} result(s) to '{collection_name}'\n"
+    if no_doi:
+        prefix += f"({no_doi} result(s) skipped: no DOI)\n"
+    if note:
+        prefix = f"[Note: {note}]\n" + prefix
+    return [TextContent(type="text", text=prefix + result[0].text)]
 
 
 async def _handle_export_search(args: dict) -> list[TextContent]:
