@@ -40,6 +40,12 @@ _REPO_ROOT = Path(__file__).resolve().parents[2]
 # onnxruntime reproduces the indexed sparse weights exactly; the previous default
 # (a bare HF hub id) could not be fetched in the air-gapped serving container.
 _DEFAULT_SPLADE_MODEL_PATH = str(_REPO_ROOT / "models" / "splade_onnx")
+# Persistent defaults for state that must survive container restarts: the
+# OpenAlex daily call counter (budget enforcement breaks silently if it resets)
+# and the work-metadata cache (lets post-restart citation/Zotero calls skip API
+# refetches). /tmp variants are still accepted via env override.
+_DEFAULT_TRACKER_PATH = str(_REPO_ROOT / "data" / "openalex_calls.json")
+_DEFAULT_WORK_CACHE_PATH = str(_REPO_ROOT / "data" / "work_cache.json")
 
 
 @dataclass
@@ -130,7 +136,10 @@ class ServerConfig:
     openalex_mailto: str = ""
     # Daily call budget (free plan = ~1,000 searches/day; default 900 leaves 10% headroom)
     openalex_daily_call_limit: int = 900
-    openalex_tracker_path: str = "/tmp/openalex_calls.json"
+    openalex_tracker_path: str = _DEFAULT_TRACKER_PATH
+
+    # Work-metadata cache persistence (DOI → metadata across restarts)
+    work_cache_path: str = _DEFAULT_WORK_CACHE_PATH
 
     # Unpaywall (email required for access)
     unpaywall_email: str = ""
@@ -274,7 +283,8 @@ def load_config() -> ServerConfig:
         openalex_api_key=_read_secret("openalex_api_key", "OPENALEX_API_KEY"),
         openalex_mailto=_read_secret("openalex_mailto", "OPENALEX_MAILTO"),
         openalex_daily_call_limit=_int_env("OPENALEX_DAILY_CALL_LIMIT", 900),
-        openalex_tracker_path=os.environ.get("OPENALEX_TRACKER_PATH", "/tmp/openalex_calls.json"),
+        openalex_tracker_path=os.environ.get("OPENALEX_TRACKER_PATH", _DEFAULT_TRACKER_PATH),
+        work_cache_path=os.environ.get("SFU_WORK_CACHE_PATH", _DEFAULT_WORK_CACHE_PATH),
         unpaywall_email=_read_secret("unpaywall_email", "UNPAYWALL_EMAIL"),
         sfu_db_registry_cache_ttl=_int_env("SFU_DB_REGISTRY_CACHE_TTL", 86400),
         sfu_db_registry_cache_file=os.environ.get(

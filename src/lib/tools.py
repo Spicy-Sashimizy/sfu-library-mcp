@@ -283,11 +283,53 @@ def _get_s2() -> "SemanticScholarClient":
 
 # ── Work cache (keyed by DOI) ─────────────────────────────────────────────────
 # Populated by search results so citation/Zotero tools can avoid a second API call.
+# Persisted (debounced, best-effort) to SFU_WORK_CACHE_PATH so post-restart
+# citation/Zotero calls for previously searched DOIs still skip the API fetch.
 
 _work_cache: dict[str, dict] = {}
+_work_cache_loaded = False
+_work_cache_last_save = 0.0
+_WORK_CACHE_SAVE_INTERVAL = 60.0  # seconds between disk writes
+
+
+def _ensure_work_cache_loaded() -> None:
+    global _work_cache_loaded
+    if _work_cache_loaded:
+        return
+    _work_cache_loaded = True
+    try:
+        from pathlib import Path
+        p = Path(_get_config().work_cache_path)
+        if p.is_file():
+            data = json.loads(p.read_text())
+            if isinstance(data, dict):
+                # Existing in-memory entries win over restored ones.
+                for k, v in data.items():
+                    _work_cache.setdefault(k, v)
+                logger.info("Work cache: restored %d entries from %s", len(data), p)
+    except Exception:
+        logger.warning("Work cache restore failed (non-fatal)", exc_info=True)
+
+
+def _maybe_persist_work_cache() -> None:
+    global _work_cache_last_save
+    now = time.monotonic()
+    if now - _work_cache_last_save < _WORK_CACHE_SAVE_INTERVAL:
+        return
+    _work_cache_last_save = now
+    try:
+        from pathlib import Path
+        p = Path(_get_config().work_cache_path)
+        p.parent.mkdir(parents=True, exist_ok=True)
+        tmp = p.with_suffix(".tmp")
+        tmp.write_text(json.dumps(_work_cache, default=str))
+        tmp.replace(p)
+    except Exception:
+        logger.debug("Work cache persist failed (non-fatal)", exc_info=True)
 
 
 def _cache_works(works: list[dict]) -> None:
+    _ensure_work_cache_loaded()
     for w in works:
         doi = w.get("doi", "")
         openalex_id = w.get("openalex_id", "")
@@ -303,9 +345,12 @@ def _cache_works(works: list[dict]) -> None:
         if len(_work_cache) > 500:
             for k in list(_work_cache)[:len(_work_cache) - 500]:
                 del _work_cache[k]
+    if works:
+        _maybe_persist_work_cache()
 
 
 def _lookup_work(doi_or_id: str) -> dict | None:
+    _ensure_work_cache_loaded()
     return _work_cache.get(doi_or_id)
 
 
@@ -689,6 +734,7 @@ TOOL_DEFINITIONS: list[Tool] = [
                     "default": "apa",
                 },
                 "limit": {"type": "integer", "description": "Citations to return (default 5, max 50)", "default": 5},
+                "compact": {"type": "boolean", "description": "Return only the bare citation text (no headers, numbering, or DOI lines) — best for pasting into a bibliography", "default": False},
                 "year_from": {"type": "integer", "description": "Earliest publication year"},
                 "year_to": {"type": "integer", "description": "Latest publication year"},
                 "open_access_only": {"type": "boolean", "description": "Limit to open-access works", "default": False},
@@ -715,6 +761,7 @@ TOOL_DEFINITIONS: list[Tool] = [
                     "enum": ["apa", "mla", "chicago", "bibtex"],
                     "default": "apa",
                 },
+                "compact": {"type": "boolean", "description": "Return only the bare citation text (no headers, numbering, or DOI lines) — best for pasting into a bibliography", "default": False},
                 "title": {"type": "string", "description": "Paper/book title (used when no DOI is available)"},
                 "authors": {
                     "type": "array",
@@ -779,6 +826,7 @@ TOOL_DEFINITIONS: list[Tool] = [
                     "enum": ["apa", "mla", "chicago", "bibtex"],
                     "default": "apa",
                 },
+                "compact": {"type": "boolean", "description": "Return only the bare citation text (no headers, numbering, or DOI lines) — best for pasting into a bibliography", "default": False},
             },
             "required": ["dois"],
         },
@@ -799,6 +847,7 @@ TOOL_DEFINITIONS: list[Tool] = [
                     "default": "bibtex",
                 },
                 "limit": {"type": "integer", "description": "Max results to export (default 10, max 50)", "default": 10},
+                "compact": {"type": "boolean", "description": "Omit the export header comment line", "default": False},
             },
             "required": ["query"],
         },
@@ -1609,9 +1658,7 @@ async def _handle_get_full_text_link(args: dict) -> list[TextContent]:
     }
 
     output = [
-        "=" * 50,
         "FULL TEXT ACCESS",
-        "=" * 50,
         f"Access type: {access_labels.get(result['access_type'], result['access_type'])}",
         f"URL: {result['access_url']}",
     ]
@@ -1717,7 +1764,7 @@ def _fetch_europe_pmc(query: str, limit: int) -> str:
         if not results:
             return "No results found in Europe PMC."
         total = payload.get("hitCount", len(results))
-        lines = [f"Europe PMC: {total:,} results for '{query}'\n", "=" * 60 + "\n"]
+        lines = [f"Europe PMC: {total:,} results for '{query}'\n"]
         for i, r in enumerate(results, 1):
             title = r.get("title", "No title")
             authors = r.get("authorString", "")
@@ -1906,6 +1953,8 @@ async def _handle_generate_citation(args: dict) -> list[TextContent]:
         "bibtex": "BibTeX",
     }
     citation = _format_single_citation(metadata, fmt)
+    if args.get("compact"):
+        return [TextContent(type="text", text=citation)]
     return [TextContent(type="text", text=f"--- {format_names.get(fmt, fmt)} ---\n\n{citation}")]
 
 
@@ -1934,7 +1983,8 @@ async def _handle_batch_citations(args: dict) -> list[TextContent]:
 
     fetched = await asyncio.gather(*[fetch_one(doi) for doi in dois], return_exceptions=True)
 
-    output = [f"--- {format_names.get(fmt, fmt)} Citations ({len(dois)} items) ---\n"]
+    compact = bool(args.get("compact"))
+    output = [] if compact else [f"--- {format_names.get(fmt, fmt)} Citations ({len(dois)} items) ---\n"]
     for i, result in enumerate(fetched, 1):
         if isinstance(result, Exception):
             output.append(f"{i}. [Error: {result}]\n")
@@ -1945,7 +1995,10 @@ async def _handle_batch_citations(args: dict) -> list[TextContent]:
             continue
         # metadata already enriched off the event loop in fetch_one
         citation = _format_single_citation(metadata, fmt)
-        output.append(f"{citation}\n" if fmt == "bibtex" else f"{i}. {citation}\n")
+        if compact:
+            output.append(f"{citation}\n")
+        else:
+            output.append(f"{citation}\n" if fmt == "bibtex" else f"{i}. {citation}\n")
 
     return [TextContent(type="text", text="\n".join(output))]
 
@@ -1979,14 +2032,17 @@ async def _handle_search_and_cite(args: dict) -> list[TextContent]:
 
     citations = await asyncio.gather(*[cite_one(w) for w in works], return_exceptions=True)
 
-    output = [f"--- {_FORMAT_NAMES.get(fmt, fmt)} citations for '{query}' ({len(works)} results) ---\n"]
+    compact = bool(args.get("compact"))
+    output = [] if compact else [
+        f"--- {_FORMAT_NAMES.get(fmt, fmt)} citations for '{query}' ({len(works)} results) ---\n"
+    ]
     if note:
         output.insert(0, f"[Note: {note}]\n")
     for i, (work, citation) in enumerate(zip(works, citations), 1):
         if isinstance(citation, Exception):
             output.append(f"{i}. [Error: {citation}]\n")
             continue
-        if fmt == "bibtex":
+        if compact or fmt == "bibtex":
             output.append(f"{citation}\n")
         else:
             doi = work.get("doi", "")
@@ -2039,6 +2095,7 @@ async def _handle_export_search(args: dict) -> list[TextContent]:
     query = sanitize_search_query(args.get("query", ""))
     export_format = args.get("format", "bibtex").lower()
     limit = max(1, min(args.get("limit", 10), 50))
+    compact = bool(args.get("compact"))
 
     async with _get_request_semaphore():
         data = await asyncio.get_event_loop().run_in_executor(
@@ -2070,7 +2127,7 @@ async def _handle_export_search(args: dict) -> list[TextContent]:
             }
             for w in works
         ]
-        header = f"// JSON Export: {len(works)} of {total:,} results for '{query}'\n\n"
+        header = "" if compact else f"// JSON Export: {len(works)} of {total:,} results for '{query}'\n\n"
         return [TextContent(type="text", text=header + json.dumps(export_data, indent=2))]
 
     if export_format == "csv":
@@ -2088,7 +2145,8 @@ async def _handle_export_search(args: dict) -> list[TextContent]:
                 esc(w.get("type", "")), esc(w.get("is_oa", False)),
                 esc(w.get("cited_by_count", 0)),
             ]))
-        return [TextContent(type="text", text=f"# CSV Export: {len(works)} of {total:,} results\n" + "\n".join(lines))]
+        header = "" if compact else f"# CSV Export: {len(works)} of {total:,} results\n"
+        return [TextContent(type="text", text=header + "\n".join(lines))]
 
     if export_format == "bibtex":
         # Run blocking CrossRef enrichment + formatting off the event loop.
@@ -2097,7 +2155,7 @@ async def _handle_export_search(args: dict) -> list[TextContent]:
                 None,
                 lambda: [format_bibtex_entry(enrich_metadata_from_crossref(w)) for w in works],
             )
-        header = f"% BibTeX Export: {len(works)} of {total:,} results for '{query}'\n\n"
+        header = "" if compact else f"% BibTeX Export: {len(works)} of {total:,} results for '{query}'\n\n"
         return [TextContent(type="text", text=header + "\n\n".join(entries))]
 
     if export_format == "ris":
@@ -2107,7 +2165,7 @@ async def _handle_export_search(args: dict) -> list[TextContent]:
                 None,
                 lambda: [format_ris_entry(enrich_metadata_from_crossref(w)) for w in works],
             )
-        header = f"# RIS Export: {len(works)} of {total:,} results for '{query}'\n\n"
+        header = "" if compact else f"# RIS Export: {len(works)} of {total:,} results for '{query}'\n\n"
         return [TextContent(type="text", text=header + "\n\n".join(entries))]
 
     return [TextContent(type="text", text=f"Unknown export format: {export_format}")]
@@ -2145,8 +2203,8 @@ async def _handle_save_to_zotero(args: dict) -> list[TextContent]:
 
     if dup["is_duplicate"]:
         return [TextContent(type="text", text=(
-            "=" * 50 + "\nALREADY IN ZOTERO\n" + "=" * 50 +
-            f"\nThis item is already in your Zotero library ({dup['match_type']} match).\n"
+            "ALREADY IN ZOTERO\n"
+            f"This item is already in your Zotero library ({dup['match_type']} match).\n"
             f"\nExisting item:\n{dup.get('existing_item_summary', 'N/A')}"
         ))]
 
@@ -2164,8 +2222,8 @@ async def _handle_save_to_zotero(args: dict) -> list[TextContent]:
     except ZoteroError as e:
         return [TextContent(type="text", text=f"Failed to create Zotero item: {e}")]
 
-    output = ["=" * 50, "SAVED TO ZOTERO", "=" * 50,
-              f"\nTitle: {metadata.get('title', 'Unknown')}", f"Zotero Key: {item_key}"]
+    output = ["SAVED TO ZOTERO",
+              f"Title: {metadata.get('title', 'Unknown')}", f"Zotero Key: {item_key}"]
     if collection_name:
         output.append(f"Collection: {collection_name}")
     return [TextContent(type="text", text="\n".join(output))]
@@ -2181,7 +2239,7 @@ async def _handle_list_zotero_collections(args: dict) -> list[TextContent]:
         return [TextContent(type="text", text=f"Zotero error: {e}")]
     if not collections:
         return [TextContent(type="text", text="No collections found in your Zotero library.")]
-    output = ["=" * 50, f"ZOTERO COLLECTIONS ({len(collections)})", "=" * 50, ""]
+    output = [f"ZOTERO COLLECTIONS ({len(collections)})", ""]
     for c in collections:
         parent = f" (in: {c['parent_key']})" if c.get("parent_key") else ""
         output.append(f"  {c['name']} — {c['num_items']} items{parent}\n    Key: {c['key']}")
@@ -2244,8 +2302,8 @@ async def _handle_batch_save_to_zotero(args: dict) -> list[TextContent]:
             failed += 1
 
     output = [
-        "=" * 50, "BATCH SAVE TO ZOTERO", "=" * 50,
-        f"\nCollection: {collection_name or '(none)'}",
+        "BATCH SAVE TO ZOTERO",
+        f"Collection: {collection_name or '(none)'}",
         f"Results: {saved} saved, {skipped} skipped, {failed} failed\n",
     ] + details
     return [TextContent(type="text", text="\n".join(output))]
@@ -2266,7 +2324,7 @@ async def _handle_search_zotero(args: dict) -> list[TextContent]:
     if not items:
         return [TextContent(type="text", text=f"No items found in Zotero for '{query}'.")]
     zot = _get_zotero_client()
-    output = ["=" * 50, f"ZOTERO SEARCH: '{query}' ({len(items)} results)", "=" * 50, ""]
+    output = [f"ZOTERO SEARCH: '{query}' ({len(items)} results)", ""]
     for i, item in enumerate(items, 1):
         output.append(f"--- Item {i} ---\n{zot.format_item_summary(item)}\n")
     return [TextContent(type="text", text="\n".join(output))]
@@ -2293,7 +2351,7 @@ async def _handle_get_zotero_collection_items(args: dict) -> list[TextContent]:
         return [TextContent(type="text", text=f"Zotero error: {e}")]
     if not items:
         return [TextContent(type="text", text=f"No items in collection '{collection_name}'.")]
-    output = ["=" * 50, f"ZOTERO COLLECTION: '{collection_name}' ({len(items)} items)", "=" * 50, ""]
+    output = [f"ZOTERO COLLECTION: '{collection_name}' ({len(items)} items)", ""]
     for i, item in enumerate(items, 1):
         output.append(f"--- Item {i} ---\n{zot.format_item_summary(item)}\n")
     return [TextContent(type="text", text="\n".join(output))]
@@ -2306,7 +2364,7 @@ async def _handle_get_zotero_status(args: dict) -> list[TextContent]:
         result = _get_zotero_client().verify_credentials()
     except ZoteroError as e:
         return [TextContent(type="text", text=f"Zotero error: {e}")]
-    output = ["=" * 50, "ZOTERO STATUS", "=" * 50]
+    output = ["ZOTERO STATUS"]
     if result["valid"]:
         access = result.get("access", {})
         output += [
@@ -2325,8 +2383,6 @@ async def _handle_get_zotero_status(args: dict) -> list[TextContent]:
 
 async def _handle_get_openalex_budget(args: dict) -> list[TextContent]:
     s = _get_openalex().budget_status()
-    bar_filled = int(s["pct_used"] / 5)  # 20-char bar
-    bar = "█" * bar_filled + "░" * (20 - bar_filled)
     if s["exhausted"]:
         state = "EXHAUSTED — requests are blocked until midnight"
     elif s["pct_used"] >= 80:
@@ -2334,14 +2390,9 @@ async def _handle_get_openalex_budget(args: dict) -> list[TextContent]:
     else:
         state = "OK"
     lines = [
-        "=" * 50,
         "OPENALEX DAILY BUDGET",
-        "=" * 50,
-        f"Status   : {state}",
-        f"Used     : {s['calls_today']:,} / {s['daily_limit']:,} calls  [{bar}] {s['pct_used']:.0f}%",
-        f"Remaining: {s['remaining']:,} calls",
-        "",
-        "Limits: api_key=100 req/s · polite pool=10 req/s · anonymous=1 req/s",
-        "Budget resets at local midnight.",
+        f"Status: {state}",
+        f"Used: {s['calls_today']:,} / {s['daily_limit']:,} calls ({s['pct_used']:.0f}%), "
+        f"{s['remaining']:,} remaining. Resets at local midnight.",
     ]
     return [TextContent(type="text", text="\n".join(lines))]

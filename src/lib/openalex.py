@@ -44,11 +44,26 @@ class DailyCallTracker:
     def _load(self) -> None:
         today = self._today()
         if not self._path.is_file():
-            # Normal on first run or after a container restart that wiped /tmp.
+            # One-time migration: adopt today's count from the legacy /tmp
+            # location so switching to a persistent path doesn't reset the budget.
+            legacy = Path("/tmp/openalex_calls.json")
+            if legacy != self._path and legacy.is_file():
+                try:
+                    data = json.loads(legacy.read_text())
+                    if data.get("date") == today:
+                        self._count = int(data.get("count", 0))
+                        self._date = today
+                        self._save()
+                        logger.info(
+                            "OpenAlex tracker migrated from %s (%d calls today)",
+                            legacy, self._count,
+                        )
+                        return
+                except Exception:
+                    pass
             logger.warning(
                 "OpenAlex tracker file not found at %s — call counter reset to 0 "
-                "(first use today, or /tmp was cleared on restart). "
-                "Set OPENALEX_TRACKER_PATH to a persistent volume to survive restarts.",
+                "(first use today).",
                 self._path,
             )
             self._count = 0
@@ -73,6 +88,7 @@ class DailyCallTracker:
 
     def _save(self) -> None:
         try:
+            self._path.parent.mkdir(parents=True, exist_ok=True)
             self._path.write_text(json.dumps({"date": self._date, "count": self._count}))
         except Exception as exc:
             logger.warning("Failed to persist OpenAlex call tracker to %s: %s", self._path, exc)

@@ -38,7 +38,6 @@ def format_search_results(results: dict | None, metadata: dict | None = None) ->
     logger.debug("Formatting %d docs from %d total results", len(docs), total)
 
     output = [f"Found {total:,} total results\n"]
-    output.append("=" * 60 + "\n")
 
     all_subjects: list[str] = []
     electronic_count = 0
@@ -157,7 +156,7 @@ def format_openalex_results(data: dict, query: str = "", fields: list[str] | Non
     def want(field: str) -> bool:
         return show is None or field in show
 
-    output = [f"Found {total:,} total results\n", "=" * 60 + "\n"]
+    output = [f"Found {total:,} total results\n"]
 
     for i, work in enumerate(results, 1):
         title = work.get("title", "No title")
@@ -248,7 +247,7 @@ def format_sfu_databases_list(docs: list[dict], query: str = "") -> str:
     header = f"Found {len(docs)} database(s)"
     if query:
         header += f" for '{query}'"
-    output = [header + "\n", "=" * 60 + "\n"]
+    output = [header + "\n"]
 
     for i, doc in enumerate(docs, 1):
         output.append(f"{i}. {format_sfu_database(doc)}\n\n")
@@ -261,7 +260,7 @@ def format_semantic_scholar_papers(papers: list[dict], label: str = "Results") -
     if not papers:
         return "No results found."
 
-    output = [f"{label} ({len(papers)})\n", "=" * 60 + "\n"]
+    output = [f"{label} ({len(papers)})\n"]
     for i, p in enumerate(papers, 1):
         title = p.get("title", "No title")
         authors = "; ".join(p.get("authors", [])[:3])
@@ -304,9 +303,7 @@ def format_item_details(item: dict | None) -> str:
     links = pnx.get("links", {})
     delivery = pnx.get("delivery", {})
 
-    output = ["=" * 60 + "\n"]
-    output.append("ITEM DETAILS\n")
-    output.append("=" * 60 + "\n\n")
+    output = ["ITEM DETAILS\n\n"]
 
     title = normalize_encoding(_first(display.get("title"), "No title"))
     output.append(f"Title: {title}\n\n")
