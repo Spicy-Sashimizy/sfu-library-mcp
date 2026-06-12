@@ -360,6 +360,52 @@ def get_metrics() -> dict:
     return dict(_metrics)
 
 
+# ── Startup warm-up ───────────────────────────────────────────────────────────
+
+def warm_up() -> None:
+    """Pre-load lazily-initialized clients and ML models in the background.
+
+    Without this, the first search call pays for SPLADE ONNX, the embedding
+    model, and the cross-encoder loading inline (measured: >2 min cold vs ~4 s
+    warm). Intended to run in a daemon thread at server startup; every step is
+    independent and non-fatal. Disable with SFU_WARMUP_ENABLED=false.
+    """
+    import os
+    if os.environ.get("SFU_WARMUP_ENABLED", "true").lower() in ("false", "0", "no"):
+        logger.info("Warm-up disabled via SFU_WARMUP_ENABLED")
+        return
+    t0 = time.monotonic()
+    cfg = _get_config()
+    features = cfg.features
+
+    def step(name, fn):
+        try:
+            fn()
+            logger.info("Warm-up: %s ready (%.1fs elapsed)", name, time.monotonic() - t0)
+        except Exception:
+            logger.warning("Warm-up: %s failed (non-fatal)", name, exc_info=True)
+
+    step("api clients", lambda: (_get_openalex(), _get_registry()))
+    if features.get("federated_search_enabled"):
+        step("federated router", _get_federated_router)
+        if features.get("splade_enabled") or features.get("local_rrf_enabled", True):
+            from lib.opensearch_retriever import encode_splade
+            step("SPLADE model", lambda: encode_splade("warm up", cfg.splade_model_path))
+    if features.get("rerank_enabled"):
+        from lib.embedding import _load_model
+        step("embedding model", lambda: _load_model(cfg.embedding_model_path or None))
+    if features.get("crossencoder_enabled"):
+        from lib.reranker import _get_cross_encoder
+        step("cross-encoder", _get_cross_encoder)
+    logger.info("Warm-up complete in %.1fs", time.monotonic() - t0)
+
+
+def start_warmup_thread() -> None:
+    """Kick off warm_up() on a daemon thread so startup isn't blocked."""
+    import threading
+    threading.Thread(target=warm_up, name="sfu-warmup", daemon=True).start()
+
+
 # ── Zotero auth helper ────────────────────────────────────────────────────────
 
 def _ensure_zotero_auth() -> list[TextContent] | None:

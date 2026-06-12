@@ -15,7 +15,7 @@ from mcp.types import Tool, TextContent
 
 from lib.logging_setup import setup_logging
 from lib.config import load_config, validate_config
-from lib.tools import get_tool_definitions, handle_tool_call
+from lib.tools import get_tool_definitions, handle_tool_call, start_warmup_thread
 
 # Configure logging to stderr (never stdout — MCP uses stdio JSON-RPC)
 config = load_config()
@@ -39,6 +39,7 @@ async def call_tool(name: str, arguments: dict[str, Any]) -> list[TextContent]:
 
 
 async def main():
+    start_warmup_thread()
     async with stdio_server() as (read_stream, write_stream):
         await server.run(read_stream, write_stream, server.create_initialization_options())
 

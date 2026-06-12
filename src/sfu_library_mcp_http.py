@@ -29,7 +29,12 @@ from mcp.types import Tool, TextContent
 
 from lib.logging_setup import setup_logging
 from lib.config import load_config, validate_config
-from lib.tools import advertised_tool_count, get_tool_definitions, handle_tool_call
+from lib.tools import (
+    advertised_tool_count,
+    get_tool_definitions,
+    handle_tool_call,
+    start_warmup_thread,
+)
 
 config = load_config()
 logger = setup_logging(level=config.log_level, log_file=config.log_file)
@@ -111,6 +116,7 @@ def main():
     port = int(os.environ.get("MCP_HTTP_PORT", "8080"))
     logger.info("Starting SFU Library MCP HTTP server on %s:%d", host, port)
     logger.info("Tools available: %d", advertised_tool_count())
+    start_warmup_thread()
     uvicorn.run(app, host=host, port=port, log_level="info")
 
 
