@@ -221,6 +221,19 @@ def iter_slice(path: Path):
 
 def build_section_worker(root_str: str, section: str, hot_subs: list[str],
                          keep_spool: bool, bmp_shard_docs: int) -> dict:
+    """Traceback-logging wrapper: a task exception is otherwise invisible
+    until the parent drains the pool (the 2026-06-12 med_bio failure sat
+    silent for 40 min while its worker moved on to cs_math)."""
+    try:
+        return _build_section(root_str, section, hot_subs, keep_spool,
+                              bmp_shard_docs)
+    except Exception:
+        logger.exception("BUILD %s: worker failed", section)
+        raise
+
+
+def _build_section(root_str: str, section: str, hot_subs: list[str],
+                   keep_spool: bool, bmp_shard_docs: int) -> dict:
     """Process-pool worker: builds one BASE section's spool into its two era
     sub-sections (sections/<base>__<era>/), with its OWN meta db
     (meta_<section>.sqlite, merged into meta.sqlite afterwards).
@@ -350,16 +363,30 @@ def phase_build(root: Path, status: dict, hot_sections: list[str],
         todo.sort(key=lambda s: -sum(f.stat().st_size
                                      for f in (spool_dir / s).glob("*")))
         logger.info("BUILD: %s with %d workers", todo, build_workers)
+        failures: list[str] = []
         with ProcessPoolExecutor(max_workers=build_workers) as pool:
             futs = {pool.submit(build_section_worker, str(root), s,
                                 hot_sections, keep_spool, bmp_shard_docs): s
                     for s in todo}
             for fut in as_completed(futs):
                 section = futs[fut]
-                infos = fut.result()   # {sub_section: info} (per era)
+                try:
+                    infos = fut.result()   # {sub_section: info} (per era)
+                except Exception:
+                    # Log NOW and keep the other sections building; raising
+                    # here would strand them (the with-block still waits for
+                    # them) and hide the failure until the pool drains. The
+                    # supervisord restart retries failures from checkpoints.
+                    logger.exception("BUILD %s: FAILED — continuing others, "
+                                     "restart will retry it", section)
+                    failures.append(section)
+                    continue
                 status.setdefault("section_info", {}).update(infos)
                 status["sections_built"].append(section)
                 save_status(root, status)
+        if failures:
+            raise RuntimeError(f"BUILD failed for {sorted(failures)} — "
+                               "see tracebacks above; restarting retries them")
     # Over ALL sections, not just this run's: a crash between a section build
     # and the merge leaves its meta_<section>.sqlite orphaned on resume
     # (merge skips files that no longer exist, so this stays idempotent).
