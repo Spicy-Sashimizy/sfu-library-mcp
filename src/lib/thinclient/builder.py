@@ -43,8 +43,13 @@ BMP_BLOCK_SIZE = 256
 # Docs are buffered and sorted by top SPLADE term in chunks before BMP
 # insertion (bounded-RAM approximation of global clustering; the win comes
 # from term locality within 256-doc blocks, which chunk-local sorting keeps).
-BMP_CLUSTER_CHUNK_DOCS = 500_000
-TANTIVY_WRITER_HEAP = 1_000_000_000
+# Halved from 500k/1GB on 2026-06-12: the era split runs TWO builders per
+# section worker (recent+archive), and 3 workers x 2 builders OOM-killed the
+# 150M build on the 31 GB host (BrokenProcessPool ~1 min into BUILD). Chunk
+# size only bounds the clustering window — the measured win comes from
+# 256-doc-block locality, which 250k chunks preserve.
+BMP_CLUSTER_CHUNK_DOCS = 250_000
+TANTIVY_WRITER_HEAP = 512_000_000
 
 
 # v2 meta schema: W-ids stored as INTEGER PRIMARY KEY (rowid alias, varint on

@@ -90,6 +90,13 @@ Operational helpers around the running 150M migration:
   export→build boundary so the BUILD phase picks up post-launch builder code
   (era routing, abstracts v3, meta v2, b256 clustering).
 
+Build RAM (measured 2026-06-12): the era split runs TWO builders per section
+worker, and `--build-workers 3` OOM-killed the 150M BUILD on the 31 GB host
+(`BrokenProcessPool` ~1 min in, swap 5 GB deep). Defaults are now
+`--build-workers 2`, `BMP_CLUSTER_CHUNK_DOCS 250k`, `TANTIVY_WRITER_HEAP
+512 MB` (~6-8 GB/worker). Chunk halving keeps the measured 256-doc-block
+locality win; smaller tantivy heap only means more segment flushes.
+
 Validation: `scripts/eval_thinclient_parity.py` (per-leg overlap vs baseline,
 LLM-judged NDCG@10, latency) and the permanent pytest suite
 `scripts/tests/test_thinclient_stack.py` (13 tests: meta v1/v2, era routing +

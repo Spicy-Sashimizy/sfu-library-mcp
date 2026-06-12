@@ -382,8 +382,10 @@ def main() -> None:
     parser.add_argument("--slices", type=int, default=8)
     parser.add_argument("--workers", type=int, default=4)
     parser.add_argument("--bmp-shard-docs", type=int, default=2_000_000)
-    parser.add_argument("--build-workers", type=int, default=3,
-                        help="parallel section builds (RAM-bound: ~5-6 GB each)")
+    parser.add_argument("--build-workers", type=int, default=2,
+                        help="parallel section builds (RAM-bound: ~6-8 GB each — "
+                             "each worker runs TWO era builders; 3 workers "
+                             "OOM-killed the 150M build on a 31 GB host)")
     parser.add_argument("--keep-spool", action="store_true")
     args = parser.parse_args()
 
