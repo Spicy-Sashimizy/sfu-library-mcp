@@ -503,3 +503,169 @@ class TestEfficiency:
               f"gated: {gated} chars (~{gated // 4} tokens), "
               f"saved: {full - gated} chars (~{(full - gated) // 4} tokens)")
         assert gated < full
+
+
+# ── Round 3: persistence, trimmed output, compact mode ───────────────────────
+
+@pytest.fixture(autouse=True)
+def _restore_work_cache_state():
+    """Keep work-cache path/state mutations from leaking between tests."""
+    yield
+    try:
+        from lib.config import load_config
+        tools._get_config().work_cache_path = load_config().work_cache_path
+    except Exception:
+        pass
+    tools._work_cache_loaded = True
+    tools._work_cache_last_save = 0.0
+
+
+class TestWorkCachePersistence:
+    def _fresh(self, tmp_path):
+        """Point the work cache at a temp file and reset its state."""
+        tools._get_config().work_cache_path = str(tmp_path / "work_cache.json")
+        tools._work_cache.clear()
+        tools._work_cache_loaded = True  # don't restore other tests' state
+        tools._work_cache_last_save = 0.0
+
+    def test_persist_and_restore(self, tmp_path):
+        self._fresh(tmp_path)
+        tools._cache_works([_make_work(1), _make_work(2)])
+        assert (tmp_path / "work_cache.json").is_file()
+        # simulate restart
+        tools._work_cache.clear()
+        tools._work_cache_loaded = False
+        work = tools._lookup_work("10.1038/test0001")
+        assert work and work["title"].startswith("Deep Learning")
+
+    def test_save_is_debounced(self, tmp_path):
+        self._fresh(tmp_path)
+        tools._cache_works([_make_work(1)])
+        first_mtime = (tmp_path / "work_cache.json").stat().st_mtime_ns
+        tools._cache_works([_make_work(2)])  # within debounce window
+        assert (tmp_path / "work_cache.json").stat().st_mtime_ns == first_mtime
+
+    def test_corrupt_cache_file_nonfatal(self, tmp_path):
+        self._fresh(tmp_path)
+        (tmp_path / "work_cache.json").write_text("{not json")
+        tools._work_cache_loaded = False
+        assert tools._lookup_work("10.1/none") is None  # no exception
+
+    def test_unwritable_path_nonfatal(self):
+        tools._get_config().work_cache_path = "/proc/definitely/not/writable.json"
+        tools._work_cache_loaded = True
+        tools._work_cache_last_save = 0.0
+        tools._cache_works([_make_work(3)])  # must not raise
+        assert tools._lookup_work("10.1038/test0003") is not None
+
+
+class TestTrackerPersistence:
+    def test_default_path_not_tmp(self):
+        from lib.config import load_config
+        import os
+        old = os.environ.pop("OPENALEX_TRACKER_PATH", None)
+        try:
+            cfg = load_config()
+            assert not cfg.openalex_tracker_path.startswith("/tmp")
+            assert cfg.openalex_tracker_path.endswith("data/openalex_calls.json")
+        finally:
+            if old is not None:
+                os.environ["OPENALEX_TRACKER_PATH"] = old
+
+    def test_tracker_survives_reinit(self, tmp_path):
+        from lib.openalex import DailyCallTracker
+        path = str(tmp_path / "calls.json")
+        t1 = DailyCallTracker(limit=900, path=path)
+        for _ in range(5):
+            t1.increment()
+        # simulate restart
+        t2 = DailyCallTracker(limit=900, path=path)
+        assert t2.status()["calls_today"] == 5
+
+
+class TestTrimmedOutput:
+    @pytest.mark.asyncio
+    async def test_no_ruler_lines_in_search(self):
+        with _patch_direct_search(3):
+            result = await handle_tool_call("search_academic", {"query": "x"})
+        assert "======" not in result[0].text
+
+    @pytest.mark.asyncio
+    async def test_budget_no_bar_but_labels_kept(self):
+        mock_oa = MagicMock()
+        mock_oa.budget_status.return_value = {
+            "exhausted": True, "calls_today": 900, "daily_limit": 900,
+            "remaining": 0, "pct_used": 100.0,
+        }
+        with patch("lib.tools._get_openalex", return_value=mock_oa):
+            result = await handle_tool_call("get_openalex_budget", {})
+        text = result[0].text
+        assert "EXHAUSTED" in text and "900" in text
+        assert "█" not in text and "====" not in text
+
+    @pytest.mark.asyncio
+    async def test_zotero_save_no_banner(self):
+        zot = _mock_zotero()
+        with patch("lib.tools._ensure_zotero_auth", return_value=None), \
+             patch("lib.tools._get_zotero_client", return_value=zot), \
+             patch("lib.tools._fetch_work_metadata", new_callable=AsyncMock, return_value=_make_work(1)), \
+             patch("lib.tools.enrich_metadata_from_crossref", side_effect=lambda m: m):
+            result = await handle_tool_call("save_to_zotero", {"doi": "10.1038/test0001"})
+        text = result[0].text
+        assert "SAVED TO ZOTERO" in text
+        assert "====" not in text
+
+
+class TestCompactMode:
+    @pytest.mark.asyncio
+    async def test_generate_citation_compact(self):
+        with patch("lib.tools._fetch_work_metadata", new_callable=AsyncMock, return_value=_make_work(1)), \
+             patch("lib.tools.enrich_metadata_from_crossref", side_effect=lambda m: m):
+            full = await handle_tool_call("generate_citation", {"doi": "10.1038/test0001"})
+            compact = await handle_tool_call(
+                "generate_citation", {"doi": "10.1038/test0001", "compact": True}
+            )
+        assert "--- APA" in full[0].text
+        assert "---" not in compact[0].text
+        assert len(compact[0].text) < len(full[0].text)
+
+    @pytest.mark.asyncio
+    async def test_batch_citations_compact(self):
+        with patch("lib.tools._fetch_work_metadata", new_callable=AsyncMock, return_value=_make_work(1)), \
+             patch("lib.tools.enrich_metadata_from_crossref", side_effect=lambda m: m):
+            compact = await handle_tool_call(
+                "batch_generate_citations",
+                {"dois": ["10.1/a", "10.1/b"], "format": "apa", "compact": True},
+            )
+        text = compact[0].text
+        assert "--- APA" not in text
+        assert not text.lstrip().startswith("1.")
+
+    @pytest.mark.asyncio
+    async def test_search_and_cite_compact(self):
+        with _patch_direct_search(5):
+            full = await handle_tool_call(
+                "search_and_cite", {"query": "x", "format": "apa", "limit": 5}
+            )
+            compact = await handle_tool_call(
+                "search_and_cite", {"query": "x", "format": "apa", "limit": 5, "compact": True}
+            )
+        assert "DOI:" in full[0].text
+        assert "DOI:" not in compact[0].text and "---" not in compact[0].text
+        reduction = 1 - len(compact[0].text) / len(full[0].text)
+        print(f"\n[efficiency] search_and_cite full: {len(full[0].text)} chars, "
+              f"compact: {len(compact[0].text)} chars, reduction: {reduction:.0%}")
+        # compact's primary value is structural (pasteable bibliography);
+        # the size reduction is a secondary ~10-20% benefit
+        assert reduction >= 0.10
+
+    @pytest.mark.asyncio
+    async def test_export_compact_drops_header(self):
+        mock_oa = MagicMock()
+        mock_oa.search_works.return_value = _openalex_response(2)
+        with patch("lib.tools._get_openalex", return_value=mock_oa):
+            out = await handle_tool_call(
+                "export_search_results", {"query": "x", "format": "csv", "compact": True}
+            )
+        assert not out[0].text.startswith("#")
+        assert out[0].text.startswith("doi,title")
