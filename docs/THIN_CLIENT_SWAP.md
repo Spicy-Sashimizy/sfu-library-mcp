@@ -63,7 +63,9 @@ MCP tools: `get_index_status`, `list_personas`, `request_section_unpack`,
 ```
 data/thinclient_index/
   manifest.json        provenance, persona, section states, checksums
-  build_status.json    resumable build checkpoint
+  build_status.json    resumable build checkpoint (phase/section granularity)
+  build_progress_<base>.json   per-spool-slice BUILD checkpoint (transient;
+                       deleted when the section completes)
   meta.sqlite          v2: int-PK id -> title/doi/year/type/is_oa/section
   sections/<base>__<era>/   tantivy/ + splade_NNN.bmp (+vocab.zst sidecars)
                             + abstracts.sqlite (hot)
@@ -92,10 +94,34 @@ Operational helpers around the running 150M migration:
 
 Build RAM (measured 2026-06-12): the era split runs TWO builders per section
 worker, and `--build-workers 3` OOM-killed the 150M BUILD on the 31 GB host
-(`BrokenProcessPool` ~1 min in, swap 5 GB deep). Defaults are now
-`--build-workers 2`, `BMP_CLUSTER_CHUNK_DOCS 250k`, `TANTIVY_WRITER_HEAP
-512 MB` (~6-8 GB/worker). Chunk halving keeps the measured 256-doc-block
-locality win; smaller tantivy heap only means more segment flushes.
+(`BrokenProcessPool` ~1 min in, swap 5 GB deep) **at the then-default
+`--bmp-shard-docs 2_000_000`** — observed worker RSS ~10.5-11.3 GB each at 2
+workers. Code defaults stay `--build-workers 2` / 2M shard docs;
+`BMP_CLUSTER_CHUNK_DOCS 250k`, `TANTIVY_WRITER_HEAP 512 MB`. The 150M run's
+supervisor conf overrides to `--build-workers 3 --bmp-shard-docs 1_000_000`
+(2026-06-12): halving the shard buffer is what makes the third worker fit —
+*estimated* from the RSS breakdown, throughput/RSS to be confirmed from the
+run's own logs. Trade-off: ~2x BMP shard count (plus one boundary rotation
+per slice, see below) → more query-time fan-out, mitigated by vocab-sidecar
+skip + era pruning; retrieval-latency impact UNMEASURED at 150M.
+
+Per-slice BUILD checkpointing (2026-06-12): a silent whole-session kill cost
+~8 h because BUILD resume granularity was the whole section (10-15 h each at
+150M). The section worker now checkpoints after every spool slice
+(`build_progress_<base>.json`): meta + abstracts commit (both sqlite sidecars
+moved `journal_mode OFF -> WAL` so a SIGKILL can't corrupt them), tantivy
+commit, and the open BMP shard rotates at the slice boundary (shards never
+span slices, so resume just deletes shards >= the recorded `next_shard`).
+A crash now costs at most one slice (~10-25 min) instead of the section.
+Edge cases handled: tantivy double-commit window (first re-fed slice probes
+for its first doc id and skips re-adds), abstracts dict-training buffers
+(persisted as `pending_*` meta rows at checkpoints — training still waits
+for the full 20k sample), orphaned abstract blocks from re-fed slices
+(dropped at finish). Slice-boundary BMP rotation is safe: measured per-slice
+era minimum is 18.6k docs (med_bio archive), above the 5k tail bar.
+Kill/resume parity test: `scripts/tests/test_build_resume.py` (SIGKILL every
+8-25 s until completion; asserts meta/tantivy/BMP-search/abstracts parity
+against an uninterrupted build of the same real-data spool subset).
 
 Process supervision (2026-06-12): a second BUILD run died SILENTLY ~17 min in
 (whole session gone, no traceback, no OOM event, no low-RAM sample — killer

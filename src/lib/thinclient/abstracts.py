@@ -82,8 +82,10 @@ class AbstractStoreWriter:
         self.path = Path(path)
         self.path.parent.mkdir(parents=True, exist_ok=True)
         self._db = sqlite3.connect(str(self.path))
+        # WAL (not OFF): the store must survive a SIGKILL so the per-slice
+        # build resume can keep appending instead of rebuilding the section.
         self._db.executescript(
-            "PRAGMA journal_mode=OFF; PRAGMA synchronous=OFF;"
+            "PRAGMA journal_mode=WAL; PRAGMA synchronous=OFF;"
             "CREATE TABLE IF NOT EXISTS blocks (b INTEGER PRIMARY KEY, d INTEGER, z BLOB);"
             "CREATE TABLE IF NOT EXISTS docs (id TEXT PRIMARY KEY, b INTEGER,"
             "  off INTEGER, n INTEGER);"
@@ -95,6 +97,40 @@ class AbstractStoreWriter:
         self._dict_names: list[str] = []      # index = dict id in blocks.d
         self._next_block = 0
         self._n = 0
+        self._restore()
+
+    def _restore(self) -> None:
+        """Resume from a checkpoint()ed store: dict ids are positional, so the
+        bucket order, the trained dicts, and the not-yet-flushed pending
+        buffers must all come back exactly as persisted."""
+        row = self._db.execute("SELECT v FROM meta WHERE k='dicts'").fetchone()
+        if row is None:
+            return
+        self._dict_names = json.loads(row[0])
+        latin_row = self._db.execute(
+            "SELECT v FROM meta WHERE k='zdict_latin'").fetchone()
+        latin = (zstandard.ZstdCompressionDict(latin_row[0])
+                 if latin_row else None)
+        for name in self._dict_names:
+            r = self._db.execute("SELECT v FROM meta WHERE k=?",
+                                 (f"zdict_{name}",)).fetchone()
+            zd = zstandard.ZstdCompressionDict(r[0]) if r else latin
+            self._cctx[name] = (zstandard.ZstdCompressor(
+                level=COMPRESSION_LEVEL, dict_data=zd) if zd
+                else zstandard.ZstdCompressor(level=COMPRESSION_LEVEL))
+        for (k, v) in self._db.execute(
+                "SELECT k, v FROM meta WHERE k LIKE 'pending_%'").fetchall():
+            bucket = k[len("pending_"):]
+            docs = json.loads(zstandard.ZstdDecompressor().decompress(v))
+            self._buffers[bucket] = [(i, a.encode("utf-8")) for i, a in docs]
+            self._buffer_bytes[bucket] = sum(len(d) for _, d in
+                                             self._buffers[bucket])
+        self._next_block = self._db.execute(
+            "SELECT COALESCE(MAX(b)+1, 0) FROM blocks").fetchone()[0]
+        self._n = self._db.execute("SELECT COUNT(*) FROM docs").fetchone()[0]
+        logger.info("abstract store %s: resumed at block %d, %d docs, "
+                    "%d pending buffers", self.path.name, self._next_block,
+                    self._n, len(self._buffers))
 
     def add(self, doc_id: str, abstract: str) -> None:
         if not abstract:
@@ -141,6 +177,11 @@ class AbstractStoreWriter:
         buf = self._buffers.get(bucket, [])
         if not buf:
             return
+        # A resume that restored pending buffers AND re-fed the crashed slice
+        # can hold the same doc twice — keep the last copy.
+        dedup = dict(buf)
+        if len(dedup) < len(buf):
+            buf[:] = list(dedup.items())
         cctx, did = self._cctx[bucket], self._dict_id(bucket)
         i = 0
         while i < len(buf):
@@ -162,6 +203,28 @@ class AbstractStoreWriter:
         if self._n % 200_000 < TRAIN_TARGET_DOCS:
             self._db.commit()
 
+    def checkpoint(self) -> None:
+        """Durability point for the per-slice build resume: flush trained
+        buckets, persist untrained buckets' raw buffers (training quality
+        needs the full TRAIN_TARGET_DOCS sample, so don't train early), and
+        commit. _restore() is the inverse."""
+        for bucket in list(self._buffers):
+            if bucket in self._cctx:
+                self._flush(bucket)
+        self._db.execute("DELETE FROM meta WHERE k LIKE 'pending_%'")
+        for bucket, buf in self._buffers.items():
+            if not buf:
+                continue
+            payload = json.dumps([(i, d.decode("utf-8"))
+                                  for i, d in dict(buf).items()])
+            self._db.execute(
+                "INSERT OR REPLACE INTO meta VALUES (?, ?)",
+                (f"pending_{bucket}",
+                 zstandard.ZstdCompressor(level=3).compress(payload.encode())))
+        self._db.execute("INSERT OR REPLACE INTO meta VALUES ('dicts', ?)",
+                         (json.dumps(self._dict_names),))
+        self._db.commit()
+
     def finish(self) -> int:
         # Train latin first so below-bar buckets can fall back to its dict.
         order = sorted(self._buffers, key=lambda b: b != "latin")
@@ -172,7 +235,12 @@ class AbstractStoreWriter:
         self._db.execute("INSERT OR REPLACE INTO meta VALUES ('format', 'v3')")
         self._db.execute("INSERT OR REPLACE INTO meta VALUES ('dicts', ?)",
                          (json.dumps(self._dict_names),))
+        self._db.execute("DELETE FROM meta WHERE k LIKE 'pending_%'")
+        # Re-fed slices repoint docs rows at fresh blocks; drop orphans.
+        self._db.execute("DELETE FROM blocks WHERE b NOT IN "
+                         "(SELECT DISTINCT b FROM docs)")
         self._db.commit()
+        self._db.execute("PRAGMA journal_mode=DELETE")  # ship without -wal/-shm
         self._db.execute("VACUUM")
         self._db.close()
         return self._n

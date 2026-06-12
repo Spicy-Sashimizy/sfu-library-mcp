@@ -202,53 +202,98 @@ def phase_export(root: Path, status: dict, slices: int, workers: int,
 
 # ── phase 2: build sections ──────────────────────────────────────────────────
 
-def iter_spool(spool_dir: Path, section: str):
+def iter_slice(path: Path):
     dctx = zstandard.ZstdDecompressor()
-    for path in sorted((spool_dir / section).glob("slice_*.jsonl.zst")):
-        with open(path, "rb") as fh, dctx.stream_reader(fh) as reader:
-            buf = b""
-            while True:
-                chunk = reader.read(8 << 20)
-                if not chunk:
-                    break
-                buf += chunk
-                *lines, buf = buf.split(b"\n")
-                for ln in lines:
-                    if ln:
-                        yield _loads(ln)
-            if buf.strip():
-                yield _loads(buf)
+    with open(path, "rb") as fh, dctx.stream_reader(fh) as reader:
+        buf = b""
+        while True:
+            chunk = reader.read(8 << 20)
+            if not chunk:
+                break
+            buf += chunk
+            *lines, buf = buf.split(b"\n")
+            for ln in lines:
+                if ln:
+                    yield _loads(ln)
+        if buf.strip():
+            yield _loads(buf)
 
 
 def build_section_worker(root_str: str, section: str, hot_subs: list[str],
                          keep_spool: bool, bmp_shard_docs: int) -> dict:
     """Process-pool worker: builds one BASE section's spool into its two era
     sub-sections (sections/<base>__<era>/), with its OWN meta db
-    (meta_<section>.sqlite, merged into meta.sqlite afterwards)."""
+    (meta_<section>.sqlite, merged into meta.sqlite afterwards).
+
+    Checkpointed per spool slice in build_progress_<section>.json: every
+    artifact is made durable at each slice boundary, so a kill costs at most
+    one slice of work instead of the whole section (the 2026-06-12 silent
+    session kill cost ~8 h exactly that way)."""
     import sqlite3
 
     root = Path(root_str)
     spool_dir = root / "spool"
-    for era in ERAS:
-        live = root / "sections" / f"{section}__{era}"
-        if live.exists():
-            shutil.rmtree(live)
-
+    progress_path = root / f"build_progress_{section}.json"
     meta_path = root / f"meta_{section}.sqlite"
-    meta_path.unlink(missing_ok=True)
+    resuming = progress_path.exists()
+    if resuming:
+        progress = json.loads(progress_path.read_text())
+        # Era dirs that never reached a checkpoint are uncommitted garbage.
+        for era in ERAS:
+            if era not in progress["eras"]:
+                live = root / "sections" / f"{section}__{era}"
+                if live.exists():
+                    shutil.rmtree(live)
+    else:
+        progress = {"slices_done": [], "eras": {}}
+        for era in ERAS:
+            live = root / "sections" / f"{section}__{era}"
+            if live.exists():
+                shutil.rmtree(live)
+        for suffix in ("", "-wal", "-shm"):
+            Path(f"{meta_path}{suffix}").unlink(missing_ok=True)
+
     meta_db = sqlite3.connect(str(meta_path))
     meta_db.executescript(META_SCHEMA)
     t0 = time.perf_counter()
     builders: dict[str, SectionBuilder] = {}
-    for doc in iter_spool(spool_dir, section):
-        era = era_of(int(doc.get("publication_year") or 0))
+
+    def get_builder(era: str) -> SectionBuilder:
         b = builders.get(era)
         if b is None:
             sub = f"{section}__{era}"
             b = builders[era] = SectionBuilder(
                 root, sub, hot=sub in hot_subs, meta_db=meta_db,
-                bmp_shard_docs=bmp_shard_docs)
-        b.add(doc)
+                bmp_shard_docs=bmp_shard_docs,
+                resume_state=progress["eras"].get(era))
+        return b
+
+    for era in progress["eras"]:
+        get_builder(era)
+    base_docs = sum(b.count for b in builders.values())
+
+    slice_paths = sorted((spool_dir / section).glob("slice_*.jsonl.zst"))
+    pending = [p for p in slice_paths if p.name not in progress["slices_done"]]
+    probe = resuming   # first re-fed slice may already be in tantivy
+    for path in pending:
+        for b in builders.values():
+            b.begin_slice(probe_tantivy=probe)
+        for doc in iter_slice(path):
+            get_builder(era_of(int(doc.get("publication_year") or 0))).add(doc)
+        for era, b in builders.items():
+            progress["eras"][era] = b.slice_checkpoint()
+        progress["slices_done"].append(path.name)
+        tmp = progress_path.with_name(progress_path.name + ".tmp")
+        tmp.write_text(json.dumps(progress))
+        os.replace(tmp, progress_path)
+        probe = False
+        total = sum(b.count for b in builders.values())
+        rate = (total - base_docs) / max(time.perf_counter() - t0, 1)
+        logger.info("BUILD %s: %s done (%d/%d slices) — %s docs, %.0f docs/s "
+                    "this run", section, path.name,
+                    len(progress["slices_done"]), len(slice_paths),
+                    f"{total:,}", rate)
+
     infos: dict[str, dict] = {}
     for era, b in builders.items():
         infos[f"{section}__{era}"] = b.finish()
@@ -256,8 +301,11 @@ def build_section_worker(root_str: str, section: str, hot_subs: list[str],
     secs = round(time.perf_counter() - t0, 1)
     for info in infos.values():
         info["build_secs"] = secs
+    # Spool first, progress file second: a kill between the two resumes into
+    # a cheap finish-only pass; the reverse order would rebuild from scratch.
     if not keep_spool:
         shutil.rmtree(spool_dir / section, ignore_errors=True)
+    progress_path.unlink(missing_ok=True)
     return infos
 
 
@@ -287,6 +335,11 @@ def phase_build(root: Path, status: dict, hot_sections: list[str],
         if section in status["sections_built"]:
             continue
         if not (spool_dir / section).is_dir():
+            if (root / f"build_progress_{section}.json").exists():
+                # Crashed between the spool delete and the progress-file
+                # cleanup: all slices are durable, run the finish-only pass.
+                todo.append(section)
+                continue
             logger.info("BUILD: section %s has no spool (0 docs) — skipping", section)
             status["sections_built"].append(section)
             save_status(root, status)

@@ -2,7 +2,9 @@
 
 Module map: `sections.py` (subject classifier, era sub-sections `<base>__recent`/
 `__archive` boundary 2010, era-qualified PERSONAS) · `builder.py` (per-section
-tantivy + BMP shards + sidecars) · `retriever.py` (drop-in ThinClientRetriever,
+tantivy + BMP shards + sidecars; per-slice `slice_checkpoint()`/resume — meta &
+abstracts are WAL, BMP shards never span spool slices; kill/resume parity test:
+`scripts/tests/test_build_resume.py`) · `retriever.py` (drop-in ThinClientRetriever,
 RRF k=60, era pruning) · `abstracts.py` (v3 script-bucketed 32KB zstd-dict
 blocks; reads v1/v2 too) · `packer.py` (hot/cold tar+zstd-19 on built artifacts)
 · `dense_cache.py` (query-driven warm cache, `SFU_DENSE_WARMCACHE`, default on)
