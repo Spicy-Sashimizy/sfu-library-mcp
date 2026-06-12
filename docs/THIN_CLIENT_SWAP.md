@@ -97,6 +97,15 @@ worker, and `--build-workers 3` OOM-killed the 150M BUILD on the 31 GB host
 512 MB` (~6-8 GB/worker). Chunk halving keeps the measured 256-doc-block
 locality win; smaller tantivy heap only means more segment flushes.
 
+Process supervision (2026-06-12): a second BUILD run died SILENTLY ~17 min in
+(whole session gone, no traceback, no OOM event, no low-RAM sample — killer
+unidentified; nohup/setsid detachment from tool-spawned shells is fragile
+here). The migration now runs under **supervisord**:
+`scripts/migration-150m.supervisor.conf` → `/etc/supervisor/conf.d/`,
+`autorestart=unexpected` + checkpointed phases make restarts free;
+`sudo supervisorctl status migration-150m` to check, exit 0 = DONE (no
+restart). Remove the conf after the build completes.
+
 Validation: `scripts/eval_thinclient_parity.py` (per-leg overlap vs baseline,
 LLM-judged NDCG@10, latency) and the permanent pytest suite
 `scripts/tests/test_thinclient_stack.py` (13 tests: meta v1/v2, era routing +
