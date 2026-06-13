@@ -20,6 +20,7 @@ block maxima internally (measured-negligible loss in the BMP paper / SIGIR'24).
 from __future__ import annotations
 
 import logging
+import os
 import sqlite3
 from pathlib import Path
 
@@ -50,6 +51,16 @@ BMP_BLOCK_SIZE = 256
 # 256-doc-block locality, which 250k chunks preserve.
 BMP_CLUSTER_CHUNK_DOCS = 250_000
 TANTIVY_WRITER_HEAP = 512_000_000
+# Commit + TRUNCATE the meta -wal every this many docs WITHIN a slice. The
+# per-slice truncate alone was insufficient (measured 2026-06-13): a section's
+# ~2h slices let the uncommitted meta -wal grow to GB before the slice-boundary
+# commit (other 5.8G, social_sciences 5.3G), re-creating the 31G-host swap
+# pressure. Mid-slice commits are safe because meta rows are INSERT OR REPLACE
+# (idempotent on the whole-slice re-feed resume performs) and only the meta db
+# is touched — tantivy/BMP still commit/rotate at the slice boundary, so the
+# atomic-slice resume model is unchanged. Env-overridable so the resume parity
+# test can force frequent mid-slice truncates on tiny slices.
+META_WAL_TRUNCATE_DOCS = int(os.environ.get("SFU_META_WAL_TRUNCATE_DOCS", "250000"))
 
 
 # v2 meta schema: W-ids stored as INTEGER PRIMARY KEY (rowid alias, varint on
@@ -135,6 +146,7 @@ class SectionBuilder:
         self._abstracts = (AbstractStoreWriter(self.dir / "abstracts.sqlite")
                            if hot else None)
         self.count = (resume_state or {}).get("count", 0)
+        self._last_wal_truncate = self.count
         # A crash between the tantivy commit and the progress-file write means
         # the first re-fed slice may already be committed; the first add() of
         # that slice probes for its doc and skips tantivy adds if found.
@@ -216,6 +228,14 @@ class SectionBuilder:
         if len(self._meta_batch) + len(self._meta_batch_other) >= 5_000:
             self._flush_meta()
         self.count += 1
+        # Bound the meta -wal mid-slice (see META_WAL_TRUNCATE_DOCS): commit the
+        # rows so far and TRUNCATE the now-checkpointable frames. Idempotent on
+        # resume (INSERT OR REPLACE), and tantivy/BMP are untouched here.
+        if self.count - self._last_wal_truncate >= META_WAL_TRUNCATE_DOCS:
+            self._flush_meta()
+            self._meta.commit()
+            self._meta.execute("PRAGMA wal_checkpoint(TRUNCATE)")
+            self._last_wal_truncate = self.count
 
     def _flush_bmp_chunk(self, final: bool = False) -> None:
         """Sort the buffered chunk by top SPLADE term, then stream into BMP

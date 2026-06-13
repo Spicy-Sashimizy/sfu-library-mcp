@@ -125,8 +125,23 @@ and the hot-section `AbstractStoreWriter.checkpoint()` now issue
 the truncate) — re-validated with `test_build_resume.py` (clean==chaos, 11
 kills). Procedure that day: dropped to `--build-workers 2` to clear the
 thrash (RAM used 29G→9G, free →21G), shipped the truncate, then restored
-`--build-workers 3`. Bounded-WAL efficacy at 150M scale: to be confirmed from
-the post-fix run's WAL sizes.
+`--build-workers 3`.
+
+Per-slice truncate was INSUFFICIENT — intra-slice fix (2026-06-13): the truncate
+above only fires at a slice boundary, but the dominant sections have ~2-2.5h
+slices and the meta rows are not committed until that boundary, so a single
+slice's uncommitted `-wal` still grew to GB before any truncate could run. Over
+a 9.5h 3-worker run only ONE slice committed (cs_math); `other`/`social_sciences`
+never reached a boundary and their `-wal` reballooned to 5.8G/5.3G, dragging
+free RAM back to 5.0G. Fix: `SectionBuilder.add()` now commits + TRUNCATEs the
+meta `-wal` every `META_WAL_TRUNCATE_DOCS` docs (default 250k ≈ ~200MB cap,
+`SFU_META_WAL_TRUNCATE_DOCS` env override). Safe because meta rows are
+`INSERT OR REPLACE` (idempotent on the whole-slice re-feed resume performs) and
+only the meta db is touched — tantivy/BMP still commit/rotate at the slice
+boundary, so the atomic-slice resume model is unchanged. Validated with
+`test_build_resume.py` at `SFU_META_WAL_TRUNCATE_DOCS=3000` (clean==chaos, 12
+mid-build kills, mid-slice truncates firing under the chaos). Bounded-WAL
+efficacy at 150M scale: to be confirmed from the post-fix run's WAL sizes.
 
 Per-slice BUILD checkpointing (2026-06-12): a silent whole-session kill cost
 ~8 h because BUILD resume granularity was the whole section (10-15 h each at
