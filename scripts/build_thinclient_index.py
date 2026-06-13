@@ -364,7 +364,11 @@ def phase_build(root: Path, status: dict, hot_sections: list[str],
                                      for f in (spool_dir / s).glob("*")))
         logger.info("BUILD: %s with %d workers", todo, build_workers)
         failures: list[str] = []
-        with ProcessPoolExecutor(max_workers=build_workers) as pool:
+        # Fresh process per section: worker RSS accumulates ~0.35 GB/h across
+        # slice commits (measured 2026-06-13, tantivy segment churn) and pool
+        # processes are otherwise reused, so late sections would inherit it.
+        with ProcessPoolExecutor(max_workers=build_workers,
+                                 max_tasks_per_child=1) as pool:
             futs = {pool.submit(build_section_worker, str(root), s,
                                 hot_sections, keep_spool, bmp_shard_docs): s
                     for s in todo}

@@ -104,6 +104,12 @@ supervisor conf overrides to `--build-workers 3 --bmp-shard-docs 1_000_000`
 run's own logs. Trade-off: ~2x BMP shard count (plus one boundary rotation
 per slice, see below) → more query-time fan-out, mitigated by vocab-sidecar
 skip + era pruning; retrieval-latency impact UNMEASURED at 150M.
+Measured under full 3-way load (2026-06-13): ~6.2 GB/worker early, drifting
++~0.35 GB/h each (tantivy segment churn across per-slice commits) — pool now
+uses `max_tasks_per_child=1` so each section task starts in a fresh process;
+per-worker throughput ~1,050 docs/s non-hot / ~375 docs/s hot (abstracts
+zstd-19 is the hot-section bottleneck) vs ~1,400/s solo — the third worker
+nets ~+12% aggregate, not +50%.
 
 Per-slice BUILD checkpointing (2026-06-12): a silent whole-session kill cost
 ~8 h because BUILD resume granularity was the whole section (10-15 h each at
