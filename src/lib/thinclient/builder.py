@@ -269,6 +269,14 @@ class SectionBuilder:
             self._abstracts.checkpoint()
         self._flush_meta()
         self._meta.commit()
+        # TRUNCATE the WAL back to zero each slice: a plain commit only does a
+        # PASSIVE checkpoint, leaving the -wal file at its high-water mark
+        # (measured 2026-06-13: other=5.8G, social_sciences=3.3G, cs_math=1.9G —
+        # ~11G across 3 workers, which evicted the page cache and drove the
+        # 31G host into swap-thrash). No concurrent readers here, so TRUNCATE
+        # always fully checkpoints; data is already durable from the commit
+        # above, so a kill mid-truncate is still crash-consistent.
+        self._meta.execute("PRAGMA wal_checkpoint(TRUNCATE)")
         self._writer.commit()
         self._skip_tantivy_slice = False
         return {"next_shard": self._bmp_shard_idx, "count": self.count}

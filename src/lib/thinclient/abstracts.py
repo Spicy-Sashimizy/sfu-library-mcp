@@ -224,6 +224,10 @@ class AbstractStoreWriter:
         self._db.execute("INSERT OR REPLACE INTO meta VALUES ('dicts', ?)",
                          (json.dumps(self._dict_names),))
         self._db.commit()
+        # Keep the -wal from growing unbounded across slices (see builder.py
+        # slice_checkpoint): TRUNCATE checkpoints all frames into the db and
+        # resets the file; data is durable from the commit above.
+        self._db.execute("PRAGMA wal_checkpoint(TRUNCATE)")
 
     def finish(self) -> int:
         # Train latin first so below-bar buckets can fall back to its dict.

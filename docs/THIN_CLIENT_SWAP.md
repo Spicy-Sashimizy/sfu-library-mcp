@@ -111,6 +111,23 @@ per-worker throughput ~1,050 docs/s non-hot / ~375 docs/s hot (abstracts
 zstd-19 is the hot-section bottleneck) vs ~1,400/s solo — the third worker
 nets ~+12% aggregate, not +50%.
 
+WAL high-water-mark swap-thrash + fix (2026-06-13): the RSS budget above was
+not the only memory sink. A plain sqlite `commit()` in WAL mode only does a
+PASSIVE checkpoint, which never shrinks the `-wal` file below its high-water
+mark, so the per-section `meta_*.sqlite-wal` grew unbounded across slices
+(measured mid-run: other 5.8G, social_sciences 3.3G, cs_math 1.9G ≈ 11G
+combined). That page-cache load drove the 31 GB host into swap (free RAM
+1.5 GB, swap 6.2 GB deep, one worker crawling at ~54 KB/s in `D` state) even
+though per-worker RSS looked fine. Fix: `SectionBuilder.slice_checkpoint()`
+and the hot-section `AbstractStoreWriter.checkpoint()` now issue
+`PRAGMA wal_checkpoint(TRUNCATE)` after each per-slice commit, resetting the
+`-wal` to ~0 every slice. Crash-safe (data is durable from the commit before
+the truncate) — re-validated with `test_build_resume.py` (clean==chaos, 11
+kills). Procedure that day: dropped to `--build-workers 2` to clear the
+thrash (RAM used 29G→9G, free →21G), shipped the truncate, then restored
+`--build-workers 3`. Bounded-WAL efficacy at 150M scale: to be confirmed from
+the post-fix run's WAL sizes.
+
 Per-slice BUILD checkpointing (2026-06-12): a silent whole-session kill cost
 ~8 h because BUILD resume granularity was the whole section (10-15 h each at
 150M). The section worker now checkpoints after every spool slice
