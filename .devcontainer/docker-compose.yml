@@ -171,6 +171,3 @@ volumes:
     labels:
       com.claudebox.project: sfu-library-thinclient
       com.claudebox.managed: "true"
-    labels:
-      com.claudebox.project: sfu-library-thinclient
-      com.claudebox.managed: "true"
