@@ -1,7 +1,8 @@
 # Whole-DB Storage Budget @150.4M docs — measured levers + hypothetical totals
 
-**Date:** 2026-06-11 · **Status:** all numbers below are MEASURED unless marked
-*est.* · Sources: `scripts/eval_storage_levers.py` →
+**Date:** 2026-06-11 · **Updated:** 2026-06-16 (§1 now carries the AS-BUILT 150M
+footprint; the completed build supersedes the earlier `meta.sqlite` estimate) ·
+**Status:** all numbers below are MEASURED unless marked *est.* · Sources: `scripts/eval_storage_levers.py` →
 `data/eval_results/storage_levers_eval.json`, `scripts/eval_text_compression.py`
 → `data/eval_results/text_compression_eval.json`, component sizes from the 1M
 validation build (`data/thinclient_1m`), full method detail in
@@ -21,15 +22,27 @@ validation build (`data/thinclient_1m`), full method detail in
 IN the builder, not just measured — BMP b256+clustered (`af09836`), abstracts v3
 script-bucketed 32 KB blocks + per-script dicts (`d978ba3`), meta v2 INTEGER-PK
 schema (`9a6d195`; implemented v2 measured **~10 GB** at 150M, better than the
-14.4 GB lever estimate above). The running 150M migration's build phase is armed
-to pick these up (`scripts/restart_at_build_phase.sh`). Sections have since also
-split into era sub-sections (`7fe689a`), which changes layout but not totals.
+14.4 GB lever estimate above — **SUPERSEDED 2026-06-16: the completed 150M
+build's `meta.sqlite` measured 24.9 GB, not ~10 GB; the early figure did not
+hold at full build, cause not yet diagnosed — see "AS BUILT" below and
+`THIN_CLIENT_SWAP.md` §BUILD COMPLETE**). Sections have since also split into
+era sub-sections (`7fe689a`), which changes layout but not totals.
 
-Persona steady state (political_science: hot `social_sciences` live + 4 cold
-sections packed at the measured 2.10× artifact ratio): **≈ 95 GB** on disk
-(hot live ≈ 34 GB incl. abstracts, packed cold ≈ 47 GB, meta 14 GB). *Pack
-ratio was measured on bsize-32 artifacts; denser b256 shards will pack
-slightly less (est.).*
+**Persona steady state — AS BUILT (measured 2026-06-16, supersedes the estimate
+below):** political_science (hot `social_sciences__recent` live + 9 cold
+sub-sections packed): **≈ 104 GB** on disk — hot live 34.0 GB (incl. 26.3M
+abstracts), packed cold 45.0 GB (live 84.3 GB → **1.875×** aggregate, range
+1.86–2.01×), `meta.sqlite` **24.9 GB**, dense 0.36 GB. Excludes the reclaimable
+131 GB `spool_backup/` build intermediate. The 1.875× ratio confirms the est.
+below that b256 packs under the 2.10× bsize-32 figure; the +9 GB vs the ≈ 95 GB
+estimate is entirely `meta.sqlite` (24.9 GB built vs 14 GB assumed). Source:
+`data/thinclient_index/manifest.json`, `logs/migration_150m.log` (DONE
+2026-06-16T03:00:21).
+
+Persona steady state (ESTIMATE 2026-06-11, superseded above): hot live ≈ 34 GB
++ packed cold ≈ 47 GB (2.10× est.) + meta 14 GB = **≈ 95 GB**. *Pack ratio was
+measured on bsize-32 artifacts; denser b256 shards will pack slightly less
+(est.).*
 
 Old-era levers already baked into this design (do NOT double-count): SPLADE
 stored once (old `nosrc_splade`, −36.9%), positions off (old `freqs`, −8.6%),

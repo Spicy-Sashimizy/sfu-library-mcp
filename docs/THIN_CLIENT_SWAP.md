@@ -170,6 +170,49 @@ here). The migration now runs under **supervisord**:
 `sudo supervisorctl status migration-150m` to check, exit 0 = DONE (no
 restart). Remove the conf after the build completes.
 
+### BUILD COMPLETE — measured results (2026-06-16)
+
+The 150M migration reached `phase: done` at **2026-06-16T03:00:21**
+(`data/thinclient_index/{build_status.json,manifest.json}`,
+`logs/migration_150m.log`). **150,413,098 docs**, 5 personas × 2 eras = 10
+sub-sections. Engines as built (from `manifest.json`): tantivy 0.26 BM25F
+(title^3/abstract, freq-only), bmp 0.2.6 (b256 clustered, `splade_quant_scale`
+70), usearch b1 + int8 rescore (32×).
+
+As-built on-disk footprint — persona `political_science`, hot
+`social_sciences__recent` live + 9 cold sub-sections packed (measured `du`,
+`manifest.json`):
+
+| Component | Size | Notes |
+|---|---|---|
+| packed cold (9 × `tar.zst`) | 45.0 GB | live 84.3 GB → 45.0 GB, aggregate **1.875×** |
+| hot section live (`social_sciences__recent`) | 34.0 GB | incl. 26,322,924 abstracts (zstd-19 script dicts) |
+| `meta.sqlite` | **24.9 GB** | meta v2 INTEGER-PK; **exceeds the ~10 GB v2 estimate** in `STORAGE_BUDGET_150M.md` §1 — corrected there, cause not yet diagnosed |
+| dense leg | 0.36 GB | 600k vectors, dim 384: b1 118 MB + int8 rescore 230 MB |
+| **Serving total** | **≈ 104 GB** (97 GiB) | vs ≈ 95 GB estimate; the +9 GB is entirely `meta.sqlite` |
+
+Per-section pack ratio (`manifest.json`, live/packed) ranged 1.86–2.01×,
+aggregate **1.875×** — **below the 2.10× bsize-32 assumption**, confirming the
+`STORAGE_BUDGET_150M.md` §1 "*denser b256 shards will pack slightly less
+(est.)*" note. Pack phase 01:33→02:59 (~86 min, 9 cold sub-sections); dense leg
+36 s.
+
+Resolved "to-be-confirmed" items: the 3-worker / `--bmp-shard-docs 1_000_000`
+build reached DONE without the OOM/swap-thrash recurring (the failure mode the
+per-slice + intra-slice `wal_checkpoint(TRUNCATE)` fixes targeted), so the
+bounded-WAL fix held at 150M scale. NOTE: the post-build meta-merge of `other`
+(54.9M docs) is a single bulk `INSERT OR REPLACE` (NOT the bounded per-slice
+path) and produced a transient ~24 GB `meta.sqlite-wal` that checkpoint-drained
+into `meta.sqlite` cleanly; final `-wal`/`-shm` truncated to 0.
+
+Post-build housekeeping: remove the supervisord conf (build done); the
+`data/thinclient_index/spool_backup/` build intermediate (**131 GB**) is
+reclaimable once the index is validated. **Retrieval efficacy (NDCG@10 /
+latency / per-leg parity) at full 150M scale is UNMEASURED** until
+`scripts/eval_thinclient_parity.py` runs against this index (the only prior
+parity result, `data/eval_results/thinclient_parity_20260611_0646.json`,
+predates this full build) — see Validation below.
+
 Validation: `scripts/eval_thinclient_parity.py` (per-leg overlap vs baseline,
 LLM-judged NDCG@10, latency) and the permanent pytest suite
 `scripts/tests/test_thinclient_stack.py` (13 tests: meta v1/v2, era routing +
