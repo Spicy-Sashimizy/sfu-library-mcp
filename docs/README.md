@@ -34,4 +34,5 @@ swap (see `THIN_CLIENT_SWAP.md` for what this container now runs).
   `wechat_setup.md` (unrelated project), `issueslog.txt` (raw MCP log dump),
   and a duplicate of the old README.)*
 - `infrastructure/` — environment/access docs (remote MCP access, GUI
-  reference).
+  reference, `HYBRID_DEMO_DEPLOYMENT.md` = NAS-broker + DO scale-to-zero plan
+  for the public 150M tech demo on $200 credit).
