@@ -9,6 +9,16 @@ This is the companion build-plan to the analysis in `THIN_CLIENT_SWAP.md` (engin
 and `STORAGE_BUDGET_150M.md` (footprint). It supersedes the DO-only sketch discussed
 in chat.
 
+> **GATE (2026-06-16): do not start building any phase yet.** Per owner: wait until
+> the index build **fully finishes** before standing up the demo. Current state is
+> `build_status.json` `phase:build` — all 5 subject sections built, but **`dense_done:
+> false` and `sections_packed:[]`**, so the dense + pack phases are still pending.
+> Completion signal to watch: `sudo supervisorctl status migration-150m` exits 0
+> (DONE, no restart) **and** `build_status.json` shows the dense/pack phases done.
+> **Also:** the build/source host is **not always-on** — the build runs intermittently
+> and the later 280 GB upload (§4.1) must be **resumable/chunked**, never a single
+> assumed-continuous run.
+
 ---
 
 ## 1. Why this shape (the constraints that forced it)
@@ -105,10 +115,13 @@ JSON is negligible.
 
 ## 4. Known risks / open decisions (resolve in Phase 0)
 
-1. **One-time 280 GB upload.** The index lives on the dev box; getting it onto the DO
-   volume crosses home upload once (e.g. ~31 h at 20 Mbps). Options: rsync direct to a
-   seed droplet+volume, or stage via DO Spaces then pull internally. **This is the main
-   setup-time cost.** Decide path + start early.
+1. **One-time 280 GB upload — must be RESUMABLE (source host is not always-on).** The
+   index lives on the build/dev box, which runs intermittently, so the transfer cannot
+   assume a single ~31 h-at-20 Mbps continuous run. Use a resumable/chunked method:
+   `rsync --partial --append-verify --inplace` (re-runnable, picks up where it left
+   off), or chunked upload to DO Spaces (`s3cmd`/`rclone` with retries) then pull
+   internally to the volume. Drive it from a re-entrant script (cron/systemd) that
+   survives source reboots. **This is the main setup-time cost and the long pole.**
 2. **Abstracts incomplete.** Only `social_sciences__recent` has local abstracts
    (`build_status.json`); all other sections fetch abstracts **live from OpenAlex** at
    rerank → latency + API budget under concurrency. `OPENALEX_API_KEY` is in `.env`.
@@ -129,6 +142,9 @@ JSON is negligible.
 
 ## 5. Build phases
 
+- **Phase −1 — WAIT (current):** index build must fully finish (dense + pack) before
+  anything below starts. See the GATE note at the top. Quality decisions (#2/#3/#4) are
+  deferred until the build completes, then revisited against the finished artifacts.
 - **Phase 0 — confirm + decide:** credits (done: $204.98, exp 2026-07-31), region,
   decisions #2/#3/#4 above, index upload path (#1).
 - **Phase 1 — seed the volume:** create 300 GB volume + seed droplet; get the 280 GB
