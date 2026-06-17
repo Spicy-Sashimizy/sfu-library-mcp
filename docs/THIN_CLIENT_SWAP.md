@@ -244,11 +244,24 @@ peak RAM at one engine rather than the sum — **but that is still not enough at
 note above), so `record-tc` OOMs on the 24 GB host before it serves a single
 query** (verified 2026-06-17: `record-tc` SIGKILLed mid-`_load()` at ~32 GB
 committed; the host `.wslconfig` 24 GB cap contained the kill — only the process
-died, Docker + OpenSearch survived). **150M thin-client parity is therefore
-BLOCKED on host RAM** (≈232 GB recommended; see `STORAGE_BUDGET_150M.md`), not on
-the eval harness. The harness itself is **IMPLEMENTED 2026-06-17, smoke-tested on
-`data/thinclient_1m`** (compare output schema-identical to
-`thinclient_parity_20260616_0536.json`). Permanent pytest
+died, Docker + OpenSearch survived). Serving the whole engine needs ≈232 GB host
+RAM (see `STORAGE_BUDGET_150M.md`).
+
+**150M parity numbers on the 24 GB host: use `scripts/eval_parity_section_waves.py
+run`** (added 2026-06-17). It exploits the fact that the legs already merge across
+sections/shards by plain score-concatenation: BM25F runs on tantivy (mmap, ~0
+resident) in one pass via `SFU_SKIP_BMP=1`, and the SPLADE/BMP leg is recorded
+**shard by shard, each wave in a fresh process** (the only way to free BMP RAM),
+then merged offline. Because BMP scores are corpus-independent dot products, the
+shard-partition merge reproduces the full-corpus top-K **exactly** — validated
+2026-06-17 on `data/thinclient_1m`: wave output is byte-for-byte identical to a
+direct full `record-tc` on both legs, all queries. Emits a record-tc-schema JSON
+consumed unchanged by `eval_thinclient_parity.py compare`. Time-not-RAM bound:
+it reads the 68.6 GB BMP set once across ~30 waves (`--resident-budget-gb`,
+default 8). The legacy single-process `record-tc` stays **BLOCKED on host RAM**.
+The base harness is **IMPLEMENTED 2026-06-17, smoke-tested on `data/thinclient_1m`**
+(compare output schema-identical to `thinclient_parity_20260616_0536.json`).
+Permanent pytest
 suite
 `scripts/tests/test_thinclient_stack.py` (13 tests: meta v1/v2, era routing +
 pruning, abstracts v1/v2/v3, dense cache, metrics/reload, MCP index tools).

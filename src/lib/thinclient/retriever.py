@@ -159,6 +159,12 @@ class ThinClientRetriever:
 
             load_floor = float(os.environ.get("SFU_LOAD_MEM_FLOOR_GB",
                                               LOAD_MEM_FLOOR_GB))
+            # SFU_SKIP_BMP: load tantivy/meta/dense only, skip the resident BMP
+            # shards. The BM25F leg (tantivy, mmap) then runs on hosts too small
+            # to hold the ~211 GB SPLADE set — used by the section-wave parity
+            # eval, which records the SPLADE leg shard-by-shard in separate
+            # processes. See scripts/eval_parity_section_waves.py.
+            skip_bmp = os.environ.get("SFU_SKIP_BMP") == "1"
             sections_dir = self.root / "sections"
             if sections_dir.is_dir():
                 for sdir in sorted(sections_dir.iterdir()):
@@ -167,7 +173,8 @@ class ThinClientRetriever:
                     idx = tantivy.Index.open(str(sdir / "tantivy"))
                     idx.reload()
                     shards = []
-                    for p in sorted(sdir.glob("splade_*.bmp")):
+                    for p in ([] if skip_bmp
+                              else sorted(sdir.glob("splade_*.bmp"))):
                         _guard_load_mem(p.stat().st_size, load_floor,
                                         f"{sdir.name}/{p.name}")
                         vocab_path = p.with_suffix(".vocab.zst")
