@@ -214,7 +214,23 @@ parity result, `data/eval_results/thinclient_parity_20260611_0646.json`,
 predates this full build) — see Validation below.
 
 Validation: `scripts/eval_thinclient_parity.py` (per-leg overlap vs baseline,
-LLM-judged NDCG@10, latency) and the permanent pytest suite
+LLM-judged NDCG@10, latency). **At 150M, run it OOM-safe** via
+`scripts/run_parity_safe.sh` — the legacy single-process path loaded BOTH
+retrievers and interleaved `tc.search`/`baseline.search` per query, keeping the
+thin-client (~104 GB mmap) and the OpenSearch 150M cluster hot at once and
+OOM-killing on the 31 GB host. The eval is now split into one-engine-per-process
+subcommands joined offline: `record-tc` (thin-client only, `SFU_DENSE_WARMCACHE=0`)
+→ `record-os` (OpenSearch only, thin-client process already exited) → `compare`
+(pure offline join, identical summary schema). `ThinClientRetriever` has no
+`close()`, so only a fresh process frees the mmap set; the orchestrator sequences
+the phases as separate processes with page-cache drops + `MemAvailable` preflight
+between them, an in-loop mem-floor guard that flushes a partial record and exits
+cleanly before the OOM-killer fires (the killer left "no traceback" above), and
+optional `PAUSE_OS=1` to `docker pause` OpenSearch during phase A. Peak RAM ≈ one
+engine, never the sum. **IMPLEMENTED 2026-06-17, smoke-tested on `data/thinclient_1m`
+(compare output schema-identical to `thinclient_parity_20260616_0536.json`); 150M
+parity numbers still UNMEASURED until the full run completes.** Permanent pytest
+suite
 `scripts/tests/test_thinclient_stack.py` (13 tests: meta v1/v2, era routing +
 pruning, abstracts v1/v2/v3, dense cache, metrics/reload, MCP index tools).
 Storage research: `docs/LEXICAL_STORAGE_RESEARCH.md`,

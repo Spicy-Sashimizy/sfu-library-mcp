@@ -77,3 +77,32 @@ The most extreme case: `Canadian documentary film Indigenous representation` sco
 ## Key Takeaway
 
 The old benchmark made local search *look* worse than it was by 2.3-2.5×. The LLM-judged benchmark reveals that SPLADE and RRF are finding highly topically relevant papers on 32 of 34 subjects with local index coverage. The low mean NDCG (0.63-0.65) is caused by 15 zero-coverage subjects scoring 0.0, not by retrieval failing on covered subjects.
+
+---
+
+## Running the parity eval OOM-safe at 150M (added 2026-06-17)
+
+`scripts/eval_thinclient_parity.py` compares the thin-client stack against the
+OpenSearch baseline. At 150M docs the thin-client serving set (~104 GB mmap) and
+the OpenSearch 150M cluster cannot both stay hot on the 31 GB host, so the legacy
+single-process mode (now `combined`, kept only for small indices) OOM-kills. Use
+the record-then-replay split instead:
+
+```bash
+scripts/run_parity_safe.sh [QUERIES] [INDEX_ROOT] [BASELINE_URL]
+# PAUSE_OS=1 also `docker pause`s OpenSearch during the thin-client phase
+```
+
+It runs each engine in its **own process** (the retriever has no `close()`, so a
+fresh process is the only way to release the mmap working set), drops page cache
+between phases, preflights `MemAvailable`, and aborts cleanly via an in-loop
+mem-floor guard before the OOM-killer can fire. Phases:
+
+1. `record-tc` — thin-client only (`SFU_DENSE_WARMCACHE=0`) → top-50 ids + latency
+2. `record-os` — OpenSearch only (thin-client process already exited)
+3. `compare` — pure offline join → the standard `thinclient_parity_*.json` summary
+
+Because overlap is set math on id lists and NDCG uses the offline judge cache, no
+comparison step needs both engines live. Peak RAM ≈ one engine, never the sum.
+**150M parity numbers are UNMEASURED until the full run lands** — smoke-tested on
+`data/thinclient_1m` only (schema-identical to the prior parity file).
