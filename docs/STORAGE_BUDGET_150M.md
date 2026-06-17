@@ -39,6 +39,20 @@ estimate is entirely `meta.sqlite` (24.9 GB built vs 14 GB assumed). Source:
 `data/thinclient_index/manifest.json`, `logs/migration_150m.log` (DONE
 2026-06-16T03:00:21).
 
+**Serving RAM ≠ on-disk size (measured 2026-06-17).** Disk is ~104 GB but the
+RAM to *serve* is dominated by BMP, which has no mmap mode: `bmp.Searcher` loads
+each `*.bmp` into anonymous RAM at **3.07×** on disk (probe: 569 MB shard → 1747
+MB resident). The 68.6 GB of live+packed SPLADE shards → **~211 GB resident** for
+the full leg; tantivy (29 GB), `meta.sqlite` (24 GB) and dense (0.34 GB) are
+mmap/paged (~0 resident). **Recommended serving host: ~232 GB RAM** (211 GB BMP +
+~21 GB for Python/process, tantivy+sqlite query working set, dense, and OOM
+headroom). This **far exceeds a 24–32 GB workstation** — raising the WSL
+`.wslconfig` cap only helps if the physical machine actually has that RAM. On
+commodity hardware the parity eval must instead run in **section waves** (load a
+subset of sections that fits, record per-section top-k in a fresh process, repeat,
+merge offline — the record-then-replay pattern at section granularity), or move to
+a ≥256 GB cloud box. See `docs/THIN_CLIENT_SWAP.md` BMP note.
+
 Persona steady state (ESTIMATE 2026-06-11, superseded above): hot live ≈ 34 GB
 + packed cold ≈ 47 GB (2.10× est.) + meta 14 GB = **≈ 95 GB**. *Pack ratio was
 measured on bsize-32 artifacts; denser b256 shards will pack slightly less

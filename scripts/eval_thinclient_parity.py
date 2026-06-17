@@ -16,12 +16,15 @@ leg complementarity).
 
 OOM-safe record-then-replay (default; use this at 150M scale)
 ─────────────────────────────────────────────────────────────
-At 150M docs the thin-client serving set (~104 GB mmap) and the OpenSearch
-150M cluster cannot both stay hot on the 31 GB host — interleaving both
-engines in ONE process (the legacy `combined` mode) OOM-kills. Instead, run
-each engine in its OWN process and join offline. The retriever has no close()
-hook, so only a fresh process truly releases the mmap working set; the phases
-are therefore separate subcommands, sequenced by scripts/run_parity_safe.sh:
+At 150M docs the thin-client SPLADE leg is ~211 GB RESIDENT (bmp.Searcher loads
+each *.bmp into anonymous RAM at ~3.07x on disk; NOT mmap — measured 2026-06-17)
+and the OpenSearch 150M cluster also wants RAM, so interleaving both engines in
+ONE process (the legacy `combined` mode) OOM-kills. Run each engine in its OWN
+process and join offline. The retriever has no close() hook, so only a fresh
+process releases the working set; the phases are therefore separate subcommands,
+sequenced by scripts/run_parity_safe.sh. NOTE: at 150M even one engine exceeds
+the 24 GB host — record-tc OOMs in _load() (now a clean RuntimeError, gate
+SFU_LOAD_MEM_FLOOR_GB) until host RAM is raised (~232 GB; see THIN_CLIENT_SWAP.md):
 
     # phase A — thin-client only (no OpenSearch in this process)
     SFU_DENSE_WARMCACHE=0 .venv/bin/python3 scripts/eval_thinclient_parity.py \

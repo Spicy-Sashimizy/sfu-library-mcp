@@ -189,7 +189,19 @@ As-built on-disk footprint — persona `political_science`, hot
 | hot section live (`social_sciences__recent`) | 34.0 GB | incl. 26,322,924 abstracts (zstd-19 script dicts) |
 | `meta.sqlite` | **24.9 GB** | meta v2 INTEGER-PK; **exceeds the ~10 GB v2 estimate** in `STORAGE_BUDGET_150M.md` §1 — corrected there, cause not yet diagnosed |
 | dense leg | 0.36 GB | 600k vectors, dim 384: b1 118 MB + int8 rescore 230 MB |
-| **Serving total** | **≈ 104 GB** (97 GiB) | vs ≈ 95 GB estimate; the +9 GB is entirely `meta.sqlite` |
+| **Serving total (on disk)** | **≈ 104 GB** (97 GiB) | vs ≈ 95 GB estimate; the +9 GB is entirely `meta.sqlite` |
+
+> **⚠ On-disk ≠ resident RAM (measured 2026-06-17).** The 68.6 GB of BMP SPLADE
+> shards are NOT mmap'd — `bmp.Searcher` (0.2.6, no mmap mode) deserializes each
+> `*.bmp` into **anonymous RAM at a measured 3.07×** its on-disk size (probe:
+> 569 MB shard → 1747 MB steady-state RSS; ratio holds 12 MB–569 MB). `_load()`
+> builds all 192 shards eagerly, so the **full 150M SPLADE leg needs ~211 GB
+> resident** — it cannot be served, even one-engine-at-a-time, on the 24 GB host.
+> tantivy (29 GB), `meta.sqlite` (24 GB) and dense (0.34 GB) are genuinely
+> mmap/paged and stay ~0 resident; the RAM wall is BMP alone. `retriever._load()`
+> now samples `MemAvailable` before each shard and aborts with a clear
+> `RuntimeError` (gate `SFU_LOAD_MEM_FLOOR_GB`, default 1.5) instead of being
+> SIGKILLed mid-construction.
 
 Per-section pack ratio (`manifest.json`, live/packed) ranged 1.86–2.01×,
 aggregate **1.875×** — **below the 2.10× bsize-32 assumption**, confirming the
@@ -217,8 +229,8 @@ Validation: `scripts/eval_thinclient_parity.py` (per-leg overlap vs baseline,
 LLM-judged NDCG@10, latency). **At 150M, run it OOM-safe** via
 `scripts/run_parity_safe.sh` — the legacy single-process path loaded BOTH
 retrievers and interleaved `tc.search`/`baseline.search` per query, keeping the
-thin-client (~104 GB mmap) and the OpenSearch 150M cluster hot at once and
-OOM-killing on the 31 GB host. The eval is now split into one-engine-per-process
+thin-client and the OpenSearch 150M cluster hot at once and
+OOM-killing on the 24 GB host. The eval is now split into one-engine-per-process
 subcommands joined offline: `record-tc` (thin-client only, `SFU_DENSE_WARMCACHE=0`)
 → `record-os` (OpenSearch only, thin-client process already exited) → `compare`
 (pure offline join, identical summary schema). `ThinClientRetriever` has no
@@ -226,10 +238,17 @@ subcommands joined offline: `record-tc` (thin-client only, `SFU_DENSE_WARMCACHE=
 the phases as separate processes with page-cache drops + `MemAvailable` preflight
 between them, an in-loop mem-floor guard that flushes a partial record and exits
 cleanly before the OOM-killer fires (the killer left "no traceback" above), and
-optional `PAUSE_OS=1` to `docker pause` OpenSearch during phase A. Peak RAM ≈ one
-engine, never the sum. **IMPLEMENTED 2026-06-17, smoke-tested on `data/thinclient_1m`
-(compare output schema-identical to `thinclient_parity_20260616_0536.json`); 150M
-parity numbers still UNMEASURED until the full run completes.** Permanent pytest
+optional `PAUSE_OS=1` to `docker pause` OpenSearch during phase A. The split caps
+peak RAM at one engine rather than the sum — **but that is still not enough at
+150M: one engine (the thin-client SPLADE leg) is ~211 GB resident (see the BMP
+note above), so `record-tc` OOMs on the 24 GB host before it serves a single
+query** (verified 2026-06-17: `record-tc` SIGKILLed mid-`_load()` at ~32 GB
+committed; the host `.wslconfig` 24 GB cap contained the kill — only the process
+died, Docker + OpenSearch survived). **150M thin-client parity is therefore
+BLOCKED on host RAM** (≈232 GB recommended; see `STORAGE_BUDGET_150M.md`), not on
+the eval harness. The harness itself is **IMPLEMENTED 2026-06-17, smoke-tested on
+`data/thinclient_1m`** (compare output schema-identical to
+`thinclient_parity_20260616_0536.json`). Permanent pytest
 suite
 `scripts/tests/test_thinclient_stack.py` (13 tests: meta v1/v2, era routing +
 pruning, abstracts v1/v2/v3, dense cache, metrics/reload, MCP index tools).

@@ -41,6 +41,40 @@ _leg_metrics: dict[str, dict] = {}
 _metrics_lock = threading.Lock()
 
 
+def _mem_available_gb() -> float | None:
+    """MemAvailable in GiB (kernel's reclaim-aware free estimate), or None if
+    /proc/meminfo is unreadable (non-Linux)."""
+    try:
+        with open("/proc/meminfo") as fh:
+            for line in fh:
+                if line.startswith("MemAvailable"):
+                    return int(line.split()[1]) / 1024 / 1024
+    except OSError:
+        return None
+    return None
+
+
+def _guard_load_mem(next_shard_bytes: int, floor_gb: float, ctx: str) -> None:
+    """Abort the load CLEANLY if pulling the next BMP shard would drive
+    MemAvailable below `floor_gb`. BMP loads resident (~3.07x on disk), so a big
+    shard can swing several GB; we project the shard's resident cost and refuse
+    *before* the allocation rather than letting the OOM-killer SIGKILL us mid-
+    construction (which leaves no actionable error). See BMP_RESIDENT_RATIO."""
+    avail = _mem_available_gb()
+    if avail is None:
+        return
+    projected = next_shard_bytes / 1073741824 * BMP_RESIDENT_RATIO
+    if avail - projected < floor_gb:
+        raise RuntimeError(
+            f"thinclient load aborted at {ctx}: MemAvailable {avail:.1f} GB, "
+            f"next BMP shard needs ~{projected:.1f} GB resident "
+            f"(~{BMP_RESIDENT_RATIO:.2f}x on disk), which would breach the "
+            f"{floor_gb:.1f} GB floor. BMP has no mmap mode; the full 150M "
+            f"SPLADE set is ~211 GB resident and cannot serve on this host. "
+            f"Raise host RAM, serve fewer sections, or set "
+            f"SFU_LOAD_MEM_FLOOR_GB lower to override (will risk OOM-kill).")
+
+
 def _record_leg(leg: str, ms: float, error: bool = False) -> None:
     with _metrics_lock:
         m = _leg_metrics.setdefault(leg, {"count": 0, "errors": 0, "total_ms": 0.0})
@@ -48,6 +82,18 @@ def _record_leg(leg: str, ms: float, error: bool = False) -> None:
         m["total_ms"] += ms
         if error:
             m["errors"] += 1
+
+# BMP is a load-into-memory engine (no mmap mode in 0.2.6): `bmp.Searcher`
+# deserializes each *.bmp shard into ANONYMOUS RAM at a measured ~3.07x its
+# on-disk size (probe 2026-06-17, 569 MB shard -> 1747 MB steady-state RSS;
+# ratio holds from 12 MB to 569 MB shards). The full 150M SPLADE set is 68.6 GB
+# on disk -> ~211 GB resident. _load() builds ALL shards eagerly, so on a host
+# that can't hold the set the process is OOM-killed *inside* construction —
+# before any per-query mem-floor guard can run. The guard below samples
+# MemAvailable before each shard and aborts CLEANLY (RuntimeError) instead, so
+# the failure is diagnosable rather than a SIGKILL. Gate: SFU_LOAD_MEM_FLOOR_GB.
+BMP_RESIDENT_RATIO = 3.07       # measured anon-RAM expansion of bmp.Searcher
+LOAD_MEM_FLOOR_GB = 1.5         # abort load if MemAvailable would drop below this
 
 RRF_K = 60
 QUANT_SCALE = 70                # must match builder.QUANT_SCALE (saturation-free)
@@ -104,11 +150,15 @@ class ThinClientRetriever:
         with self._lock:
             if self._loaded:
                 return
+            import os
+
             import bmp
             import tantivy
 
             from lib.thinclient.abstracts import AbstractStore
 
+            load_floor = float(os.environ.get("SFU_LOAD_MEM_FLOOR_GB",
+                                              LOAD_MEM_FLOOR_GB))
             sections_dir = self.root / "sections"
             if sections_dir.is_dir():
                 for sdir in sorted(sections_dir.iterdir()):
@@ -118,6 +168,8 @@ class ThinClientRetriever:
                     idx.reload()
                     shards = []
                     for p in sorted(sdir.glob("splade_*.bmp")):
+                        _guard_load_mem(p.stat().st_size, load_floor,
+                                        f"{sdir.name}/{p.name}")
                         vocab_path = p.with_suffix(".vocab.zst")
                         vocab = None
                         if vocab_path.exists():
@@ -160,7 +212,6 @@ class ThinClientRetriever:
                     "rescore": np.load(dense_dir / "rescore_int8.npy", mmap_mode="r"),
                     "ids": json.loads((dense_dir / "ids.json").read_text()),
                 }
-            import os
             if os.environ.get("SFU_DENSE_WARMCACHE", "1") != "0":
                 try:
                     from lib.thinclient.dense_cache import DenseWarmCache

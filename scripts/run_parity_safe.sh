@@ -1,12 +1,18 @@
 #!/usr/bin/env bash
 # OOM-safe 150M thin-client vs 150M OpenSearch parity run.
 #
-# The thin-client serving set (~104 GB mmap) and the OpenSearch 150M cluster
-# cannot both stay hot on the 31 GB host. This script runs each engine in its
-# OWN process (the retriever has no close() hook, so only a fresh process frees
-# the mmap working set), dropping page cache between phases so the idle engine's
-# pages are reclaimed before the next one loads. At no instant are both engines
-# serving query load — peak RAM ~= one engine, never the sum.
+# This script runs each engine in its OWN process (the retriever has no close()
+# hook, so only a fresh process frees its working set), dropping page cache
+# between phases. At no instant are both engines serving — peak RAM ~= one
+# engine, never the sum.
+#
+# ⚠ WARNING (measured 2026-06-17): at 150M this is necessary but NOT sufficient.
+# The thin-client SPLADE leg is NOT mmap'd — bmp.Searcher loads each *.bmp into
+# anonymous RAM at ~3.07x on disk, so the full set is ~211 GB RESIDENT. On the
+# 24 GB host `record-tc` OOMs inside _load() before it serves a query. The
+# retriever now aborts cleanly (RuntimeError, gate SFU_LOAD_MEM_FLOOR_GB) instead
+# of being SIGKILLed. 150M thin-client parity is BLOCKED on host RAM (~232 GB);
+# this script only produces numbers once the host can hold one engine.
 #
 # Usage:
 #   scripts/run_parity_safe.sh [QUERIES] [INDEX_ROOT] [BASELINE_URL]
