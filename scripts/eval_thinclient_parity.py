@@ -280,9 +280,20 @@ def cmd_compare(args) -> None:
 # ── legacy single-process mode (may OOM at 150M) ─────────────────────────────
 
 def cmd_combined(args) -> None:
-    logger.warning("combined mode loads BOTH engines in one process — at 150M "
-                   "scale this OOM-kills on a 31 GB host; prefer record-tc/"
-                   "record-os/compare via scripts/run_parity_safe.sh")
+    # combined loads BOTH 150M engines (thin-client ~104 GB mmap + OpenSearch)
+    # in one process. On the 31 GB host this OOMs and can take down the whole
+    # Docker/WSL2 VM — refuse by default unless the caller is explicitly opting
+    # into that risk (or running thin-client-only via --no-baseline).
+    if not args.no_baseline and not args.force_oom_risk:
+        raise SystemExit(
+            "REFUSED: combined mode loads BOTH 150M engines in one process and "
+            "OOM-crashes the Docker/WSL2 VM on a 31 GB host.\n"
+            "  → Use the OOM-safe path:  scripts/run_parity_safe.sh\n"
+            "  → Or thin-client only:     ... combined --no-baseline\n"
+            "  → To force anyway (NOT recommended): add --force-oom-risk")
+    if args.force_oom_risk and not args.no_baseline:
+        logger.warning("combined --force-oom-risk: loading BOTH engines — this "
+                       "may OOM-crash the host. Prefer scripts/run_parity_safe.sh")
     from lib.thinclient.retriever import ThinClientRetriever
     tc = ThinClientRetriever(index_root=args.index_root, remote_abstracts=False)
     assert tc.is_available(), f"thin-client index at {args.index_root} not available"
@@ -358,9 +369,11 @@ def main() -> None:
     p_cmp.add_argument("--output", default=None)
     p_cmp.set_defaults(func=cmd_compare)
 
-    p_comb = sub.add_parser("combined", help="legacy single-process (may OOM at 150M)")
+    p_comb = sub.add_parser("combined", help="legacy single-process (REFUSED at 150M unless --force-oom-risk)")
     p_comb.add_argument("--index-root", default=str(REPO_ROOT / "data/thinclient_index"))
     p_comb.add_argument("--no-baseline", action="store_true")
+    p_comb.add_argument("--force-oom-risk", action="store_true",
+                        help="load BOTH 150M engines anyway (may OOM-crash the host)")
     p_comb.add_argument("--baseline-url",
                         default=os.environ.get("SFU_MIGRATION_SOURCE",
                                                "http://host.docker.internal:9200"))
