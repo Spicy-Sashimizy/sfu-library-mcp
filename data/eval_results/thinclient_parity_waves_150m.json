@@ -1,0 +1,307 @@
+{
+  "config": {
+    "index_root": "data/thinclient_index",
+    "baseline": "http://host.docker.internal:9200/openalex_works",
+    "queries": 40,
+    "top_k": 50
+  },
+  "latency_ms": {
+    "tc_bm25f": 2904.2,
+    "tc_splade": 6779.1,
+    "os_bm25f": 6199.3,
+    "os_splade": 4802.6
+  },
+  "ndcg@10": {
+    "tc_rrf": {
+      "mean": 0.5368,
+      "judged_queries": 39
+    },
+    "os_rrf": {
+      "mean": 0.4487,
+      "judged_queries": 34
+    }
+  },
+  "overlap_vs_baseline@50": {
+    "bm25f": 0.532,
+    "splade": 0.3985,
+    "rrf": 0.476
+  },
+  "tc_leg_complementarity": {
+    "avg_bm25f_splade_overlap@50": 5.475
+  },
+  "per_query": [
+    {
+      "query": "indigenous language revitalization First Nations British Columbia",
+      "tc_bm25f_n": 50,
+      "tc_splade_n": 50,
+      "tc_rrf_ndcg@10": 0.3728,
+      "os_rrf_ndcg@10": 0.2732
+    },
+    {
+      "query": "What initiatives and programs exist to revitalize Indigenous languages among First Nations communities in British Columbia?",
+      "tc_bm25f_n": 50,
+      "tc_splade_n": 50,
+      "tc_rrf_ndcg@10": 0.2162,
+      "os_rrf_ndcg@10": 0.1142
+    },
+    {
+      "query": "How are First Nations in British Columbia working to preserve and revitalize their Indigenous languages?",
+      "tc_bm25f_n": 50,
+      "tc_splade_n": 50,
+      "tc_rrf_ndcg@10": 0.1422,
+      "os_rrf_ndcg@10": 0.1
+    },
+    {
+      "query": "residential school trauma intergenerational effects Indigenous communities",
+      "tc_bm25f_n": 50,
+      "tc_splade_n": 50,
+      "tc_rrf_ndcg@10": 0.7876,
+      "os_rrf_ndcg@10": 0.8134
+    },
+    {
+      "query": "What are the intergenerational effects of residential school trauma on Indigenous communities?",
+      "tc_bm25f_n": 50,
+      "tc_splade_n": 50,
+      "tc_rrf_ndcg@10": 0.7785,
+      "os_rrf_ndcg@10": 0.7165
+    },
+    {
+      "query": "How does trauma from residential schools continue to affect Indigenous communities across multiple generations?",
+      "tc_bm25f_n": 50,
+      "tc_splade_n": 50,
+      "tc_rrf_ndcg@10": 0.497,
+      "os_rrf_ndcg@10": 0.3597
+    },
+    {
+      "query": "Truth and Reconciliation Commission calls to action implementation Canada",
+      "tc_bm25f_n": 50,
+      "tc_splade_n": 50,
+      "tc_rrf_ndcg@10": 0.8555,
+      "os_rrf_ndcg@10": 0.8169
+    },
+    {
+      "query": "How have Canadian institutions and governments implemented the Truth and Reconciliation Commission's calls to action?",
+      "tc_bm25f_n": 50,
+      "tc_splade_n": 50,
+      "tc_rrf_ndcg@10": 0.7719,
+      "os_rrf_ndcg@10": 0.4221
+    },
+    {
+      "query": "What progress has Canada made in responding to the Truth and Reconciliation Commission's calls to action?",
+      "tc_bm25f_n": 50,
+      "tc_splade_n": 50,
+      "tc_rrf_ndcg@10": 0.8134,
+      "os_rrf_ndcg@10": 0.7439
+    },
+    {
+      "query": "land back movement Indigenous rights treaty negotiations British Columbia",
+      "tc_bm25f_n": 50,
+      "tc_splade_n": 50,
+      "tc_rrf_ndcg@10": 0.6728,
+      "os_rrf_ndcg@10": 0.5108
+    },
+    {
+      "query": "How does the land back movement relate to Indigenous rights and treaty negotiations in British Columbia?",
+      "tc_bm25f_n": 50,
+      "tc_splade_n": 50,
+      "tc_rrf_ndcg@10": 0.5657,
+      "os_rrf_ndcg@10": 0.3592
+    },
+    {
+      "query": "What role does the land back movement play in shaping contemporary treaty negotiations and Indigenous sovereignty claims in British Columbia?",
+      "tc_bm25f_n": 50,
+      "tc_splade_n": 50,
+      "tc_rrf_ndcg@10": 0.0336,
+      "os_rrf_ndcg@10": 0.2288
+    },
+    {
+      "query": "housing affordability crisis Metro Vancouver rental market",
+      "tc_bm25f_n": 50,
+      "tc_splade_n": 50,
+      "tc_rrf_ndcg@10": 0.5411,
+      "os_rrf_ndcg@10": 0.5512
+    },
+    {
+      "query": "What factors are contributing to the housing affordability crisis in Metro Vancouver's rental market?",
+      "tc_bm25f_n": 50,
+      "tc_splade_n": 50,
+      "tc_rrf_ndcg@10": 0.5293,
+      "os_rrf_ndcg@10": 0.3669
+    },
+    {
+      "query": "How is the housing affordability crisis impacting renters in Metro Vancouver?",
+      "tc_bm25f_n": 50,
+      "tc_splade_n": 50,
+      "tc_rrf_ndcg@10": 0.4834,
+      "os_rrf_ndcg@10": 0.0961
+    },
+    {
+      "query": "Canadian immigration settlement services multicultural policy",
+      "tc_bm25f_n": 50,
+      "tc_splade_n": 50,
+      "tc_rrf_ndcg@10": 0.8669,
+      "os_rrf_ndcg@10": 0.8292
+    },
+    {
+      "query": "How do Canadian settlement services for immigrants align with and reflect multicultural policy objectives?",
+      "tc_bm25f_n": 50,
+      "tc_splade_n": 50,
+      "tc_rrf_ndcg@10": 0.6652
+    },
+    {
+      "query": "What is the relationship between Canada's multicultural policy and the design of immigration settlement services?",
+      "tc_bm25f_n": 50,
+      "tc_splade_n": 50,
+      "tc_rrf_ndcg@10": 0.6086
+    },
+    {
+      "query": "BC provincial politics electoral reform referendum",
+      "tc_bm25f_n": 50,
+      "tc_splade_n": 50,
+      "tc_rrf_ndcg@10": 0.7245,
+      "os_rrf_ndcg@10": 0.6686
+    },
+    {
+      "query": "What electoral reform referendums has British Columbia held, and what impact did they have on provincial politics?",
+      "tc_bm25f_n": 50,
+      "tc_splade_n": 50,
+      "tc_rrf_ndcg@10": 0.5716,
+      "os_rrf_ndcg@10": 0.1954
+    },
+    {
+      "query": "In what ways have British Columbians used referendums to push for electoral reform in their provincial system?",
+      "tc_bm25f_n": 50,
+      "tc_splade_n": 50,
+      "tc_rrf_ndcg@10": 0.2712,
+      "os_rrf_ndcg@10": 0.1148
+    },
+    {
+      "query": "Chinese Canadian discrimination exclusion act immigration history",
+      "tc_bm25f_n": 50,
+      "tc_splade_n": 50,
+      "tc_rrf_ndcg@10": 0.8305,
+      "os_rrf_ndcg@10": 0.603
+    },
+    {
+      "query": "What was the history of discrimination and exclusion acts against Chinese Canadians?",
+      "tc_bm25f_n": 50,
+      "tc_splade_n": 50,
+      "tc_rrf_ndcg@10": 0.7034,
+      "os_rrf_ndcg@10": 0.0934
+    },
+    {
+      "query": "How did discriminatory immigration policies and exclusion acts shape Chinese Canadian settlement and community experiences?",
+      "tc_bm25f_n": 50,
+      "tc_splade_n": 50,
+      "tc_rrf_ndcg@10": 0.2895
+    },
+    {
+      "query": "restorative justice alternatives incarceration recidivism reduction",
+      "tc_bm25f_n": 50,
+      "tc_splade_n": 50,
+      "tc_rrf_ndcg@10": 0.9266,
+      "os_rrf_ndcg@10": 0.8669
+    },
+    {
+      "query": "How effective are restorative justice programs as alternatives to incarceration in reducing recidivism?",
+      "tc_bm25f_n": 50,
+      "tc_splade_n": 50,
+      "tc_rrf_ndcg@10": 0.4427,
+      "os_rrf_ndcg@10": 0.4122
+    },
+    {
+      "query": "To what extent can restorative justice approaches decrease re-offending rates compared to traditional incarceration?",
+      "tc_bm25f_n": 50,
+      "tc_splade_n": 50,
+      "tc_rrf_ndcg@10": 0.2566,
+      "os_rrf_ndcg@10": 0.2673
+    },
+    {
+      "query": "police use of force racial profiling Black Indigenous communities Canada",
+      "tc_bm25f_n": 50,
+      "tc_splade_n": 50,
+      "tc_rrf_ndcg@10": 0.7989,
+      "os_rrf_ndcg@10": 0.7291
+    },
+    {
+      "query": "How does racial profiling by Canadian police contribute to the use of force against Black and Indigenous communities?",
+      "tc_bm25f_n": 50,
+      "tc_splade_n": 50,
+      "tc_rrf_ndcg@10": 0.2539,
+      "os_rrf_ndcg@10": 0.0942
+    },
+    {
+      "query": "What are the documented patterns and disparities in police use of force and racial profiling targeting Black and Indigenous peoples in Canada?",
+      "tc_bm25f_n": 50,
+      "tc_splade_n": 50,
+      "tc_rrf_ndcg@10": 0.2304,
+      "os_rrf_ndcg@10": 0.122
+    },
+    {
+      "query": "cybercrime financial fraud digital forensics investigation",
+      "tc_bm25f_n": 50,
+      "tc_splade_n": 50,
+      "tc_rrf_ndcg@10": 0.8604,
+      "os_rrf_ndcg@10": 0.7309
+    },
+    {
+      "query": "How do investigators use digital forensics techniques to detect and prosecute financial fraud in cybercrime cases?",
+      "tc_bm25f_n": 50,
+      "tc_splade_n": 50,
+      "tc_rrf_ndcg@10": 0.6115,
+      "os_rrf_ndcg@10": 0.611
+    },
+    {
+      "query": "What investigative methods and digital forensics approaches are most effective for identifying perpetrators of financial fraud committed through cybercrimes?",
+      "tc_bm25f_n": 50,
+      "tc_splade_n": 50,
+      "tc_rrf_ndcg@10": 0.2173
+    },
+    {
+      "query": "prison population mental health services rehabilitation programs",
+      "tc_bm25f_n": 50,
+      "tc_splade_n": 50,
+      "tc_rrf_ndcg@10": 0.4252,
+      "os_rrf_ndcg@10": 0.6831
+    },
+    {
+      "query": "How do mental health services in prisons support rehabilitation outcomes for incarcerated populations?",
+      "tc_bm25f_n": 50,
+      "tc_splade_n": 50
+    },
+    {
+      "query": "What mental health and rehabilitation programs are most effective for individuals currently serving sentences in the prison system?",
+      "tc_bm25f_n": 50,
+      "tc_splade_n": 50,
+      "tc_rrf_ndcg@10": 0.0948
+    },
+    {
+      "query": "interactive media experience design user engagement game mechanics",
+      "tc_bm25f_n": 50,
+      "tc_splade_n": 50,
+      "tc_rrf_ndcg@10": 0.6027,
+      "os_rrf_ndcg@10": 0.4227
+    },
+    {
+      "query": "How do game mechanics enhance user engagement in interactive media experience design?",
+      "tc_bm25f_n": 50,
+      "tc_splade_n": 50,
+      "tc_rrf_ndcg@10": 0.5966,
+      "os_rrf_ndcg@10": 0.419
+    },
+    {
+      "query": "What design strategies most effectively combine game mechanics with interactive media to create engaging user experiences?",
+      "tc_bm25f_n": 50,
+      "tc_splade_n": 50,
+      "tc_rrf_ndcg@10": 0.1546,
+      "os_rrf_ndcg@10": 0.0595
+    },
+    {
+      "query": "virtual reality augmented reality immersive learning environments",
+      "tc_bm25f_n": 50,
+      "tc_splade_n": 50,
+      "tc_rrf_ndcg@10": 0.8701,
+      "os_rrf_ndcg@10": 0.8604
+    }
+  ]
+}

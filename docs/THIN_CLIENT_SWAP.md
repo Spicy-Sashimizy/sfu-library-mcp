@@ -259,6 +259,22 @@ direct full `record-tc` on both legs, all queries. Emits a record-tc-schema JSON
 consumed unchanged by `eval_thinclient_parity.py compare`. Time-not-RAM bound:
 it reads the 68.6 GB BMP set once across ~30 waves (`--resident-budget-gb`,
 default 8). The legacy single-process `record-tc` stays **BLOCKED on host RAM**.
+
+**MEASURED 150M parity (2026-06-18, first full-corpus run).** 40 diverse queries,
+LLM-judged NDCG@10, thin-client (this index) vs the 150M OpenSearch baseline.
+Thin-client recorded via section-shard-waves (27 waves, 8 GB budget, ~43 min,
+min RAM 15.4 GB, peak swap 2.1 GB, no OOM); OpenSearch via `record-os`; joined by
+`compare`. **On the common judged set (34 queries with a judged doc in both),
+thin-client RRF NDCG@10 = 0.561 vs OpenSearch 0.449 (Δ +0.112; thin-client wins
+29/34 queries, loses 5).** Overlap@50 vs OpenSearch baseline: bm25f 0.532, splade
+0.399, rrf 0.476 (the thin-client uses tantivy BM25F + BMP SPLADE, not OpenSearch's
+analyzers, so per-leg sets differ while final RRF quality is higher). Latency is
+NOT comparable across these runs (different hardware; tc splade latency is
+reconstructed encode+search, hydration excluded). Records:
+`data/eval_results/thinclient_parity_waves_150m.json` (summary),
+`parity_record_tc_waves_150m.json` (tc), `parity_record_os_20260618_0028.json`
+(os). Eval: `scripts/eval_parity_section_waves.py` + `eval_thinclient_parity.py
+compare`. Caveat: NDCG coverage is judge-cache-limited (34/40 queries scored).
 The base harness is **IMPLEMENTED 2026-06-17, smoke-tested on `data/thinclient_1m`**
 (compare output schema-identical to `thinclient_parity_20260616_0536.json`).
 Permanent pytest
