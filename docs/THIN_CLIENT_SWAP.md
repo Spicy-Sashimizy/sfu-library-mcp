@@ -269,6 +269,36 @@ and documented, plus an eval access pattern that bypasses the hot/cold mitigatio
   (BMP fork with mmap, Seismic/PISA, or SPLADE impacts as tantivy payloads — same
   page-cache property OpenSearch had); hot/cold is a partial mitigation, not a cure.
 
+#### Off-BMP migration → Qdrant on_disk sparse (IN PROGRESS, EFFICACY UNMEASURED — 2026-06-18)
+
+The chosen durable fix for the BMP RAM wall is **Qdrant `on_disk=true` sparse**
+(no JVM, page-cache resident like the old OpenSearch leg). Migration is **GPU-free**:
+`data/thinclient_index/spool_backup/` (123 GB, 5 sections) already holds the
+precomputed SPLADE `sparse_field`, so we re-ingest those vectors rather than
+re-encoding. Ingest path: `scripts/spike_qdrant_sparse.py build-spool-par`
+(8 workers, gRPC, `wait=True` bounded in-flight) into a collection whose sparse
+index is `on_disk`. Token space: every encoder token → its `bert-base-uncased`
+vocab id (shared doc/query u32 space).
+
+- **Resumability (commit 19bb44e):** per-worker checkpoints under
+  `data/qdrant_spike/ckpt/<collection>/` (slice/line/id-offset/done), fsync'd per
+  batch; deterministic point IDs (`id_base+local`) make replay idempotent, so a
+  container restart resumes mid-slice. Auto-resume on checkpoint presence; a fresh
+  start drops the collection + stale checkpoints. `_wait_qdrant()` decouples
+  start ordering from the server.
+- **Operational:** runs under supervisord (`scripts/qdrant-offbmp.supervisor.conf`,
+  programs `qdrant-spike` + `qdrant-ingest-30m`); Qdrant storage
+  `data/qdrant_spike/storage`, REST 6333 / gRPC 6334.
+- **Spike signal so far (validation only, not parity):** `on_disk` sparse RAM is
+  flat/sub-linear (544 MB at-rest @ 5M vs BMP ~7 GB); bounded parallel ingest holds
+  <10 GB RSS at ~3.9k docs/s. See commit `a41cd6d`.
+- **Gate before full ~150M:** a **30M parity run** (`splade_par30`) is in progress;
+  `measure` will report p50/p95 latency + at-rest RSS, compared against the
+  thin-client **NDCG@10 0.561** baseline (§ BUILD COMPLETE). Numbers, eval path, and
+  GO/NO-GO will be recorded here when the gate completes — **no quality/latency
+  result is claimed yet.** Phases 5–7 (wire retriever sparse leg to Qdrant,
+  decommission BMP / reclaim 68.6 GB, doc sync) are post-GO.
+
 Per-section pack ratio (`manifest.json`, live/packed) ranged 1.86–2.01×,
 aggregate **1.875×** — **below the 2.10× bsize-32 assumption**, confirming the
 `STORAGE_BUDGET_150M.md` §1 "*denser b256 shards will pack slightly less
