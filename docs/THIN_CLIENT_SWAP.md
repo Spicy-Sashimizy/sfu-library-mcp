@@ -244,8 +244,15 @@ peak RAM at one engine rather than the sum — **but that is still not enough at
 note above), so `record-tc` OOMs on the 24 GB host before it serves a single
 query** (verified 2026-06-17: `record-tc` SIGKILLed mid-`_load()` at ~32 GB
 committed; the host `.wslconfig` 24 GB cap contained the kill — only the process
-died, Docker + OpenSearch survived). Serving the whole engine needs ≈232 GB host
-RAM (see `STORAGE_BUDGET_150M.md`).
+died, Docker + OpenSearch survived). Holding the whole SPLADE engine resident in
+one process would need ≈232 GB — but that is **not a serving recommendation**: a
+search DB should not keep the index in RAM, and this stack's other legs (tantivy
+BM25F, `meta.sqlite`, dense) already serve from mmap at ~0 resident. The 211 GB is
+the artifact of BMP 0.2.6 being load-into-memory only, taken across all sections
+at once. The real fixes are an mmap-backed SPLADE engine (drops serving RAM to the
+hot working set) or hot/cold residency (serve the live section only); see the
+serving-RAM box in `STORAGE_BUDGET_150M.md`. The wave eval below sidesteps the
+issue entirely for benchmarking.
 
 **150M parity numbers on the 24 GB host: use `scripts/eval_parity_section_waves.py
 run`** (added 2026-06-17). It exploits the fact that the legs already merge across

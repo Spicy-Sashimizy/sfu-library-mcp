@@ -11,8 +11,10 @@
 # anonymous RAM at ~3.07x on disk, so the full set is ~211 GB RESIDENT. On the
 # 24 GB host `record-tc` OOMs inside _load() before it serves a query. The
 # retriever now aborts cleanly (RuntimeError, gate SFU_LOAD_MEM_FLOOR_GB) instead
-# of being SIGKILLed. 150M thin-client parity is BLOCKED on host RAM (~232 GB);
-# this script only produces numbers once the host can hold one engine.
+# of being SIGKILLed. This single-process path is BLOCKED until a host can hold
+# one whole engine (~232 GB — an artifact of BMP's load-into-memory design, NOT a
+# serving recommendation; the mmap fix / hot-cold residency are the real answers).
+# For 150M parity numbers on a small host, use scripts/eval_parity_section_waves.py.
 #
 # Usage:
 #   scripts/run_parity_safe.sh [QUERIES] [INDEX_ROOT] [BASELINE_URL]

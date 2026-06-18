@@ -39,19 +39,42 @@ estimate is entirely `meta.sqlite` (24.9 GB built vs 14 GB assumed). Source:
 `data/thinclient_index/manifest.json`, `logs/migration_150m.log` (DONE
 2026-06-16T03:00:21).
 
-**Serving RAM ≠ on-disk size (measured 2026-06-17).** Disk is ~104 GB but the
-RAM to *serve* is dominated by BMP, which has no mmap mode: `bmp.Searcher` loads
-each `*.bmp` into anonymous RAM at **3.07×** on disk (probe: 569 MB shard → 1747
-MB resident). The 68.6 GB of live+packed SPLADE shards → **~211 GB resident** for
-the full leg; tantivy (29 GB), `meta.sqlite` (24 GB) and dense (0.34 GB) are
-mmap/paged (~0 resident). **Recommended serving host: ~232 GB RAM** (211 GB BMP +
-~21 GB for Python/process, tantivy+sqlite query working set, dense, and OOM
-headroom). This **far exceeds a 24–32 GB workstation** — raising the WSL
-`.wslconfig` cap only helps if the physical machine actually has that RAM. On
-commodity hardware the parity eval must instead run in **section waves** (load a
-subset of sections that fits, record per-section top-k in a fresh process, repeat,
-merge offline — the record-then-replay pattern at section granularity), or move to
-a ≥256 GB cloud box. See `docs/THIN_CLIENT_SWAP.md` BMP note.
+**Serving RAM ≠ on-disk size (measured 2026-06-17).** Disk is ~104 GB but the RAM
+to *serve the SPLADE leg* is dominated by BMP, which has no mmap mode:
+`bmp.Searcher` loads each `*.bmp` into anonymous RAM at **3.07×** on disk (probe:
+569 MB shard → 1747 MB resident). Holding **all** 68.6 GB of live+packed SPLADE
+shards resident at once → **~211 GB**. Every other leg is mmap/paged and serves at
+~0 resident: tantivy/BM25F (29 GB on disk), `meta.sqlite` (24 GB), dense/usearch
+(0.34 GB).
+
+> **⚠ ~211 GB is NOT a serving recommendation — do not size a host to it.** A
+> search DB should never hold the whole index in RAM, and the rest of this stack
+> doesn't. That number is the worst case of one specific weakness — **BMP 0.2.6
+> is load-into-memory only** — multiplied by the eval's all-sections-at-once
+> access pattern. The right fixes, in order:
+>
+> 1. **mmap-backed SPLADE (the actual fix).** Make the sparse leg page from disk
+>    like the others — a BMP build/fork with mmap, or an alternative impact-ranked
+>    sparse engine (Seismic / PISA), or fold SPLADE term-impacts into tantivy as
+>    quantized payloads. Then SPLADE serving RAM = hot working set, not 211 GB,
+>    and a 150M index serves on commodity RAM like BM25F already does. *(future
+>    work; unimplemented as of 2026-06-18.)*
+> 2. **Hot/cold residency (partial, already built).** Production serves the live
+>    section(s) and packs the rest (`packer.py`); you never load all 10. But at
+>    3.07× even one hot `__recent` section is ~25–40 GB resident, so this suits a
+>    64–128 GB server, not a 24 GB laptop — it narrows the gap, the mmap fix
+>    closes it.
+> 3. **Benchmarking on any host — section-shard-wave eval** (`scripts/
+>    eval_parity_section_waves.py`): records SPLADE shard-by-shard in fresh
+>    processes and merges offline, so it needs only one wave's worth of shards
+>    resident (~8 GB) regardless of corpus size. This is how the 150M parity
+>    numbers were produced on the 24 GB host; it is an **eval** tool, not a
+>    serving path.
+>
+> The single-process `record-tc`/`run_parity_safe.sh` path *would* need ~232 GB
+> (211 GB + headroom) to hold one engine whole — that figure describes that
+> brute-force path only, and exists to explain why we use the wave eval instead,
+> not to recommend buying RAM. See `docs/THIN_CLIENT_SWAP.md` BMP note.
 
 Persona steady state (ESTIMATE 2026-06-11, superseded above): hot live ≈ 34 GB
 + packed cold ≈ 47 GB (2.10× est.) + meta 14 GB = **≈ 95 GB**. *Pack ratio was

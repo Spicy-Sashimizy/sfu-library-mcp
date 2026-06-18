@@ -129,9 +129,11 @@ scripts/eval_thinclient_parity.py compare --tc-record <tc_record.json> --os-reco
 ```
 
 The `run_parity_safe.sh` record-then-replay split (one engine per process, page-
-cache drops, `MemAvailable` preflight, in-loop mem-floor guard) remains the path
-**once the host can hold one engine** (~232 GB) — at 24 GB its `record-tc` still
-OOMs in `_load()`, so use the wave eval instead.
+cache drops, `MemAvailable` preflight, in-loop mem-floor guard) only helps once a
+single process can hold one whole engine (~232 GB for the current load-into-memory
+BMP — an eval-path figure, **not** a serving-host recommendation; see the
+serving-RAM box in `STORAGE_BUDGET_150M.md`). At 24 GB its `record-tc` still OOMs
+in `_load()`, so use the wave eval instead.
 
 ### MEASURED 150M parity (2026-06-18, first full-corpus run)
 

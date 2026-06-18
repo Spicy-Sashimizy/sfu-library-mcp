@@ -22,9 +22,12 @@ and the OpenSearch 150M cluster also wants RAM, so interleaving both engines in
 ONE process (the legacy `combined` mode) OOM-kills. Run each engine in its OWN
 process and join offline. The retriever has no close() hook, so only a fresh
 process releases the working set; the phases are therefore separate subcommands,
-sequenced by scripts/run_parity_safe.sh. NOTE: at 150M even one engine exceeds
-the 24 GB host — record-tc OOMs in _load() (now a clean RuntimeError, gate
-SFU_LOAD_MEM_FLOOR_GB) until host RAM is raised (~232 GB; see THIN_CLIENT_SWAP.md):
+sequenced by scripts/run_parity_safe.sh. NOTE: at 150M even one engine exceeds the
+24 GB host — record-tc OOMs in _load() (now a clean RuntimeError, gate
+SFU_LOAD_MEM_FLOOR_GB). Holding one whole engine in a process needs ~232 GB (an
+artifact of BMP being load-into-memory only, NOT a serving target). For 150M
+numbers on a small host use scripts/eval_parity_section_waves.py instead; the real
+serving fix is mmap-backed SPLADE or hot/cold residency (see THIN_CLIENT_SWAP.md):
 
     # phase A — thin-client only (no OpenSearch in this process)
     SFU_DENSE_WARMCACHE=0 .venv/bin/python3 scripts/eval_thinclient_parity.py \
@@ -296,7 +299,7 @@ def cmd_combined(args) -> None:
             "OOM-crashes the Docker/WSL2 VM (tc SPLADE leg alone ~211 GB "
             "resident on a 24 GB host).\n"
             "  → 150M numbers on a small host:  scripts/eval_parity_section_waves.py run\n"
-            "  → OOM-safe split (needs ~232 GB): scripts/run_parity_safe.sh\n"
+            "  → OOM-safe split (needs a ~232 GB host to hold one engine): scripts/run_parity_safe.sh\n"
             "  → Or thin-client only:     ... combined --no-baseline\n"
             "  → To force anyway (NOT recommended): add --force-oom-risk")
     if args.force_oom_risk and not args.no_baseline:
