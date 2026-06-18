@@ -1,7 +1,7 @@
 # Benchmark Methodology: Old vs New
 
-**Last updated:** 2026-05-16  
-**Context:** Explains why the citation-count benchmark was replaced and how the LLM-judged method works.
+**Last updated:** 2026-06-18  
+**Context:** Explains why the citation-count benchmark was replaced and how the LLM-judged method works; plus the 150M thin-client-vs-OpenSearch parity method and measured results (see last section).
 
 ---
 
@@ -80,29 +80,85 @@ The old benchmark made local search *look* worse than it was by 2.3-2.5×. The L
 
 ---
 
-## Running the parity eval OOM-safe at 150M (added 2026-06-17)
+## Running the parity eval at 150M (the RAM wall + how to get numbers anyway)
 
 `scripts/eval_thinclient_parity.py` compares the thin-client stack against the
-OpenSearch baseline. At 150M docs the thin-client serving set (~104 GB mmap) and
-the OpenSearch 150M cluster cannot both stay hot on the 31 GB host, so the legacy
-single-process mode (now `combined`, kept only for small indices) OOM-kills. Use
-the record-then-replay split instead:
+OpenSearch baseline. The hard constraint at 150M is RAM, and the cause is
+specific: **BMP (the SPLADE engine, 0.2.6) has no mmap mode** — `bmp.Searcher`
+deserializes each `*.bmp` shard into **anonymous RAM at a measured 3.07×** its
+on-disk size (probe 2026-06-17: 569 MB shard → 1747 MB resident; ratio holds
+12 MB–569 MB). The full 150M SPLADE leg is **68.6 GB on disk → ~211 GB resident**
+(NOT the "~104 GB mmap" earlier docs claimed — that 104 GB is on-disk total;
+tantivy/`meta.sqlite`/dense are genuinely mmap/paged and stay ~0 resident). So
+even one engine cannot be held in a single process on the 24 GB host (capped via
+`.wslconfig` 2026-06-17), let alone both.
+
+`retriever._load()` now samples `MemAvailable` before each shard and aborts with
+a clean `RuntimeError` (gate `SFU_LOAD_MEM_FLOOR_GB`, default 1.5) instead of
+being SIGKILLed mid-construction. The legacy `combined` single-process mode is
+refused by default for the same reason.
+
+### Section-shard-wave eval — gets 150M numbers on the 24 GB host (added 2026-06-17)
+
+`scripts/eval_parity_section_waves.py run` produces a record-tc-schema file
+without ever holding the SPLADE set in one process. It exploits the fact that the
+legs **already merge across sections/shards by plain score-concatenation**:
+
+- **BM25F** runs on tantivy (mmap, ~0 resident) in one pass via the retriever's
+  `SFU_SKIP_BMP=1` flag (load tantivy/meta/dense, skip BMP). Output is identical
+  to `record-tc`'s bm25f field (same code path).
+- **SPLADE/BMP** scores are corpus-independent dot products, so each shard's
+  top-K is recorded in a **fresh process per wave** (the only way to free BMP
+  RAM — the retriever has no `close()`), and merged offline. First-fit-decreasing
+  bin-packs shards into waves under `--resident-budget-gb` (default 8).
+
+This is **exact, not approximate** — validated 2026-06-17 on `data/thinclient_1m`:
+wave-merged output is byte-for-byte identical to a direct full `record-tc` on both
+legs, all queries. The OpenSearch side is recorded separately (`record-os`, its
+own container, low RAM) and joined by `compare` (pure offline set-math + judge
+cache, no engine live). Time-, not RAM-, bound: it reads the 68.6 GB BMP set once.
 
 ```bash
-scripts/run_parity_safe.sh [QUERIES] [INDEX_ROOT] [BASELINE_URL]
-# PAUSE_OS=1 also `docker pause`s OpenSearch during the thin-client phase
+# thin-client record on a small host (≈43 min at 150M, 27 waves, 8 GB budget):
+scripts/eval_parity_section_waves.py run --index-root data/thinclient_index \
+    --queries 40 --resident-budget-gb 8 --output <tc_record.json>
+# OpenSearch baseline (separate process):
+scripts/eval_thinclient_parity.py record-os --baseline-url <url> --queries 40 --output <os_record.json>
+# join → summary:
+scripts/eval_thinclient_parity.py compare --tc-record <tc_record.json> --os-record <os_record.json> --output <summary.json>
 ```
 
-It runs each engine in its **own process** (the retriever has no `close()`, so a
-fresh process is the only way to release the mmap working set), drops page cache
-between phases, preflights `MemAvailable`, and aborts cleanly via an in-loop
-mem-floor guard before the OOM-killer can fire. Phases:
+The `run_parity_safe.sh` record-then-replay split (one engine per process, page-
+cache drops, `MemAvailable` preflight, in-loop mem-floor guard) remains the path
+**once the host can hold one engine** (~232 GB) — at 24 GB its `record-tc` still
+OOMs in `_load()`, so use the wave eval instead.
 
-1. `record-tc` — thin-client only (`SFU_DENSE_WARMCACHE=0`) → top-50 ids + latency
-2. `record-os` — OpenSearch only (thin-client process already exited)
-3. `compare` — pure offline join → the standard `thinclient_parity_*.json` summary
+### MEASURED 150M parity (2026-06-18, first full-corpus run)
 
-Because overlap is set math on id lists and NDCG uses the offline judge cache, no
-comparison step needs both engines live. Peak RAM ≈ one engine, never the sum.
-**150M parity numbers are UNMEASURED until the full run lands** — smoke-tested on
-`data/thinclient_1m` only (schema-identical to the prior parity file).
+40 diverse queries, LLM-judged NDCG@10 (same judge cache + method as above),
+thin-client (full `data/thinclient_index`) vs the 150M OpenSearch baseline.
+Thin-client recorded via section-shard-waves (27 waves, 8 GB budget, ~43 min,
+min RAM 15.4 GB available, peak swap 2.1 GB — no OOM).
+
+**NDCG@10 on the common judged set** (34 queries with a judged doc in *both*
+engines — apples-to-apples, equal denominator):
+
+| Metric | Thin-client (150M) | OpenSearch (150M) | Δ |
+|---|---|---|---|
+| RRF NDCG@10 | **0.561** | 0.449 | **+0.112** (tc better) |
+| Per-query wins | **29 / 34** | 5 / 34 | tc wins 85% |
+
+Overlap@50 vs OpenSearch baseline (agreement, not quality — different engines):
+bm25f **0.532**, splade **0.399**, rrf **0.476**.
+
+As-reported means (unequal denominators, for the record): tc_rrf 0.537 (39 judged
+queries) / os_rrf 0.449 (34); recomputed on the common 34 for fairness above.
+NDCG coverage is judge-cache-limited (34/40 queries gradable). **Latency is NOT
+comparable** across these runs (different hardware; tc splade latency is
+reconstructed encode+search, hydration excluded) — reported in the summary for
+completeness only, not as a head-to-head.
+
+Records: `data/eval_results/thinclient_parity_waves_150m.json` (summary),
+`parity_record_tc_waves_150m.json` (tc), `parity_record_os_20260618_0028.json`
+(os). Full architecture context: `THIN_CLIENT_SWAP.md`; serving-RAM math:
+`STORAGE_BUDGET_150M.md`.

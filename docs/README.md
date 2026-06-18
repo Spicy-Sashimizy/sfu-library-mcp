@@ -14,7 +14,7 @@ swap (see `THIN_CLIENT_SWAP.md` for what this container now runs).
 | `DENSE_WARMCACHE_RESEARCH.md` | Query-driven dense warm cache: literature lineage (database cracking, CrackIVF) + the v1 design implemented in `lib/thinclient/dense_cache.py` |
 | `THIN_CLIENT_STACK_RESEARCH.md` | Engine selection: measured POC that picked tantivy+BMP+usearch, hot/cold persona metrics, abstract policy + appendix with the per-engine survey (why leave OpenSearch on laptops, why BMP over Seismic) |
 | `LOCALIZED_DEPLOYMENT_PLAN.md` | Deployment tiers (15M laptop / warm-cache / 150M server); partially superseded — see its 2026-06-11 status note |
-| `BENCHMARK_METHODOLOGY.md` | How the LLM-judged NDCG@10 eval harness works (harness is kept and active) |
+| `BENCHMARK_METHODOLOGY.md` | How the LLM-judged NDCG@10 eval harness works; the 150M thin-client-vs-OpenSearch parity method (section-shard-wave eval for small hosts) **and measured results** (tc RRF NDCG@10 0.561 vs OpenSearch 0.449, 2026-06-18) |
 
 ## Subdirectories
 

@@ -283,15 +283,20 @@ def cmd_compare(args) -> None:
 # ── legacy single-process mode (may OOM at 150M) ─────────────────────────────
 
 def cmd_combined(args) -> None:
-    # combined loads BOTH 150M engines (thin-client ~104 GB mmap + OpenSearch)
-    # in one process. On the 31 GB host this OOMs and can take down the whole
-    # Docker/WSL2 VM — refuse by default unless the caller is explicitly opting
-    # into that risk (or running thin-client-only via --no-baseline).
+    # combined loads BOTH 150M engines in one process. The thin-client SPLADE
+    # leg alone is ~211 GB RESIDENT (bmp.Searcher loads each *.bmp into anon RAM
+    # at ~3.07x on disk; NOT mmap — see THIN_CLIENT_SWAP.md), so this OOMs and can
+    # take down the whole Docker/WSL2 VM on the 24 GB host — refuse by default
+    # unless the caller explicitly opts into that risk (or runs thin-client-only
+    # via --no-baseline). For 150M numbers on a small host use the section-shard-
+    # wave eval: scripts/eval_parity_section_waves.py run.
     if not args.no_baseline and not args.force_oom_risk:
         raise SystemExit(
             "REFUSED: combined mode loads BOTH 150M engines in one process and "
-            "OOM-crashes the Docker/WSL2 VM on a 31 GB host.\n"
-            "  → Use the OOM-safe path:  scripts/run_parity_safe.sh\n"
+            "OOM-crashes the Docker/WSL2 VM (tc SPLADE leg alone ~211 GB "
+            "resident on a 24 GB host).\n"
+            "  → 150M numbers on a small host:  scripts/eval_parity_section_waves.py run\n"
+            "  → OOM-safe split (needs ~232 GB): scripts/run_parity_safe.sh\n"
             "  → Or thin-client only:     ... combined --no-baseline\n"
             "  → To force anyway (NOT recommended): add --force-oom-risk")
     if args.force_oom_risk and not args.no_baseline:
