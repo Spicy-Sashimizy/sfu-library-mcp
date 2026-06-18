@@ -191,22 +191,80 @@ def cmd_build_spool(args):
     logger.info("collection points=%s status=%s", info.points_count, info.status)
 
 
+def _ckpt_path(ckpt_dir, worker_id):
+    return os.path.join(ckpt_dir, "worker_%d.json" % worker_id)
+
+
+def _write_ckpt(path, state):
+    """Atomic, fsync'd checkpoint write so a kill mid-write can't corrupt it."""
+    tmp = path + ".tmp"
+    with open(tmp, "w") as f:
+        json.dump(state, f)
+        f.flush()
+        os.fsync(f.fileno())
+    os.replace(tmp, path)
+
+
+def _wait_qdrant(timeout=300):
+    """Block until the Qdrant server answers (supervisord may start the ingest
+    before the server is up). Returns a ready client or exits."""
+    from qdrant_client import QdrantClient
+    deadline = time.monotonic() + timeout
+    last = None
+    while time.monotonic() < deadline:
+        try:
+            c = QdrantClient(url=QDRANT_URL, timeout=10)
+            c.get_collections()
+            logger.info("qdrant is ready")
+            return QdrantClient(url=QDRANT_URL, timeout=120)
+        except Exception as e:
+            last = e
+            time.sleep(2)
+    raise SystemExit("qdrant not ready after %ds: %s" % (timeout, last))
+
+
 def _parallel_worker(task):
     """One ingest worker: owns a subset of slices, upserts with wait=True (bounded
-    in-flight -> no server backlog, no runaway RAM) over gRPC."""
+    in-flight -> no server backlog, no runaway RAM) over gRPC.
+
+    Resumable: a per-worker checkpoint (slice_idx, line_no, local id offset, done)
+    is fsync'd after every batch. On restart the worker skips completed slices and
+    fast-forwards past already-read lines in the in-flight slice. IDs are
+    deterministic (id_base + local), so re-upserting the partial last batch is
+    idempotent — no duplicates, no drift."""
     import zstandard
     from qdrant_client import QdrantClient, models
-    worker_id, slice_files, n_cap, collection, batch = task
+    worker_id, slice_files, n_cap, collection, batch, ckpt_dir = task
+    ckpt = _ckpt_path(ckpt_dir, worker_id)
+    resume_slice = resume_line = local = done = 0
+    if os.path.exists(ckpt):
+        try:
+            with open(ckpt) as f:
+                c = json.load(f)
+            if c.get("complete"):
+                logger.info("worker %d already complete (%d docs) — skip",
+                            worker_id, c.get("done", 0))
+                return c.get("done", 0)
+            resume_slice, resume_line = c["slice_idx"], c["line_no"]
+            local, done = c["local"], c["done"]
+            logger.info("worker %d RESUME: slice=%d line=%d local=%d done=%d",
+                        worker_id, resume_slice, resume_line, local, done)
+        except Exception as e:
+            logger.warning("worker %d bad ckpt (%s) — worker restarts from 0", worker_id, e)
+            resume_slice = resume_line = local = done = 0
     client = QdrantClient(host="localhost", grpc_port=6334, prefer_grpc=True, timeout=600)
     vocab = _vocab()
     id_base = worker_id * 100_000_000
-    local = done = 0
     points = []
     dctx = zstandard.ZstdDecompressor()
-    for sl in slice_files:
+    for si, sl in enumerate(slice_files):
+        if si < resume_slice:
+            continue
         with open(sl, "rb") as fh, dctx.stream_reader(fh) as r:
             text = io.TextIOWrapper(r, encoding="utf-8")
-            for line in text:
+            for ln, line in enumerate(text):
+                if si == resume_slice and ln < resume_line:
+                    continue
                 try:
                     rec = json.loads(line)
                 except Exception:
@@ -227,12 +285,16 @@ def _parallel_worker(task):
                 if len(points) >= batch:
                     client.upsert(collection_name=collection, points=points, wait=True)
                     done += len(points); points = []
+                    _write_ckpt(ckpt, {"slice_idx": si, "line_no": ln + 1,
+                                       "local": local, "done": done, "complete": False})
                     if done >= n_cap:
-                        if points:
-                            client.upsert(collection_name=collection, points=points, wait=True)
+                        _write_ckpt(ckpt, {"slice_idx": si, "line_no": ln + 1,
+                                           "local": local, "done": done, "complete": True})
                         return done
     if points:
         client.upsert(collection_name=collection, points=points, wait=True); done += len(points)
+    _write_ckpt(ckpt, {"slice_idx": len(slice_files), "line_no": 0,
+                       "local": local, "done": done, "complete": True})
     return done
 
 
@@ -241,11 +303,19 @@ def cmd_build_spool_parallel(args):
     means the measured rate is the TRUE end-to-end (server-indexed) rate, and
     RAM stays bounded (no async backlog)."""
     import multiprocessing as mp
-    from qdrant_client import QdrantClient, models
-    client = QdrantClient(url=QDRANT_URL, timeout=120)
+    from qdrant_client import models
     name = args.collection
-    if client.collection_exists(name) and not args.append:
+    ckpt_dir = str(REPO_ROOT / "data/qdrant_spike/ckpt" / name)
+    os.makedirs(ckpt_dir, exist_ok=True)
+    have_ckpt = bool(glob.glob(os.path.join(ckpt_dir, "worker_*.json")))
+    resume = args.append or have_ckpt
+    # supervisord may launch us before the server; block until it answers.
+    client = _wait_qdrant(timeout=300)
+    if client.collection_exists(name) and not resume:
+        logger.info("FRESH start: dropping existing collection %s + stale checkpoints", name)
         client.delete_collection(name)
+        for f in glob.glob(os.path.join(ckpt_dir, "worker_*.json")):
+            os.remove(f)
     if not client.collection_exists(name):
         client.create_collection(
             collection_name=name, vectors_config={},
@@ -257,13 +327,15 @@ def cmd_build_spool_parallel(args):
                 max_optimization_threads=args.opt_threads))
         logger.info("created %s (sparse on_disk, segments=%d, opt_threads=%d)",
                     name, args.segments, args.opt_threads)
+    else:
+        logger.info("RESUME into existing collection %s (have_ckpt=%s)", name, have_ckpt)
     slices = sorted(glob.glob(str(REPO_ROOT / "data/thinclient_index/spool_backup"
                                   / "*" / "slice_*.jsonl.zst")))
     if not slices:
         raise SystemExit("no spool_backup slices")
     W = args.workers
     n_cap = args.n // W
-    tasks = [(w, slices[w::W], n_cap, name, args.batch) for w in range(W)]
+    tasks = [(w, slices[w::W], n_cap, name, args.batch, ckpt_dir) for w in range(W)]
     rss0 = qdrant_rss_mb()
     logger.info("PARALLEL build: %d workers, ~%d docs/worker, %d slices, qdrant RSS before=%.0f MB",
                 W, n_cap, len(slices), rss0)
