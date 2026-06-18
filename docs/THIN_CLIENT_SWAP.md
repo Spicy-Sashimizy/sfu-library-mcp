@@ -203,6 +203,72 @@ As-built on-disk footprint — persona `political_science`, hot
 > `RuntimeError` (gate `SFU_LOAD_MEM_FLOOR_GB`, default 1.5) instead of being
 > SIGKILLed mid-construction.
 
+#### Why SPLADE serves fine at 1M/15M but OOMs at 150M — and how this relates to hot/cold
+
+This OOM appeared for the first time during the 2026-06-18 parity benchmark. It is
+**not a behaviour change** — it is scale meeting a design property that was known
+and documented, plus an eval access pattern that bypasses the hot/cold mitigation.
+
+- **BMP has always loaded its shards fully into RAM.** It is a load-into-memory
+  block-max engine (`bmp.Searcher` → `load_into_memory()`); there is no mmap mode.
+  At 1M docs the SPLADE set is ~1 GB → ~3 GB resident, so it fits trivially — every
+  prior parity run used `data/thinclient_1m`. 150M was the **first query-time load
+  of the full 68.6 GB BMP set** (→ ~211 GB). Scale exposed a latent cost; nothing
+  regressed.
+
+- **Was the "Rust engine = more RAM-efficient" design intent wrong? No — but it was
+  scoped to the laptop/subset tier and to the *other* legs.** Per
+  `THIN_CLIENT_STACK_RESEARCH.md`, the thin-client was recommendation #2 — the
+  **laptop tier (~15M docs)** replacement for OpenSearch's JVM (measured tantivy
+  BM25F **45 MB RSS** vs a 2 GB JVM heap; tens-of-MB idle; mmap dense via usearch
+  `view()`). The sparse leg was **always expected to be RAM-resident** (Seismic
+  "index is fully RAM-resident, ~8 GB / 9M docs"; the same doc flags Qdrant's
+  "sparse must be on_disk at 150M, **~300 GB in-RAM otherwise**"). At the 15M tier
+  the sparse leg is ~9–13 GB — laptop-feasible. So "more RAM-efficient" was true for
+  BM25F + dense + cold-start at the *designed tier*; it never promised a disk-backed
+  sparse leg at 150M. The 150M thin-client (this testbed) pushes the laptop stack
+  past its tier. In the deployment plan, **Full/150M was always the *server*
+  (OpenSearch) tier**; thin-client was the ~10–15M / 20–40 GB laptop/subset tier.
+
+- **Why OpenSearch never hit this.** OpenSearch served SPLADE as Lucene
+  `rank_features` (impact-quantized postings) stored on disk and **mmap'd
+  (`MMapDirectory`, page-cache-resident)**, with a bounded JVM heap. It never makes
+  the whole sparse index resident — cold postings stay on disk and the OS reclaims
+  them under pressure. BMP traded exactly that away for a fully-resident structure
+  (faster per query, instant in-RAM block-max), so **at 150M the BMP sparse leg is a
+  RAM *regression* vs the OpenSearch leg it replaced** — on the one axis OpenSearch
+  handled well. BM25F (tantivy) and dense (usearch) kept the mmap property and have
+  no such problem.
+
+- **Is it just the benchmark, or real use? Both — at different thresholds.** The
+  ~211 GB figure *is* a benchmark/access-pattern artifact: full-corpus parity forces
+  **all 10 sections live at once**, which is precisely what the hot/cold persona
+  system exists to avoid. Designed serving keeps **one persona's hot section live**
+  (manifest `hot_sections = ['social_sciences__recent']`) and the other 9 **packed**
+  (`packer.py`); `_load()` only loads section dirs physically present under
+  `sections/`, so production normally loads one section, not ten. **But the
+  underlying ceiling is real, not an edge case:** even a single hot `__recent`
+  section at 150M is ~13 GB on disk → **~40 GB resident**, still over a 24 GB host.
+  So:
+  - **Local/laptop:** fine at the intended ~15M tier (hot section is a few GB);
+    **not viable at 150M** with BMP as-is (one hot section already busts a laptop).
+  - **Server-to-client:** the 150M tier. One-persona hot/cold fits a ~64–128 GB
+    server; serving many personas hot at once (or all sections, like the eval)
+    trends toward ~211 GB and is unreasonable — that needs the mmap fix.
+  - **Gotcha:** the index currently ships **all 10 sections unpacked** (a build/eval
+    state), so pointing the live server at it as-is would OOM identically until the
+    cold sections are packed away. And a query routed to a *cold* section triggers an
+    on-demand unpack→load of that section's BMP (~tens of GB) — so even correct
+    hot/cold can spike on an off-hot query on a small host.
+
+  **Fair summary:** it is an edge-case interaction between an all-sections access
+  pattern and the hot/cold persona system *layered on top of* a structural
+  per-section RAM cost. The eval triggers the extreme; the structural cost (BMP
+  resident, no mmap) is what makes even normal single-persona serving strain small
+  hosts at 150M. The durable fix is a mmap-backed / disk-resident sparse engine
+  (BMP fork with mmap, Seismic/PISA, or SPLADE impacts as tantivy payloads — same
+  page-cache property OpenSearch had); hot/cold is a partial mitigation, not a cure.
+
 Per-section pack ratio (`manifest.json`, live/packed) ranged 1.86–2.01×,
 aggregate **1.875×** — **below the 2.10× bsize-32 assumption**, confirming the
 `STORAGE_BUDGET_150M.md` §1 "*denser b256 shards will pack slightly less
