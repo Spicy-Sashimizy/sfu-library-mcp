@@ -116,6 +116,13 @@ class TestNotifyPayload(unittest.TestCase):
         body, _ = build_payload("json", "t", "m")
         self.assertEqual(json.loads(body), {"title": "t", "message": "m"})
 
+    def test_ntfy_bearer_token(self):
+        # auth-locked ntfy (the NAS sfu-ntfy) needs Authorization: Bearer
+        _, headers = build_payload("ntfy", "t", "m", token="tk_secret")
+        self.assertEqual(headers["Authorization"], "Bearer tk_secret")
+        _, h2 = build_payload("ntfy", "t", "m")  # no token -> no auth header
+        self.assertNotIn("Authorization", h2)
+
 
 if __name__ == "__main__":
     unittest.main(verbosity=2)

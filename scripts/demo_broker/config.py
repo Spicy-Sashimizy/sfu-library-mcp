@@ -30,6 +30,17 @@ def _f(name: str, default: float) -> float:
         return default
 
 
+def _read_secret(val: str) -> str:
+    """Allow a secret env var to be a literal value OR a path to a secret file
+    (so the broker can reuse the monitor's gitignored secret files on the NAS)."""
+    if val and os.path.isfile(val):
+        try:
+            return open(val).read().strip()
+        except OSError:
+            return ""
+    return val
+
+
 def _days(name: str, default: str) -> frozenset[int]:
     # 0=Mon .. 6=Sun. Default Mon-Fri.
     raw = os.environ.get(name, default)
@@ -72,6 +83,9 @@ class Config:
     # --- notifications (push/webhook; ntfy/slack/discord/generic) ---
     notify_webhook: str = field(default_factory=lambda: os.environ.get("DEMO_NOTIFY_WEBHOOK", ""))
     notify_kind: str = field(default_factory=lambda: os.environ.get("DEMO_NOTIFY_KIND", "ntfy"))  # ntfy|slack|discord|json
+    # bearer token for auth-locked ntfy (the NAS sfu-ntfy is deny-all + token);
+    # accepts a literal tk_... or a path to a secret file (e.g. the monitor's).
+    notify_token: str = field(default_factory=lambda: _read_secret(os.environ.get("DEMO_NOTIFY_TOKEN", "")))
     notify_on_query: bool = field(default_factory=lambda: _b("DEMO_NOTIFY_ON_QUERY", False))  # default: session-start + errors only
 
     # --- durable logging ---

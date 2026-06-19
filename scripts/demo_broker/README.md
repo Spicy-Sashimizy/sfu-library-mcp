@@ -107,8 +107,28 @@ and recorded.
 
 ### Notifications
 Set `DEMO_NOTIFY_WEBHOOK` to any push sink. Owner is notified on **session start**
-and **errors** by default (`DEMO_NOTIFY_ON_QUERY=1` for every query). ntfy example:
+and **errors** by default (`DEMO_NOTIFY_ON_QUERY=1` for every query). Generic ntfy:
 `DEMO_NOTIFY_WEBHOOK=https://ntfy.sh/your-secret-topic DEMO_NOTIFY_KIND=ntfy`.
+
+`DEMO_NOTIFY_TOKEN` adds `Authorization: Bearer` for **auth-locked ntfy** and may be
+a literal `tk_...` **or a path to a secret file** (so the broker can reuse an
+existing secret without copying it).
+
+**This deployment reuses the existing NAS `sfu-ntfy` server** (verified 2026-06-19,
+push accepted on topic `sfu-truenas-7292faa659`, which the owner's phone already
+subscribes to). The token is `rw`-scoped to `sfu-truenas-*`, so the demo publishes
+to that same topic. Env for the NAS broker (no secret in git — read the monitor's
+existing file):
+```bash
+DEMO_NOTIFY_KIND=ntfy
+DEMO_NOTIFY_WEBHOOK=https://ntfy.vancitylandscaper.com/sfu-truenas-7292faa659
+DEMO_NOTIFY_TOKEN=/mnt/MAIN/sfu-library-mcp/monitor/secrets/notify_token   # file path
+```
+To split demo alerts onto their own topic (`sfu-truenas-demo`), mint a token on the
+NAS: `sudo docker exec sfu-ntfy ntfy access <user> 'sfu-truenas-*' rw` already
+covers it — just change the topic in the webhook URL.
+
+Manual test push: `python3 notify.py "hello"` (uses the env above).
 
 ### Durable tracking + debug + reports
 - **sqlite** (`invites`/`sessions`/`events` tables, in the broker state db) survives
