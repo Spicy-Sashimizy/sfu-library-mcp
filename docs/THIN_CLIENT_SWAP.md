@@ -336,7 +336,18 @@ vocab id (shared doc/query u32 space).
     is what reclaims the RAM. tantivy (BM25F) + meta + dense still load;
   - degrades to the **BM25F leg** on any encode/Qdrant error (same contract as the
     encoder-failure path — RRF still fuses the other legs). Validated end-to-end
-    against the 30M `splade_par30` collection.
+    against the 30M `splade_par30` collection (2026-06-19: sensible ranking, 10
+    hits/query; **warm leg latency ~1–2 s, encode-dominated**, Qdrant search itself
+    ~66 ms p50 — the SPLADE *query encode*, not Qdrant, is the cost).
+- **Query-encoder path is now env-selectable (2026-06-19):** `retriever.py` honors
+  **`SFU_SPLADE_MODEL_PATH`** (else the `splade_model_path` arg, else default
+  `models/splade_onnx`). This matters because the SPLADE query encode dominates warm
+  latency and the **cold model load is the real tail**: measured `models/splade_onnx`
+  (fp32) **cold 104.6 s** vs `models/splade_onnx_fp16` **cold 6.1 s** (17×), warm
+  ~40–47 ms and *identical top-5 terms*. So serving (and the demo droplet) should set
+  `SFU_SPLADE_MODEL_PATH=models/splade_onnx_fp16`, plus a boot-time warm-up query so
+  no user pays the cold load. Default unchanged; this is an opt-in serving lever.
+  Demo droplet stack: `deploy/demo_droplet/` (compose + cloud-init pre-warm).
 - **Remaining:** full ~9.8 h 150M ingest (into `splade_150m`) pending user GO; then
   phase 6 (decommission BMP / reclaim 68.6 GB on disk) and a full-scale RRF NDCG
   confirmation against the **0.561** baseline (the only number still owed at scale).

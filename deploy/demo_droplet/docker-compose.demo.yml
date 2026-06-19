@@ -1,0 +1,71 @@
+# DO demo droplet stack: Qdrant on_disk sparse + thin-client MCP (off-BMP).
+# Brought up by cloud-init.sh on boot from the pre-baked snapshot; the index +
+# Qdrant storage live on the attached persistent volume (mounted at ${IDX_VOL}).
+#
+#   IDX_VOL=/mnt/idxvol docker compose -f docker-compose.demo.yml up -d
+#
+# The thin-client serves BM25F (tantivy) + dense (usearch) from the volume's
+# thinclient_index, and SPLADE from Qdrant (SFU_SPLADE_BACKEND=qdrant) — so the
+# 68.6 GB resident BMP set is never loaded (the whole point of the migration).
+
+services:
+  qdrant:
+    image: qdrant/qdrant:latest
+    container_name: demo-qdrant
+    restart: unless-stopped
+    volumes:
+      # seeded by scripts/seed_demo_volume.sh (the ~205 GB on_disk storage)
+      - ${IDX_VOL:-/mnt/idxvol}/qdrant_storage:/qdrant/storage
+    environment:
+      QDRANT__SERVICE__GRPC_PORT: "6334"
+    # not published to the host — only the MCP container talks to it
+    expose: ["6333", "6334"]
+    healthcheck:
+      test: ["CMD-SHELL", "bash -c 'exec 3<>/dev/tcp/127.0.0.1/6333' 2>/dev/null"]
+      interval: 15s
+      timeout: 5s
+      retries: 10
+      start_period: 30s
+    mem_limit: 8g          # on_disk sparse is page-cache backed; this caps anon RAM
+
+  sfu-library-mcp:
+    container_name: demo-sfu-mcp
+    build:
+      context: ../..
+      dockerfile: deploy/Dockerfile.prod
+    image: sfu-library-mcp:demo
+    depends_on:
+      qdrant:
+        condition: service_healthy
+    ports:
+      - "8080:8080"        # broker (NAS) reverse-proxies this; DO firewall locks to NAS IP
+    volumes:
+      - ${IDX_VOL:-/mnt/idxvol}/thinclient_index:/app/data/thinclient_index:ro
+      - ${IDX_VOL:-/mnt/idxvol}/logs:/app/logs
+    environment:
+      - MCP_HTTP_HOST=0.0.0.0
+      - MCP_HTTP_PORT=8080
+      - PYTHONPATH=/app
+      - PYTHONUNBUFFERED=1
+      # --- thin-client off-BMP serving ---
+      - SFU_SEARCH_BACKEND=thinclient
+      - SFU_THINCLIENT_INDEX_ROOT=/app/data/thinclient_index
+      - SFU_SPLADE_BACKEND=qdrant
+      - SFU_SPLADE_QDRANT_URL=http://qdrant:6333
+      - SFU_SPLADE_QDRANT_COLLECTION=${SPLADE_COLLECTION:-splade_150m}
+      - SFU_DENSE_WARMCACHE=0          # demo: static dense only, deterministic
+      # faster query encode (fp16 SPLADE) to cut the ~1-2s warm / ~115s cold encode
+      - SFU_SPLADE_MODEL_PATH=/app/models/splade_onnx_fp16
+      - SFU_METRICS_LOG_PATH=/app/logs/mcp_metrics.jsonl
+      - SFU_QUERY_LOG_PATH=/app/logs/mcp_queries.jsonl
+    restart: unless-stopped
+    stop_grace_period: 30s
+    healthcheck:
+      test: ["CMD", "curl", "-sf", "http://localhost:8080/health"]
+      interval: 30s
+      timeout: 10s
+      start_period: 120s     # model load is slow; don't flap during warm-up
+      retries: 5
+    logging:
+      driver: json-file
+      options: {max-size: "10m", max-file: "3"}

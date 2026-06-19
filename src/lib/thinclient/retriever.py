@@ -122,7 +122,12 @@ class ThinClientRetriever:
     ):
         repo_root = Path(__file__).resolve().parents[3]
         self.root = Path(index_root or repo_root / "data" / "thinclient_index")
-        self.splade_model_path = splade_model_path or str(repo_root / "models" / "splade_onnx")
+        # SFU_SPLADE_MODEL_PATH lets serving point at a faster query encoder
+        # (e.g. models/splade_onnx_fp16) without a code change — the query-side
+        # SPLADE encode is the dominant warm latency (~1-2s) and the cold model
+        # load is ~115s, so fp16 here is a real demo lever. Default unchanged.
+        self.splade_model_path = (splade_model_path or os.environ.get("SFU_SPLADE_MODEL_PATH")
+                                  or str(repo_root / "models" / "splade_onnx"))
         self.dense_model_path = dense_model_path or str(repo_root / "models" / "sfu-academic-embed-v5")
         self.remote_abstracts = remote_abstracts
         self.openalex_mailto = openalex_mailto
