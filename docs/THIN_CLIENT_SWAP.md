@@ -269,7 +269,7 @@ and documented, plus an eval access pattern that bypasses the hot/cold mitigatio
   (BMP fork with mmap, Seismic/PISA, or SPLADE impacts as tantivy payloads — same
   page-cache property OpenSearch had); hot/cold is a partial mitigation, not a cure.
 
-#### Off-BMP migration → Qdrant on_disk sparse (IN PROGRESS, EFFICACY UNMEASURED — 2026-06-18)
+#### Off-BMP migration → Qdrant on_disk sparse (30M GATE PASSED on RAM+latency; NDCG parity still unmeasured — 2026-06-19)
 
 The chosen durable fix for the BMP RAM wall is **Qdrant `on_disk=true` sparse**
 (no JVM, page-cache resident like the old OpenSearch leg). Migration is **GPU-free**:
@@ -289,15 +289,30 @@ vocab id (shared doc/query u32 space).
 - **Operational:** runs under supervisord (`scripts/qdrant-offbmp.supervisor.conf`,
   programs `qdrant-spike` + `qdrant-ingest-30m`); Qdrant storage
   `data/qdrant_spike/storage`, REST 6333 / gRPC 6334.
-- **Spike signal so far (validation only, not parity):** `on_disk` sparse RAM is
-  flat/sub-linear (544 MB at-rest @ 5M vs BMP ~7 GB); bounded parallel ingest holds
-  <10 GB RSS at ~3.9k docs/s. See commit `a41cd6d`.
-- **Gate before full ~150M:** a **30M parity run** (`splade_par30`) is in progress;
-  `measure` will report p50/p95 latency + at-rest RSS, compared against the
-  thin-client **NDCG@10 0.561** baseline (§ BUILD COMPLETE). Numbers, eval path, and
-  GO/NO-GO will be recorded here when the gate completes — **no quality/latency
-  result is claimed yet.** Phases 5–7 (wire retriever sparse leg to Qdrant,
-  decommission BMP / reclaim 68.6 GB, doc sync) are post-GO.
+- **Spike signal (validation):** `on_disk` sparse RAM is flat/sub-linear (544 MB
+  at-rest @ 5M vs BMP ~7 GB); bounded parallel ingest holds <10 GB RSS. See `a41cd6d`.
+- **30M gate — MEASURED 2026-06-19** (collection `splade_par30`, 30,000,000 docs,
+  `status=green`, 16 segments; eval `scripts/spike_qdrant_sparse.py measure`,
+  results `data/qdrant_spike/measure_par30.log` + `logs/qdrant_ingest_30m.log`):
+  - **RAM (the thesis): 1,441 MB resident at rest** for 30M on_disk sparse — vs BMP,
+    whose load-into-RAM 3.07× would put 30M at tens of GB resident. Flat, page-cache
+    backed. Querying warms page cache to ~5.3 GB RSS (reclaimable, not allocation).
+  - **Search latency, 40 eval queries (Qdrant search time only, encode excluded):**
+    warm steady-state **p50 ~66 ms / p95 ~85 ms / max ~95 ms** (two passes:
+    67.4/83.4/97.7 and 65.6/88.6/93.4). Cold first-touch pass was p50 208 / p95 1333 /
+    max 1502 ms — i.e. the tail is page-cache warm-up, not steady cost.
+  - **Ingest throughput: 4,234 docs/s end-to-end** (`wait=True`, 8 workers), 30M in
+    7,086 s; peak ingest RSS 11.4 GB. Extrapolates to full ~150M ≈ **~9.8 h**.
+  - **NOT measured: NDCG quality parity.** `measure` reports latency+RSS only. The
+    30M subset is not directly comparable to the 150M **NDCG@10 0.561** baseline
+    (§ BUILD COMPLETE). Low *a-priori* risk: Qdrant stores **f32** sparse values
+    while BMP 8-bit-quantizes (weights ×70), so on_disk ranking should be ≥ BMP on
+    quality — but this remains **unmeasured / design only** until a full-scale (or
+    matched-qrel) retrieval eval is run. Do not claim NDCG parity yet.
+- **Verdict:** gate **PASSES on RAM + throughput + latency**; GO/NO-GO for the full
+  ~9.8 h 150M ingest is pending user sign-off, with NDCG parity to be measured at
+  full scale. Phases 5–7 (wire retriever sparse leg to Qdrant, decommission BMP /
+  reclaim 68.6 GB, doc sync) are post-GO.
 
 Per-section pack ratio (`manifest.json`, live/packed) ranged 1.86–2.01×,
 aggregate **1.875×** — **below the 2.10× bsize-32 assumption**, confirming the
