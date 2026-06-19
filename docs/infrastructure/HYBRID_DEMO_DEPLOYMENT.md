@@ -275,8 +275,18 @@ pre-measurement numbers `*est.*`.
   `/admin/report`; **safety caps** = per-session rate/daily limits + Zotero-write
   blocked for visitors (JSON-RPC `tools/call` inspected at the proxy, 403).
   **No OpenAlex key per user** — OpenAlex is keyless; the droplet uses one shared
-  polite-pool identity, rate-capped. Tested: 13 tenancy unit tests + a full
+  polite-pool identity, rate-capped. Tested: 14 tenancy unit tests + a full
   `/start`→`/mcp`→`/admin/report` integration test (dry-run, no DO spend). Live
   wake-time / per-tenant latency still UNMEASURED (needs a real droplet).
+- **Notify channel wired + VERIFIED 2026-06-19**: the broker reuses the existing
+  NAS self-hosted **`sfu-ntfy`** (`https://ntfy.vancitylandscaper.com`, topic
+  `sfu-truenas-7292faa659`, deny-all + `tk_` token scoped rw to `sfu-truenas-*`,
+  the monitor's channel — owner's phone already subscribed). `notify.py` sends
+  `Authorization: Bearer`; `DEMO_NOTIFY_TOKEN` accepts the monitor's secret file
+  path so no secret is copied/committed. A test push was **accepted by the server**
+  (no DO spend; engine-independent). NAS reached via `ssh truenas` (gordoz, no
+  sudo — configs read from disk). Cloudflare creds already in `.env`; cloudflared's
+  NAS config is root-only and not needed. Pommel was down (`pommeld` EXITED) so
+  creds came from the NAS directly.
 - **Resumable seed** (`scripts/seed_demo_volume.sh`): interrupt→resume→checksum-verify
   validated; dry-run enumerated the real 41 GB / 30M Qdrant storage (2,509 files).
