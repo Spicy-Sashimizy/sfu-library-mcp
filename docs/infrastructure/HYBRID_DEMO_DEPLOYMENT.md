@@ -205,10 +205,18 @@ JSON is negligible.
    off), or chunked upload to DO Spaces (`s3cmd`/`rclone` with retries) then pull
    internally to the volume. Drive it from a re-entrant script (cron/systemd) that
    survives source reboots. **This is the main setup-time cost and the long pole.**
-2. **Abstracts incomplete.** Only `social_sciences__recent` has local abstracts
-   (`build_status.json`); all other sections fetch abstracts **live from OpenAlex** at
-   rerank → latency + API budget under concurrency. `OPENALEX_API_KEY` is in `.env`.
-   Decide: finish sidecars vs accept live-fetch vs scope demo to social_sciences.
+2. **Abstracts incomplete — DECIDED 2026-06-19: accept live-fetch.** Only
+   `social_sciences__recent` (~26.3M) has local abstract sidecars; the other ~124M
+   fetch **live from OpenAlex** at rerank. Recommendation: **accept live-fetch for the
+   demo** (do *not* build full sidecars — that's ~52.9 GB at 150M, not worth it for a
+   3-week demo). Rationale: `retriever.fetch_abstracts()` hydrates **before rerank in
+   one batched mget (~100 docs ≈ 1 OpenAlex call/query)**, so even Qdrant-flat serving
+   (all 150M reachable, so most rerank candidates miss the hot sidecar) costs ~1 API
+   call/query; the **per-session rate caps** (broker) bound concurrency well under the
+   polite-pool 10 req/s, and `OPENALEX_API_KEY`/mailto are in `.env`. Watch
+   `OPENALEX_TRACKER_PATH` usage in the Phase-5 dry run; only revisit if live-fetch
+   latency dominates. (Build-time alternative scoping the demo to social_sciences is a
+   fallback, not the plan.)
 3. **Dense leg not built** (`dense_done:false`) → natural-language queries weaker
    (loses the measured +0.17 NDCG@10 NL win). Decide: build full-corpus dense vs accept.
 4. **CPU rerank throughput.** ✅ **int8 ONNX export DONE + MEASURED 2026-06-19**

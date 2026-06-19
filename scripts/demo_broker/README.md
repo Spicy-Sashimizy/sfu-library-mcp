@@ -150,6 +150,34 @@ python3 test_tenants.py     # 13 — invites/sessions/rate caps/events/notify
 .venv/bin/python3 test_app.py   # 1  — full /start->/mcp->/admin wiring (dry-run)
 ```
 
+## Deploying on the NAS + Cloudflare hostname (Phase 3)
+
+`gordoz` has no sudo/docker — run the broker as a user process (it only needs
+Python + fastapi/uvicorn, ~256 MB):
+```bash
+# on the NAS, in the copied scripts/demo_broker/
+python3 -m pip install --user fastapi uvicorn          # one-time
+mkdir -p /mnt/MAIN/sfu-library-mcp/demo_broker
+cp demo.env.example demo.env && $EDITOR demo.env        # fill DO ids when ready
+set -a; . ./demo.env; set +a
+nohup python3 -m uvicorn app:app --host 0.0.0.0 --port 8088 \
+      >/mnt/MAIN/sfu-library-mcp/demo_broker/uvicorn.log 2>&1 &
+curl -s localhost:8088/health    # {"status":"ok","mode":"dry-run",...}
+```
+
+**Cloudflare hostname** `demo.<domain>` → NAS broker `:8088` (same Cloudflare→NPM
+chain as ntfy; creds in repo `.env`). This is a **live DNS change — run it yourself
+when ready** (it points a public name at the broker; do it after the broker is up):
+- NPM → New Proxy Host: `demo.<domain>` → `http://192.168.1.142:8088`, enable
+  Websockets, request SSL. **Or** Cloudflare Tunnel public hostname →
+  `http://192.168.1.142:8088`.
+- Then set `DEMO_PUBLIC_BASE=https://demo.<domain>` in `demo.env` and restart.
+- Lock it down: the broker already enforces per-session bearer + admin token; add a
+  Cloudflare WAF rule if you also want IP/header gating (see REMOTE_MCP_ACCESS.md).
+
+`demo.env.example` ships the verified ntfy + schedule + caps; only the DO ids
+(snapshot/volume/firewall, Phase 1/2) are left blank.
+
 ## Not yet done (needs the migration / Phase 1–2 artifacts)
 
 - Real snapshot + volume IDs (`DEMO_DO_SNAPSHOT_ID` / `_VOLUME_ID`) — Phase 1/2.
