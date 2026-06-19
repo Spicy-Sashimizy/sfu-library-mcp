@@ -10,7 +10,7 @@ is untouched and is used only as a **read-only export source and eval baseline**
 | Leg | Engine | Config |
 |---|---|---|
 | Lexical BM25F | tantivy 0.26 | title^3 + abstract, `index_option='freq'` (positions-off lossless lever), fast-field year/type/is_oa filters, no stored text |
-| Sparse SPLADE | bmp 0.2.6 | 8-bit block-max impacts, **bsize=256 + chunked top-term clustered insertion** (measured −54% size, −61% latency at equal recall), 2M-doc shards, weights ×70 quantization (saturation-free for SPLADE log1p ≤ 3.64), sidecar post-filtering |
+| Sparse SPLADE | bmp 0.2.6 (default) · Qdrant on_disk (opt-in) | 8-bit block-max impacts, **bsize=256 + chunked top-term clustered insertion** (measured −54% size, −61% latency at equal recall), 2M-doc shards, weights ×70 quantization (saturation-free for SPLADE log1p ≤ 3.64), sidecar post-filtering. **Off-BMP path wired behind `SFU_SPLADE_BACKEND=qdrant`** (flat ~GB RAM vs BMP's ~211 GB resident at 150M; quality at parity) — see the off-BMP section below |
 | Dense | usearch 2.x | b1 Hamming mmap + int8 rescore memmap (binary+rescore 32×, validated R@10 0.996); coverage = dense-POC 600k until full corpus is encoded, **plus the query-driven warm cache below** |
 | Dense warm cache | `lib/thinclient/dense_cache.py` | query-driven delta over the static seed (RAM Hamming + int8 rescore, SQLite durability, 500k-doc cap); `SFU_DENSE_WARMCACHE=0` disables (default on); design in `DENSE_WARMCACHE_RESEARCH.md` |
 | Fusion | Python RRF k=60 | unchanged (`federated_search.py`) |
@@ -324,10 +324,22 @@ vocab id (shared doc/query u32 space).
     by construction — the swap is quality-neutral and can only help. Quantization
     fidelity is corpus-size-independent, so this generalizes to 150M.
 - **Verdict:** gate **PASSES on RAM, throughput, latency, AND quality parity.** The
-  off-BMP swap is safe. GO/NO-GO for the full ~9.8 h 150M ingest is pending user
-  sign-off. Phases 5–7 (wire retriever sparse leg to Qdrant, decommission BMP /
-  reclaim 68.6 GB, doc sync) are post-GO; full-scale RRF NDCG to be confirmed against
-  the 0.561 baseline after the 150M ingest completes.
+  off-BMP swap is safe.
+- **Serving path WIRED (phase 5, IMPLEMENTED 2026-06-19).** `lib/thinclient/retriever.py`
+  gates the SPLADE leg on **`SFU_SPLADE_BACKEND`** (default `bmp`; set `qdrant` to
+  serve from the on_disk collection). Backend=`qdrant`:
+  - queries the collection named by **`SFU_SPLADE_QDRANT_COLLECTION`** (default
+    `splade_150m`) at **`SFU_SPLADE_QDRANT_URL`** (default `http://localhost:6333`),
+    using the raw f32 top-64 query (the measured-parity path) and the
+    bert-base-uncased token→id map shared with the ingest;
+  - **forces `skip_bmp`** in `_load()` — the ~211 GB BMP set is never loaded, which
+    is what reclaims the RAM. tantivy (BM25F) + meta + dense still load;
+  - degrades to the **BM25F leg** on any encode/Qdrant error (same contract as the
+    encoder-failure path — RRF still fuses the other legs). Validated end-to-end
+    against the 30M `splade_par30` collection.
+- **Remaining:** full ~9.8 h 150M ingest (into `splade_150m`) pending user GO; then
+  phase 6 (decommission BMP / reclaim 68.6 GB on disk) and a full-scale RRF NDCG
+  confirmation against the **0.561** baseline (the only number still owed at scale).
 
 Per-section pack ratio (`manifest.json`, live/packed) ranged 1.86–2.01×,
 aggregate **1.875×** — **below the 2.10× bsize-32 assumption**, confirming the

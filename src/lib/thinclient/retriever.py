@@ -26,6 +26,7 @@ from __future__ import annotations
 
 import json
 import logging
+import os
 import sqlite3
 import threading
 import time
@@ -138,6 +139,20 @@ class ThinClientRetriever:
         self._dense_cache = None   # query-driven warm cache (dense_cache.py)
         self._loaded = False
 
+        # Off-BMP serving gate. SFU_SPLADE_BACKEND=qdrant routes the SPLADE leg
+        # to the Qdrant on_disk sparse collection (flat ~GB RAM) instead of the
+        # load-into-RAM BMP shards (~211 GB resident at 150M). Default "bmp"
+        # preserves existing behavior. Engine/quality parity measured 2026-06-19
+        # (scripts/eval_quant_fidelity.py: overlap@10 0.987, NDCG@10 ties exactly;
+        # Qdrant sparse is exact vs BMP block-max approximate). See THIN_CLIENT_SWAP.md.
+        self._splade_backend = os.environ.get("SFU_SPLADE_BACKEND", "bmp").lower()
+        self._splade_qdrant_url = os.environ.get(
+            "SFU_SPLADE_QDRANT_URL", "http://localhost:6333")
+        self._splade_collection = os.environ.get(
+            "SFU_SPLADE_QDRANT_COLLECTION", "splade_150m")
+        self._qdrant_client = None   # lazy, only when backend=qdrant
+        self._bert_vocab = None      # token->id map shared with the ingest
+
     # ── lazy loading ────────────────────────────────────────────────────────
 
     def _manifest(self) -> dict:
@@ -164,7 +179,10 @@ class ThinClientRetriever:
             # to hold the ~211 GB SPLADE set — used by the section-wave parity
             # eval, which records the SPLADE leg shard-by-shard in separate
             # processes. See scripts/eval_parity_section_waves.py.
-            skip_bmp = os.environ.get("SFU_SKIP_BMP") == "1"
+            # backend=qdrant serves SPLADE from Qdrant, so the resident BMP set
+            # is never queried — skip it (this is what reclaims the ~211 GB).
+            skip_bmp = (os.environ.get("SFU_SKIP_BMP") == "1"
+                        or self._splade_backend == "qdrant")
             sections_dir = self.root / "sections"
             if sections_dir.is_dir():
                 for sdir in sorted(sections_dir.iterdir()):
@@ -459,8 +477,75 @@ class ThinClientRetriever:
         merged.sort(key=lambda t: -t[1])
         return merged[:top_k]
 
+    # ── SPLADE query-vector helpers (shared by both backends) ─────────────────
+
+    def _encode_splade_top(self, query: str):
+        """Encode the query and return its top-SPLADE_QUERY_TERMS terms, or None
+        if the encoder is unavailable/empty (caller degrades to the BM25F leg)."""
+        from lib.opensearch_retriever import encode_splade
+        try:
+            sparse = encode_splade(query, self.splade_model_path)
+        except Exception as exc:
+            # Missing/corrupt ONNX model must degrade the leg, not the query:
+            # RRF still fuses BM25F (+dense) while this leg mirrors BM25F.
+            logger.warning("SPLADE encoder failed (%s); falling back to BM25F leg", exc)
+            return None
+        if not sparse:
+            logger.warning("SPLADE encoding empty; falling back to BM25F leg")
+            return None
+        return dict(sorted(sparse.items(), key=lambda x: -x[1])[:SPLADE_QUERY_TERMS])
+
+    def _bert_vocab_map(self) -> dict:
+        """bert-base-uncased token->id map — the SAME bijection the Qdrant ingest
+        used to place doc sparse vectors (scripts/spike_qdrant_sparse._vocab)."""
+        if self._bert_vocab is None:
+            from transformers import AutoTokenizer
+            self._bert_vocab = AutoTokenizer.from_pretrained("bert-base-uncased").get_vocab()
+        return self._bert_vocab
+
+    def _qdrant(self):
+        if self._qdrant_client is None:
+            from qdrant_client import QdrantClient
+            self._qdrant_client = QdrantClient(url=self._splade_qdrant_url, timeout=30)
+        return self._qdrant_client
+
+    def _splade_leg_qdrant(self, query: str, top_k: int,
+                           f: dict | None) -> list[tuple[str, float]]:
+        """SPLADE leg served from the Qdrant on_disk sparse collection. Uses the
+        raw f32 query (top-64 terms) measured at parity with BMP's 8-bit path
+        (eval_quant_fidelity 2026-06-19). Any failure degrades to the BM25F leg,
+        matching the encoder-failure contract — RRF still fuses the other legs."""
+        from qdrant_client import models
+        top_terms = self._encode_splade_top(query)
+        if not top_terms:
+            return self._bm25f_leg(query, top_k, f)
+        vocab = self._bert_vocab_map()
+        idx, val = [], []
+        for tok, w in top_terms.items():
+            i = vocab.get(tok)
+            if i is not None:
+                idx.append(int(i)); val.append(float(w))
+        if not idx:
+            return self._bm25f_leg(query, top_k, f)
+        fetch = top_k * (OVERFETCH_FILTERED if f else OVERFETCH)
+        try:
+            res = self._qdrant().query_points(
+                collection_name=self._splade_collection,
+                query=models.SparseVector(indices=idx, values=val),
+                using="splade", limit=fetch, with_payload=True)
+        except Exception as exc:
+            logger.warning("Qdrant SPLADE leg failed (%s); falling back to BM25F leg", exc)
+            return self._bm25f_leg(query, top_k, f)
+        merged = [(p.payload.get("oaid"), float(p.score))
+                  for p in res.points if p.payload and p.payload.get("oaid")]
+        if f:
+            merged = self._post_filter(merged, f)
+        return merged[:top_k]
+
     def _splade_leg(self, query: str, top_k: int,
                     f: dict | None) -> list[tuple[str, float]]:
+        if self._splade_backend == "qdrant":
+            return self._splade_leg_qdrant(query, top_k, f)
         from lib.opensearch_retriever import encode_splade
         try:
             sparse = encode_splade(query, self.splade_model_path)
