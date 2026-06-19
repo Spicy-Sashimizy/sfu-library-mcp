@@ -1270,6 +1270,127 @@ async def _handle_search_academic(args: dict) -> list[TextContent]:
     return [TextContent(type="text", text=format_openalex_results(data, query))]
 
 
+async def search_academic_structured(args: dict) -> dict:
+    """Structured (JSON-friendly) variant of search_academic for the web GUI.
+
+    Mirrors _handle_search_academic's retrieval logic but returns
+    {"results": [<work dict>...], "meta": {"count": N}, "notes": [str...]}
+    instead of formatted text, so the GUI can render result cards. The MCP text
+    tool above is intentionally left untouched.
+    """
+    query = sanitize_search_query(args.get("query", ""))
+    if not query:
+        return {"results": [], "meta": {"count": 0}, "notes": ["Empty search query."]}
+    limit = max(1, min(args.get("limit", 10), 50))
+    page = max(args.get("page", 1), 1)
+
+    filters: dict[str, str] = {}
+    year_from = args.get("year_from")
+    year_to = args.get("year_to")
+    if year_from and year_to:
+        filters["publication_year"] = f"{year_from}-{year_to}"
+    elif year_from:
+        filters["from_publication_date"] = f"{year_from}-01-01"
+    elif year_to:
+        filters["to_publication_date"] = f"{year_to}-12-31"
+    if args.get("open_access_only"):
+        filters["open_access.is_oa"] = "true"
+    work_type = args.get("type", "")
+    if work_type:
+        filters["type"] = work_type
+
+    notes: list[str] = []
+
+    # Federated/thin-client path (preferred when enabled).
+    if _get_features().get("federated_search_enabled"):
+        from lib.federated_search import detect_subject
+        subject_hint = detect_subject(query)
+        prefer_local = bool(args.get("prefer_local"))
+        t0 = time.monotonic()
+        router = _get_federated_router()
+        fetch_k = _retrieval_top_k(limit)
+        async with _request_semaphore:
+            results = await asyncio.get_event_loop().run_in_executor(
+                None,
+                lambda: router.search(
+                    query, filters, top_k=fetch_k,
+                    subject_hint=subject_hint, prefer_local=prefer_local,
+                ),
+            )
+        if results:
+            _cache_works(results)
+            results = _maybe_rerank(results, query, limit)
+        _log_query(query, results, (time.monotonic() - t0) * 1000, "search_academic_gui")
+        if getattr(router, "last_degraded", False):
+            notes.append("The local search index is currently unavailable; results may be incomplete.")
+        if _thinclient_retriever is not None:
+            try:
+                hint = _thinclient_retriever.cold_section_hint(query)
+            except Exception:
+                hint = None
+            if hint:
+                notes.append(
+                    f"This query maps to the '{hint}' section, which is cold (packed) "
+                    f"in the local index — local results may be incomplete.")
+        return {"results": results[:limit], "meta": {"count": len(results)}, "notes": notes}
+
+    # Direct OpenAlex path.
+    unavailable = _openalex_unavailable_reason()
+    if unavailable:
+        return await _s2_fallback_structured(query, limit, unavailable)
+
+    async with _request_semaphore:
+        data = await asyncio.get_event_loop().run_in_executor(
+            None,
+            lambda: _get_openalex().search_works(
+                query, filters=filters, per_page=_retrieval_top_k(limit), page=page
+            ),
+        )
+    if not data.get("results"):
+        fallback_reason = _openalex_unavailable_reason()
+        if fallback_reason or _get_openalex().circuit_open:
+            reason = fallback_reason or "OpenAlex returned no results (possible outage)."
+            return await _s2_fallback_structured(query, limit, reason)
+
+    t0 = time.monotonic()
+    results = data.get("results", [])
+    if results:
+        _cache_works(results)
+        results = _maybe_rerank(results, query, limit)
+    _log_query(query, results, (time.monotonic() - t0) * 1000, "search_academic_gui")
+    return {"results": results[:limit], "meta": {"count": data.get("meta", {}).get("count", len(results))}, "notes": notes}
+
+
+async def _s2_fallback_structured(query: str, limit: int, reason: str) -> dict:
+    """Semantic Scholar fallback returning normalized dicts for the GUI."""
+    logger.warning("OpenAlex fallback to S2 (gui): %s", reason)
+    try:
+        async with _request_semaphore:
+            papers = await asyncio.get_event_loop().run_in_executor(
+                None, lambda: _get_s2().search_papers(query, limit=limit))
+    except Exception as exc:  # pragma: no cover - network/runtime guard
+        logger.warning("S2 structured fallback failed: %s", exc)
+        papers = []
+    results = [{
+        "title": p.get("title", ""),
+        "authors": p.get("authors", []),
+        "year": p.get("year"),
+        "doi": p.get("doi", ""),
+        "cited_by_count": p.get("citation_count", 0),
+        "tldr": p.get("tldr", ""),
+        "abstract": p.get("abstract", ""),
+        "is_oa": bool(p.get("open_access_pdf")),
+        "oa_url": p.get("open_access_pdf", ""),
+        "source": p.get("venue", ""),
+        "type": "article",
+    } for p in (papers or [])]
+    return {
+        "results": results,
+        "meta": {"count": len(results)},
+        "notes": [f"{reason} Showing results from Semantic Scholar (reduced coverage)."],
+    }
+
+
 async def _handle_search_by_author(args: dict) -> list[TextContent]:
     author = args.get("author", "").strip()
     if not author:

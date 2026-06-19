@@ -28,6 +28,60 @@ log (`SFU_METRICS_LOG_PATH` / `SFU_QUERY_LOG_PATH`), and four index-management
 MCP tools: `get_index_status`, `list_personas`, `request_section_unpack`,
 `reload_index`.
 
+## Web GUI — SFU Library Suite (2026-06-19)
+
+The first real web GUI for this stack lives in `web/` and is served by the HTTP
+entry point (`src/sfu_library_mcp_http.py`) as **static files at `/app`** — no
+Node/npm build step. It is the implementation of the `claude.ai/design` handoff
+bundle (`sfu library mcp-handoff.zip`).
+
+**Stack:** vendored React 18.3.1 + ReactDOM + Babel-standalone (`web/vendor/`,
+no CDN, no toolchain); JSX compiles in-browser. Each app is a self-contained
+single-file React app ported pixel-for-pixel from the design prototypes.
+
+**Apps:**
+| File | Route | What it is |
+|---|---|---|
+| `web/suite.html` | `/app` (redirect target) | shell; iframes one app at a time, coordinates via `postMessage` (`suiteReady`/`suiteNav`/`suiteScreen`) |
+| `web/search.html` | mounted by shell | primary search app — 6 screens (search, saved, history, databases, settings, admin) |
+| `web/analytics.html` | mounted by shell | "About this index" — corpus disclosures + distribution + operator metrics |
+| `web/index_manager.html` | mounted by shell | personas/sections, warm cache, storage budget |
+
+**Shared client (`web/lib/`):** `api.js` (`window.SFUApi`) calls the live
+backend and **falls back to `mock.js` (`window.SFUMock`) on any error/timeout**;
+`ui.js` (`window.SFUUI`) renders a **demo-data banner whenever mock/fallback
+data is shown** (backend down OR a live call returned zero results). The Search
+app's AI-status pill reflects real backend reachability (probed via `/health`).
+
+**New REST endpoints (GUI-facing, in `sfu_library_mcp_http.py`):**
+| Endpoint | Backs | Notes |
+|---|---|---|
+| `POST /api/search` | `tools.search_academic_structured()` | structured `{results, meta, notes}` JSON (the MCP `search_academic` text tool is unchanged); reuses the federated/OpenAlex/S2 retrieval path |
+| `GET /api/index_status` | `get_index_status` tool | JSON passthrough |
+| `GET /api/personas` | `list_personas` tool | JSON passthrough |
+| `POST /api/unpack` | `request_section_unpack` tool | fires background unpack |
+| `GET /analytics`, `POST /engagement` | pre-existing | reused by the GUI |
+
+Static mount is conditional on `web/` existing, so headless/index-only
+deployments are unaffected (`/app` simply 404s).
+
+**Efficacy — IMPLEMENTED, verified 2026-06-19 (no quality metric; it's a UI):**
+verification was automated, not "should work":
+- All 3 apps + `tweaks-panel.jsx` transform-compile under vendored Babel.
+- Lib logic unit-tested (11/11): live→mock fallback on every method, result
+  normalization (OpenAlex dict→card shape), demo-banner source reflection.
+- Full DOM mount (jsdom) offline **and** online for all 3 apps: zero runtime
+  errors; demo banner shows offline, absent online.
+- Interactive search (simulated query+Enter): live results render with no
+  banner; live-but-empty falls back to samples **with** the banner.
+- Live server: static `/app/*` all HTTP 200, `/analytics` 200 real data,
+  `/api/index_status`+`/api/personas` 200, `/api/search` returns the structured
+  shape (observed `notes:["…local search index currently unavailable…"]` when
+  the sparse leg is degraded), validation paths 400/400, `/engagement` 200.
+- Backend trait noted: index-touching endpoints lazily load the 24 GB
+  `meta.sqlite`+sections and can block the single event loop on first call; the
+  client's 12 s timeout → mock fallback + banner is the intended mitigation.
+
 ## Hot/cold profile structure (fully implemented)
 
 - Subject sections: `social_sciences`, `med_bio`, `phys_eng`, `cs_math`,

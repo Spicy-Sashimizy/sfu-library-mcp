@@ -1,0 +1,2255 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>SFU Library Search</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,300;0,9..40,400;0,9..40,500;0,9..40,600;1,9..40,400&family=Lora:ital,wght@0,400;0,500;0,600;1,400&display=swap" rel="stylesheet">
+<script src="vendor/react.production.min.js"></script>
+<script src="vendor/react-dom.production.min.js"></script>
+<script src="vendor/babel.min.js"></script>
+<!-- Shared suite client: live backend with mock fallback + demo-data banner -->
+<script src="lib/mock.js"></script>
+<script src="lib/api.js"></script>
+<script src="lib/ui.js"></script>
+<style>
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+  :root {
+    --bg: oklch(97.5% 0.006 80);
+    --bg-panel: oklch(99% 0.004 80);
+    --bg-sidebar: oklch(18% 0.012 250);
+    --bg-sidebar-hover: oklch(24% 0.014 250);
+    --bg-sidebar-active: oklch(28% 0.016 250);
+    --text: oklch(16% 0.012 250);
+    --text-secondary: oklch(44% 0.014 250);
+    --text-muted: oklch(60% 0.010 250);
+    --text-sidebar: oklch(78% 0.010 250);
+    --text-sidebar-active: oklch(96% 0.006 80);
+    --border: oklch(88% 0.010 250);
+    --border-light: oklch(92% 0.007 250);
+    --accent-red: oklch(52% 0.18 25);
+    --accent-red-light: oklch(94% 0.04 25);
+    --accent-red-mid: oklch(70% 0.10 25);
+    --accent-teal: oklch(52% 0.12 200);
+    --accent-teal-light: oklch(93% 0.04 200);
+    --accent-amber: oklch(68% 0.13 75);
+    --accent-amber-light: oklch(96% 0.04 75);
+    --shadow-sm: 0 1px 3px oklch(0% 0 0 / 0.08), 0 1px 2px oklch(0% 0 0 / 0.05);
+    --shadow-md: 0 4px 12px oklch(0% 0 0 / 0.10), 0 2px 6px oklch(0% 0 0 / 0.06);
+    --shadow-lg: 0 12px 32px oklch(0% 0 0 / 0.12), 0 4px 12px oklch(0% 0 0 / 0.08);
+    --radius: 8px;
+    --radius-sm: 5px;
+    --radius-lg: 12px;
+    --font-ui: 'DM Sans', system-ui, sans-serif;
+    --font-serif: 'Lora', Georgia, serif;
+    --sidebar-width: 220px;
+  }
+  html, body, #root { height: 100%; overflow: hidden; }
+  body { font-family: var(--font-ui); background: var(--bg); color: var(--text); font-size: 14px; line-height: 1.5; -webkit-font-smoothing: antialiased; }
+  ::selection { background: var(--accent-red-light); }
+  ::-webkit-scrollbar { width: 6px; height: 6px; }
+  ::-webkit-scrollbar-track { background: transparent; }
+  ::-webkit-scrollbar-thumb { background: var(--border); border-radius: 3px; }
+  ::-webkit-scrollbar-thumb:hover { background: var(--text-muted); }
+  button { cursor: pointer; font-family: var(--font-ui); }
+  input, textarea, select { font-family: var(--font-ui); }
+</style>
+</head>
+<body>
+<div id="root"></div>
+<script type="text/babel" src="tweaks-panel.jsx"></script>
+<script type="text/babel">
+
+// ─── MOCK DATA ─────────────────────────────────────────────────────────────
+
+const MOCK_RESULTS = [
+  {
+    id: "W2971912755",
+    title: "Deep learning for predicting drug–target interactions and drug bioactivity",
+    authors: ["Öztürk, H.", "Özgür, A.", "Ozkirimli, E."],
+    year: 2018,
+    source: "Molecular Informatics",
+    volume: "37", issue: "1-2",
+    doi: "10.1002/minf.201700113",
+    cited_by: 847,
+    type: "article",
+    peer_reviewed: true,
+    abstract: "Predicting drug–target interaction (DTI) is an important step in drug discovery and repositioning. In this work, we propose DeepDTA, a deep-learning-based model for the prediction of drug–target binding affinity values. We evaluated our model on two well-known benchmark datasets: Davis and KIBA.",
+    tldr: "DeepDTA uses CNN-based deep learning to predict drug-target binding affinity, outperforming previous methods on benchmark datasets.",
+    access: { type: "open_access", url: "#", label: "Open Access" },
+    expanded_terms: ["neural networks", "binding affinity", "chemogenomics", "computational drug discovery"],
+    topics: ["Drug Discovery", "Deep Learning", "Bioinformatics"],
+    oa_status: true,
+  },
+  {
+    id: "W2794406408",
+    title: "Artificial intelligence in drug discovery and development",
+    authors: ["Paul, D.", "Sanap, G.", "Shenoy, S.", "Kalyane, D.", "Kalia, K.", "Tekade, R. K."],
+    year: 2021,
+    source: "Drug Discovery Today",
+    volume: "26", issue: "1",
+    doi: "10.1016/j.drudis.2020.10.010",
+    cited_by: 1243,
+    type: "article",
+    peer_reviewed: true,
+    abstract: "Artificial intelligence (AI) is beginning to transform drug discovery and development. Various AI techniques, including machine learning, deep learning, and natural language processing, are being applied at every stage of the drug discovery pipeline from target identification to clinical trials.",
+    tldr: "Comprehensive review of AI/ML applications across the drug discovery pipeline, covering target identification, hit discovery, lead optimization, and clinical trials.",
+    access: { type: "sfu_proxy", url: "#", label: "SFU Library via ScienceDirect" },
+    expanded_terms: ["machine learning", "pharmaceutical AI", "QSAR", "generative models"],
+    topics: ["Pharmaceutical Sciences", "Artificial Intelligence", "Machine Learning"],
+    oa_status: false,
+  },
+  {
+    id: "W3120987654",
+    title: "Graph neural networks for drug discovery and molecular property prediction",
+    authors: ["Gilmer, J.", "Schütt, K. T.", "Maennel, H."],
+    year: 2020,
+    source: "Nature Machine Intelligence",
+    volume: "2", issue: "11",
+    doi: "10.1038/s42256-020-00236-4",
+    cited_by: 512,
+    type: "article",
+    peer_reviewed: true,
+    abstract: "Graph neural networks (GNNs) have emerged as a powerful paradigm for molecular machine learning, offering a natural representation of molecular graphs. This review covers the development of GNN architectures for property prediction, generative modeling, and drug-target interaction.",
+    tldr: "Survey of graph neural network approaches for molecular property prediction and drug discovery, with comparisons across architectures.",
+    access: { type: "unpaywall_oa", url: "#", label: "Free via PubMed Central" },
+    expanded_terms: ["graph convolution", "molecular fingerprints", "MPNN", "message passing"],
+    topics: ["Graph Neural Networks", "Cheminformatics", "Molecular Modeling"],
+    oa_status: true,
+  },
+  {
+    id: "W2801234987",
+    title: "A survey of transfer learning for drug discovery",
+    authors: ["Hu, W.", "Liu, B.", "Gomes, J.", "Zitnik, M.", "Liang, P."],
+    year: 2020,
+    source: "Journal of Chemical Information and Modeling",
+    volume: "60", issue: "8",
+    doi: "10.1021/acs.jcim.0c00116",
+    cited_by: 334,
+    type: "article",
+    peer_reviewed: true,
+    abstract: "The limited availability of labeled data is one of the most significant challenges in applying deep learning to drug discovery. Transfer learning and pre-training strategies can alleviate this by leveraging large unlabeled molecular datasets.",
+    tldr: "Introduces transfer learning strategies for molecular property prediction with limited labeled data, showing improvements across 12 benchmark tasks.",
+    access: { type: "sfu_proxy", url: "#", label: "SFU Library via ACS Publications" },
+    expanded_terms: ["pre-training", "few-shot learning", "molecular representation", "self-supervised"],
+    topics: ["Transfer Learning", "Molecular Property Prediction", "Deep Learning"],
+    oa_status: false,
+  },
+  {
+    id: "W3098765432",
+    title: "Generative models for molecular design in drug discovery",
+    authors: ["Sanchez-Lengeling, B.", "Aspuru-Guzik, A."],
+    year: 2018,
+    source: "Science",
+    volume: "361", issue: "6400",
+    doi: "10.1126/science.aat2663",
+    cited_by: 1897,
+    type: "article",
+    peer_reviewed: true,
+    abstract: "Generative models—in particular variational autoencoders, generative adversarial networks, and recurrent neural networks—are being applied to molecular design, enabling de novo generation of drug-like molecules with desired properties.",
+    tldr: "Perspective on generative AI approaches for de novo molecular design, covering VAEs, GANs, and reinforcement learning methods.",
+    access: { type: "sfu_proxy", url: "#", label: "SFU Library via AAAS" },
+    expanded_terms: ["VAE", "GAN", "de novo design", "SMILES generation", "reinforcement learning"],
+    topics: ["Generative AI", "Molecular Design", "Drug Discovery"],
+    oa_status: false,
+  },
+  {
+    id: "W3112345678",
+    title: "Molecular transformers for drug property prediction and optimization",
+    authors: ["Schwaller, P.", "Laino, T.", "Gaudin, T.", "Bolgar, P."],
+    year: 2022,
+    source: "ACS Central Science",
+    volume: "8", issue: "4",
+    doi: "10.1021/acscentsci.2c00117",
+    cited_by: 287,
+    type: "article",
+    peer_reviewed: true,
+    abstract: "Transformer-based architectures originally developed for natural language processing have shown remarkable success in chemical applications, learning representations from SMILES strings that capture complex molecular structure-activity relationships.",
+    tldr: "Transformer models trained on SMILES strings achieve state-of-the-art performance on molecular property prediction and chemical reaction prediction.",
+    access: { type: "open_access", url: "#", label: "Open Access" },
+    expanded_terms: ["BERT for molecules", "ChemBERTa", "attention mechanism", "SMILES tokenization"],
+    topics: ["Transformers", "NLP for Chemistry", "Property Prediction"],
+    oa_status: true,
+  },
+  {
+    id: "W2987654321",
+    title: "Predicting clinical drug–drug interactions using a deep learning approach",
+    authors: ["Ryu, J. Y.", "Kim, H. U.", "Lee, S. Y."],
+    year: 2018,
+    source: "Nature Communications",
+    volume: "9", issue: "1",
+    doi: "10.1038/s41467-018-07953-8",
+    cited_by: 623,
+    type: "article",
+    peer_reviewed: true,
+    abstract: "Drug–drug interactions (DDIs) remain a major cause of adverse events in polypharmacy patients. We develop DeepDDI, a deep learning framework that predicts 86 DDI types using structural information about drug pairs.",
+    tldr: "DeepDDI predicts 86 types of drug-drug interactions with >92% accuracy using structural drug features and a deep learning classifier.",
+    access: { type: "open_access", url: "#", label: "Open Access" },
+    expanded_terms: ["polypharmacy", "adverse drug reactions", "DDI prediction", "pharmacovigilance"],
+    topics: ["Drug Safety", "Deep Learning", "Computational Pharmacology"],
+    oa_status: true,
+  },
+];
+
+const MOCK_DATABASES = [
+  { id: 1, name: "Academic Search Complete", provider: "EBSCOhost", subjects: ["Multidisciplinary"], proxy: true, free: false },
+  { id: 2, name: "ScienceDirect", provider: "Elsevier", subjects: ["Science", "Technology", "Medicine"], proxy: true, free: false },
+  { id: 3, name: "PubMed Central", provider: "NLM", subjects: ["Biomedical", "Life Sciences"], proxy: false, free: true },
+  { id: 4, name: "JSTOR", provider: "JSTOR", subjects: ["Humanities", "Social Sciences"], proxy: true, free: false },
+  { id: 5, name: "Web of Science", provider: "Clarivate", subjects: ["Multidisciplinary"], proxy: true, free: false },
+  { id: 6, name: "Scopus", provider: "Elsevier", subjects: ["Science", "Technology", "Medicine"], proxy: true, free: false },
+  { id: 7, name: "PsycINFO", provider: "EBSCOhost", subjects: ["Psychology", "Behavioral Sciences"], proxy: true, free: false },
+  { id: 8, name: "IEEE Xplore", provider: "IEEE", subjects: ["Engineering", "Computer Science"], proxy: true, free: false },
+  { id: 9, name: "ACM Digital Library", provider: "ACM", subjects: ["Computer Science"], proxy: true, free: false },
+  { id: 10, name: "SpringerLink", provider: "Springer", subjects: ["Science", "Technology"], proxy: true, free: false },
+];
+
+// ─── ICONS (SVG inline) ─────────────────────────────────────────────────────
+
+const Icon = ({ name, size = 16, className = "", style = {} }) => {
+  const icons = {
+    search: <svg width={size} height={size} viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><circle cx="9" cy="9" r="6"/><path d="m16 16-3.5-3.5"/></svg>,
+    book: <svg width={size} height={size} viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d="M4 3h10a1 1 0 0 1 1 1v13l-2-1-2 1-2-1-2 1-2-1-2 1V4a1 1 0 0 1 1-1Z"/><path d="M7 8h6M7 11h4"/></svg>,
+    history: <svg width={size} height={size} viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><circle cx="10" cy="10" r="7"/><path d="M10 6v4l2.5 2.5"/></svg>,
+    bookmark: <svg width={size} height={size} viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d="M5 3h10v14l-5-3-5 3V3Z"/></svg>,
+    settings: <svg width={size} height={size} viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><circle cx="10" cy="10" r="2.5"/><path d="M10 2v2M10 16v2M2 10h2M16 10h2M4.22 4.22l1.42 1.42M14.36 14.36l1.42 1.42M4.22 15.78l1.42-1.42M14.36 5.64l1.42-1.42"/></svg>,
+    database: <svg width={size} height={size} viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><ellipse cx="10" cy="5.5" rx="7" ry="2.5"/><path d="M3 5.5v4c0 1.38 3.13 2.5 7 2.5s7-1.12 7-2.5v-4"/><path d="M3 9.5v4c0 1.38 3.13 2.5 7 2.5s7-1.12 7-2.5v-4"/></svg>,
+    admin: <svg width={size} height={size} viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d="M10 2L3 6v4c0 4.4 3.03 8.52 7 9.5 3.97-.98 7-5.1 7-9.5V6L10 2Z"/></svg>,
+    copy: <svg width={size} height={size} viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><rect x="8" y="8" width="9" height="9" rx="1.5"/><path d="M4 12V4a1 1 0 0 1 1-1h8"/></svg>,
+    zotero: <svg width={size} height={size} viewBox="0 0 20 20" fill="currentColor"><path d="M4 4h12v2.5L8.5 14H16v2H4v-2.5L11.5 6H4V4Z"/></svg>,
+    download: <svg width={size} height={size} viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d="M10 3v10m-4-4 4 4 4-4"/><path d="M4 16h12"/></svg>,
+    externalLink: <svg width={size} height={size} viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d="M8 3H4a1 1 0 0 0-1 1v12a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1v-4"/><path d="M13 3h4v4"/><path d="M9 11 17 3"/></svg>,
+    chevronDown: <svg width={size} height={size} viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="m5 8 5 5 5-5"/></svg>,
+    chevronRight: <svg width={size} height={size} viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="m8 5 5 5-5 5"/></svg>,
+    close: <svg width={size} height={size} viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M5 5 15 15M15 5 5 15"/></svg>,
+    filter: <svg width={size} height={size} viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d="M3 5h14M6 10h8M9 15h2"/></svg>,
+    sparkle: <svg width={size} height={size} viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d="M10 2v3M10 15v3M2 10h3M15 10h3M4.22 4.22l2.12 2.12M13.66 13.66l2.12 2.12M4.22 15.78l2.12-2.12M13.66 6.34l2.12-2.12"/><circle cx="10" cy="10" r="2"/></svg>,
+    plus: <svg width={size} height={size} viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M10 4v12M4 10h12"/></svg>,
+    edit: <svg width={size} height={size} viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d="M14.5 2.5a2.12 2.12 0 0 1 3 3L6 17l-4 1 1-4 11.5-11.5Z"/></svg>,
+    trash: <svg width={size} height={size} viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d="M3 6h14M8 6V4h4v2M6 6v11a1 1 0 0 0 1 1h6a1 1 0 0 0 1-1V6"/></svg>,
+    cpu: <svg width={size} height={size} viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><rect x="4" y="4" width="12" height="12" rx="1.5"/><rect x="7" y="7" width="6" height="6" rx="0.5"/><path d="M7 2v2M13 2v2M7 16v2M13 16v2M2 7h2M2 13h2M16 7h2M16 13h2"/></svg>,
+    check: <svg width={size} height={size} viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round"><path d="m4 10 4.5 4.5 7.5-8"/></svg>,
+    warning: <svg width={size} height={size} viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d="M10 3 2 17h16L10 3Z"/><path d="M10 9v4M10 14.5v1"/></svg>,
+    activity: <svg width={size} height={size} viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d="M2 10h3l2-5 3 10 2-5h6"/></svg>,
+    chart: <svg width={size} height={size} viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d="M3 17h14"/><path d="M6 14V9M10 14V5M14 14v-6"/></svg>,
+    server: <svg width={size} height={size} viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><rect x="3" y="3.5" width="14" height="5.5" rx="1.2"/><rect x="3" y="11" width="14" height="5.5" rx="1.2"/><path d="M6 6.25h.01M6 13.75h.01"/></svg>,
+    arrowLeft: <svg width={size} height={size} viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="m10 5-5 5 5 5"/><path d="M5 10h11"/></svg>,
+    info: <svg width={size} height={size} viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><circle cx="10" cy="10" r="7"/><path d="M10 9v5M10 6.5v.5"/></svg>,
+    link: <svg width={size} height={size} viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d="M8 13H5a4 4 0 0 1 0-8h3M12 7h3a4 4 0 0 1 0 8h-3M7 10h6"/></svg>,
+  };
+  return <span className={className} style={{ display: "inline-flex", alignItems: "center", ...style }}>{icons[name] || null}</span>;
+};
+
+// ─── ACCESS BADGE ────────────────────────────────────────────────────────────
+
+const AccessBadge = ({ access, compact = false }) => {
+  const configs = {
+    open_access:   { bg: "var(--accent-teal-light)", color: "var(--accent-teal)", label: compact ? "OA" : "Open Access" },
+    unpaywall_oa:  { bg: "oklch(93% 0.05 145)", color: "oklch(42% 0.14 145)", label: compact ? "Free Copy" : "Free via Unpaywall" },
+    sfu_proxy:     { bg: "var(--accent-red-light)", color: "var(--accent-red)", label: compact ? "SFU" : "SFU Library" },
+    sfu_direct:    { bg: "var(--accent-red-light)", color: "var(--accent-red)", label: compact ? "SFU" : "SFU Library" },
+    doi_fallback:  { bg: "oklch(93% 0.01 250)", color: "var(--text-muted)", label: compact ? "DOI" : "Check Access" },
+  };
+  const cfg = configs[access?.type] || configs.doi_fallback;
+  return (
+    <span style={{ display: "inline-flex", alignItems: "center", gap: 4, padding: compact ? "2px 6px" : "3px 8px", borderRadius: 4, background: cfg.bg, color: cfg.color, fontSize: compact ? 11 : 12, fontWeight: 500, letterSpacing: "0.02em", whiteSpace: "nowrap" }}>
+      {cfg.label}
+    </span>
+  );
+};
+
+// ─── CITATION BADGE ─────────────────────────────────────────────────────────
+
+const CitationCount = ({ n }) => (
+  <span style={{ color: "var(--text-muted)", fontSize: 12, display: "inline-flex", alignItems: "center", gap: 3 }}>
+    <Icon name="link" size={11} />
+    {n.toLocaleString()} citations
+  </span>
+);
+
+// ─── SIDEBAR ────────────────────────────────────────────────────────────────
+
+// ─── SESSION REPLAY (mini view in sidebar dead space) ──────────────────────
+
+// Recording of the user's recent in-app events: search, open, save, copy, filter.
+// Same dark-sidebar stylization as before; smaller and timeline-anchored rather
+// than tree-shaped. Has a built-in selector that can swap to other panels or
+// collapse the whole section so the dead space is reclaimable.
+const SESSION = {
+  duration_s: 47,
+  started: "2:41 PM",
+  events: [
+    { id: "e0", t: 0,  icon: "search",       label: 'Searched "ml drug discovery"', detail: "Free-text query · NL parser engaged", kind: "query" },
+    { id: "e1", t: 3,  icon: "sparkle",      label: "AI expanded query",            detail: "+neural networks, +QSAR, +DTI, +deep learning", kind: "ai" },
+    { id: "e2", t: 5,  icon: "activity",     label: "47 results returned",          detail: "412 candidates → 50 ranked → 47 deduped (3 DOI dupes)", kind: "system" },
+    { id: "e3", t: 12, icon: "book",         label: "Opened Paul et al. 2021",      detail: '"AI in drug discovery and development" · cited 1,243 ×', kind: "open" },
+    { id: "e4", t: 18, icon: "copy",         label: "Copied APA citation",          detail: "Paul, D., Sanap, G., et al. (2021)…", kind: "action" },
+    { id: "e5", t: 24, icon: "bookmark",     label: "Saved to library",             detail: "Folder · Drug Discovery · Reading List", kind: "action" },
+    { id: "e6", t: 31, icon: "filter",       label: "Filtered: Open Access",        detail: "47 → 12 results · 23 sec scroll dwell after", kind: "filter" },
+    { id: "e7", t: 38, icon: "book",         label: "Opened Schwaller 2022",        detail: '"Molecular transformers…" · OA via ACS Central Science', kind: "open" },
+    { id: "e8", t: 44, icon: "externalLink", label: "Click-out to publisher",       detail: "DOI: 10.1021/acscentsci.2c00117 · new tab", kind: "open" },
+  ],
+};
+
+const KIND_COLOR = {
+  query:  { dot: "var(--accent-red-mid)", lane: "oklch(45% 0.10 25)" },
+  ai:     { dot: "oklch(70% 0.13 295)",   lane: "oklch(45% 0.08 295)" },
+  system: { dot: "oklch(60% 0.010 250)",  lane: "oklch(40% 0.010 250)" },
+  open:   { dot: "var(--accent-teal)",    lane: "oklch(45% 0.07 200)" },
+  action: { dot: "oklch(72% 0.13 145)",   lane: "oklch(45% 0.08 145)" },
+  filter: { dot: "var(--accent-amber)",   lane: "oklch(48% 0.09 75)"  },
+};
+
+// ─── PANEL: Session Replay ──────────────────────────────────────────────────
+
+const SessionReplayPanel = () => {
+  const [hovered, setHovered] = React.useState(null);
+  const [playhead, setPlayhead] = React.useState(SESSION.duration_s);
+  const containerRef = React.useRef(null);
+
+  const hoveredEvent = hovered ? SESSION.events.find(e => e.id === hovered.id) : null;
+  const containerRect = containerRef.current?.getBoundingClientRect();
+
+  return (
+    <>
+      {/* Header line: timecode + scrubber */}
+      <div style={{ padding: "2px 10px 8px" }}>
+        <div style={{ display: "flex", alignItems: "center", gap: 6, marginBottom: 5 }}>
+          <button style={{ width: 16, height: 16, borderRadius: "50%", background: "oklch(36% 0.014 250)", border: "1px solid oklch(44% 0.014 250)", color: "var(--text-sidebar-active)", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", padding: 0, flexShrink: 0 }}>
+            <svg width="6" height="7" viewBox="0 0 6 7" fill="currentColor"><path d="M0 0v7l6-3.5L0 0Z" /></svg>
+          </button>
+          <span style={{ fontFamily: "ui-monospace, 'SF Mono', Menlo, monospace", fontSize: 9.5, color: "var(--text-sidebar-active)" }}>
+            00:{String(playhead).padStart(2, "0")}
+          </span>
+          <span style={{ fontFamily: "ui-monospace, 'SF Mono', Menlo, monospace", fontSize: 9.5, color: "oklch(50% 0.010 250)" }}>
+            / 00:{SESSION.duration_s}
+          </span>
+          <span style={{ marginLeft: "auto", fontSize: 9.5, color: "oklch(50% 0.010 250)" }}>
+            {SESSION.events.length} events
+          </span>
+        </div>
+        {/* Scrubber bar with event ticks */}
+        <div style={{ position: "relative", height: 14, display: "flex", alignItems: "center" }}>
+          <div style={{ position: "absolute", left: 0, right: 0, top: "50%", height: 3, transform: "translateY(-50%)", background: "oklch(26% 0.012 250)", borderRadius: 2 }} />
+          <div style={{ position: "absolute", left: 0, top: "50%", height: 3, transform: "translateY(-50%)", width: `${(playhead / SESSION.duration_s) * 100}%`, background: "var(--accent-red-mid)", borderRadius: 2 }} />
+          {SESSION.events.map(ev => (
+            <div key={ev.id}
+              onMouseEnter={e => setHovered({ id: ev.id, top: e.currentTarget.getBoundingClientRect().top })}
+              onMouseLeave={() => setHovered(null)}
+              style={{ position: "absolute", left: `${(ev.t / SESSION.duration_s) * 100}%`, top: "50%", transform: "translate(-50%, -50%)", width: 5, height: 5, borderRadius: "50%", background: KIND_COLOR[ev.kind].dot, boxShadow: "0 0 0 1.5px var(--bg-sidebar)", cursor: "pointer" }} />
+          ))}
+        </div>
+      </div>
+
+      {/* Event list */}
+      <div ref={containerRef} style={{ flex: 1, minHeight: 0, overflow: "auto", padding: "0 4px 4px", position: "relative" }}>
+        {SESSION.events.slice().reverse().map((ev, idx) => {
+          const isHovered = hovered?.id === ev.id;
+          return (
+            <div key={ev.id}
+              onMouseEnter={e => setHovered({ id: ev.id, top: e.currentTarget.getBoundingClientRect().top })}
+              onMouseLeave={() => setHovered(null)}
+              style={{
+                display: "grid",
+                gridTemplateColumns: "26px 14px 1fr",
+                alignItems: "center",
+                gap: 4,
+                padding: "3px 6px",
+                borderRadius: 4,
+                cursor: "pointer",
+                background: isHovered ? "oklch(26% 0.014 250)" : "transparent",
+                position: "relative",
+              }}>
+              <span style={{ fontFamily: "ui-monospace, 'SF Mono', Menlo, monospace", fontSize: 9.5, color: "oklch(52% 0.010 250)", textAlign: "right" }}>
+                +{ev.t}s
+              </span>
+              <span style={{ display: "flex", alignItems: "center", justifyContent: "center", color: KIND_COLOR[ev.kind].dot }}>
+                <Icon name={ev.icon} size={10} />
+              </span>
+              <span style={{ fontSize: 10.5, color: isHovered ? "var(--text-sidebar-active)" : "var(--text-sidebar)", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis", lineHeight: 1.3 }}>
+                {ev.label}
+              </span>
+              {/* Connecting timeline rail on the left of the icon column */}
+              {idx < SESSION.events.length - 1 && (
+                <span aria-hidden="true" style={{ position: "absolute", left: 26 + 4 + 7, top: 17, width: 1, height: "calc(100% - 14px)", background: "oklch(26% 0.012 250)" }} />
+              )}
+            </div>
+          );
+        })}
+      </div>
+
+      {/* Snippet popout — fixed-positioned to escape sidebar overflow */}
+      {hoveredEvent && containerRect && (
+        <div
+          style={{
+            position: "fixed",
+            left: containerRect.right + 10,
+            top: Math.max(60, Math.min(window.innerHeight - 200, hovered.top - 4)),
+            width: 280,
+            background: "var(--bg-panel)",
+            border: "1px solid var(--border)",
+            borderRadius: 8,
+            boxShadow: "var(--shadow-lg)",
+            padding: "10px 12px",
+            zIndex: 1000,
+            pointerEvents: "none",
+            fontFamily: "var(--font-ui)",
+          }}
+        >
+          <div style={{ position: "absolute", left: -6, top: 12, width: 10, height: 10, background: "var(--bg-panel)", borderLeft: "1px solid var(--border)", borderBottom: "1px solid var(--border)", transform: "rotate(45deg)" }} />
+
+          <div style={{ display: "flex", alignItems: "center", gap: 6, marginBottom: 6 }}>
+            <span style={{ width: 6, height: 6, borderRadius: "50%", background: KIND_COLOR[hoveredEvent.kind].dot, flexShrink: 0 }} />
+            <span style={{ fontFamily: "ui-monospace, 'SF Mono', Menlo, monospace", fontSize: 10, color: "var(--text-muted)", textTransform: "uppercase", letterSpacing: "0.06em", fontWeight: 500 }}>
+              {hoveredEvent.kind} event
+            </span>
+            <span style={{ marginLeft: "auto", fontSize: 10, color: "var(--text-muted)", fontFamily: "ui-monospace, 'SF Mono', Menlo, monospace" }}>
+              +{hoveredEvent.t}s
+            </span>
+          </div>
+
+          <div style={{ fontSize: 13, color: "var(--text)", fontWeight: 500, lineHeight: 1.35, marginBottom: 5, fontFamily: "var(--font-serif)" }}>
+            {hoveredEvent.label}
+          </div>
+          <div style={{ fontSize: 11.5, color: "var(--text-secondary)", lineHeight: 1.45 }}>
+            {hoveredEvent.detail}
+          </div>
+        </div>
+      )}
+    </>
+  );
+};
+
+// ─── PANEL: Quick Filters (alternative content for the dead-space slot) ────
+
+const QuickFiltersPanel = () => {
+  const [active, setActive] = React.useState(new Set(["oa"]));
+  const filters = [
+    { id: "oa",     label: "Open Access only",  count: 12 },
+    { id: "sfu",    label: "SFU Library",       count: 23 },
+    { id: "peer",   label: "Peer-reviewed",     count: 41 },
+    { id: "recent", label: "Last 5 years",      count: 28 },
+    { id: "review", label: "Review articles",   count: 6  },
+  ];
+  const toggle = (id) => setActive(s => { const n = new Set(s); n.has(id) ? n.delete(id) : n.add(id); return n; });
+
+  return (
+    <div style={{ flex: 1, minHeight: 0, overflow: "auto", padding: "2px 8px 8px", display: "flex", flexDirection: "column", gap: 2 }}>
+      {filters.map(f => {
+        const on = active.has(f.id);
+        return (
+          <button key={f.id} onClick={() => toggle(f.id)}
+            style={{ display: "flex", alignItems: "center", gap: 8, padding: "5px 8px", borderRadius: 5, border: "none", background: on ? "oklch(28% 0.020 25)" : "transparent", color: on ? "var(--text-sidebar-active)" : "var(--text-sidebar)", fontSize: 11.5, fontFamily: "var(--font-ui)", textAlign: "left", cursor: "pointer", transition: "background 0.12s" }}>
+            <span style={{ width: 12, height: 12, borderRadius: 3, border: `1.5px solid ${on ? "var(--accent-red-mid)" : "oklch(40% 0.010 250)"}`, background: on ? "var(--accent-red-mid)" : "transparent", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
+              {on && <Icon name="check" size={8} style={{ color: "white" }} />}
+            </span>
+            <span style={{ flex: 1 }}>{f.label}</span>
+            <span style={{ fontSize: 10, color: "oklch(55% 0.010 250)", fontFamily: "ui-monospace, 'SF Mono', Menlo, monospace" }}>{f.count}</span>
+          </button>
+        );
+      })}
+    </div>
+  );
+};
+
+// ─── PANEL: AI Notes (alternative content) ─────────────────────────────────
+
+const AiNotesPanel = () => (
+  <div style={{ flex: 1, minHeight: 0, overflow: "auto", padding: "2px 12px 8px" }}>
+    <div style={{ fontSize: 11, color: "var(--text-sidebar)", lineHeight: 1.5, fontFamily: "var(--font-serif)", fontStyle: "italic", marginBottom: 8 }}>
+      "Your last 3 searches converge on graph-based and transformer methods for molecular property prediction."
+    </div>
+    <div style={{ fontSize: 10, color: "oklch(60% 0.010 250)", textTransform: "uppercase", letterSpacing: "0.08em", marginBottom: 4, fontWeight: 500 }}>Suggested next steps</div>
+    <div style={{ display: "flex", flexDirection: "column", gap: 3 }}>
+      {[
+        "→ Narrow to GNN architectures",
+        "→ Add: \"reaction prediction\"",
+        "→ Author cluster: Schwaller, Coley",
+      ].map(s => (
+        <div key={s} style={{ fontSize: 10.5, color: "var(--text-sidebar)", padding: "3px 6px", borderRadius: 4, cursor: "pointer", transition: "background 0.12s" }}
+          onMouseEnter={e => e.currentTarget.style.background = "oklch(26% 0.014 250)"}
+          onMouseLeave={e => e.currentTarget.style.background = "transparent"}>
+          {s}
+        </div>
+      ))}
+    </div>
+  </div>
+);
+
+// ─── DEAD-SPACE PANEL HOST (with selector dropdown + collapse) ─────────────
+
+const PANELS = {
+  replay:  { label: "Session Replay",  icon: "activity",  Comp: SessionReplayPanel },
+  filters: { label: "Quick Filters",   icon: "filter",    Comp: QuickFiltersPanel  },
+  notes:   { label: "AI Notes",        icon: "sparkle",   Comp: AiNotesPanel       },
+};
+
+const SidebarPanel = () => {
+  const [panel, setPanel] = React.useState("replay");
+  const [open, setOpen] = React.useState(true);
+  const [menuOpen, setMenuOpen] = React.useState(false);
+
+  // Close menu on outside click
+  React.useEffect(() => {
+    if (!menuOpen) return;
+    const close = () => setMenuOpen(false);
+    window.addEventListener("click", close);
+    return () => window.removeEventListener("click", close);
+  }, [menuOpen]);
+
+  const cur = PANELS[panel];
+  const Comp = cur.Comp;
+
+  return (
+    <div style={{ flex: open ? 1 : "0 0 auto", minHeight: 0, display: "flex", flexDirection: "column", borderTop: "1px solid oklch(26% 0.010 250)", marginTop: 4 }}>
+      {/* Header with dropdown + collapse */}
+      <div style={{ display: "flex", alignItems: "center", padding: "8px 8px 6px", gap: 4 }}>
+        {/* Selector button (acts as the title) */}
+        <button
+          onClick={(e) => { e.stopPropagation(); setMenuOpen(o => !o); if (!open) setOpen(true); }}
+          style={{ display: "flex", alignItems: "center", gap: 5, padding: "3px 6px 3px 8px", border: "none", background: menuOpen ? "oklch(26% 0.014 250)" : "transparent", borderRadius: 4, cursor: "pointer", color: "oklch(70% 0.010 250)", fontSize: 10, letterSpacing: "0.06em", textTransform: "uppercase", fontWeight: 500, fontFamily: "var(--font-ui)" }}>
+          <Icon name={cur.icon} size={11} style={{ color: "oklch(60% 0.010 250)" }} />
+          {cur.label}
+          <Icon name="chevronDown" size={9} style={{ color: "oklch(55% 0.010 250)", marginLeft: 1 }} />
+        </button>
+
+        {/* Collapse / show */}
+        <button onClick={() => setOpen(o => !o)}
+          title={open ? "Hide panel" : "Show panel"}
+          style={{ marginLeft: "auto", border: "none", background: "transparent", color: "oklch(55% 0.010 250)", cursor: "pointer", padding: 4, borderRadius: 4, display: "flex", alignItems: "center", transition: "color 0.12s, background 0.12s" }}
+          onMouseEnter={e => { e.currentTarget.style.color = "var(--text-sidebar-active)"; e.currentTarget.style.background = "oklch(26% 0.014 250)"; }}
+          onMouseLeave={e => { e.currentTarget.style.color = "oklch(55% 0.010 250)"; e.currentTarget.style.background = "transparent"; }}>
+          <svg width="11" height="11" viewBox="0 0 11 11" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round">
+            {open
+              ? <path d="M2 4l3.5 3.5L9 4" />        /* chevron down → collapses */
+              : <path d="M2 7l3.5-3.5L9 7" />}      {/* chevron up → expands */}
+          </svg>
+        </button>
+
+        {/* Selector menu */}
+        {menuOpen && (
+          <div onClick={(e) => e.stopPropagation()}
+            style={{ position: "absolute", left: 8, marginTop: 28, width: 196, background: "oklch(22% 0.012 250)", border: "1px solid oklch(32% 0.012 250)", borderRadius: 7, padding: 4, boxShadow: "0 8px 24px oklch(0% 0 0 / 0.4)", zIndex: 100 }}>
+            <div style={{ fontSize: 9, color: "oklch(55% 0.010 250)", textTransform: "uppercase", letterSpacing: "0.08em", padding: "5px 8px 4px", fontWeight: 500 }}>Show in this slot</div>
+            {Object.entries(PANELS).map(([key, p]) => (
+              <button key={key}
+                onClick={() => { setPanel(key); setMenuOpen(false); setOpen(true); }}
+                style={{ display: "flex", alignItems: "center", gap: 8, width: "100%", padding: "6px 8px", border: "none", background: panel === key ? "oklch(28% 0.014 250)" : "transparent", color: panel === key ? "var(--text-sidebar-active)" : "var(--text-sidebar)", borderRadius: 4, fontSize: 11.5, cursor: "pointer", textAlign: "left", fontFamily: "var(--font-ui)" }}
+                onMouseEnter={e => { if (panel !== key) e.currentTarget.style.background = "oklch(26% 0.014 250)"; }}
+                onMouseLeave={e => { if (panel !== key) e.currentTarget.style.background = "transparent"; }}>
+                <Icon name={p.icon} size={12} style={{ color: panel === key ? "var(--accent-red-mid)" : "oklch(60% 0.010 250)" }} />
+                <span style={{ flex: 1 }}>{p.label}</span>
+                {panel === key && <Icon name="check" size={11} style={{ color: "var(--accent-red-mid)" }} />}
+              </button>
+            ))}
+            <div style={{ height: 1, background: "oklch(28% 0.012 250)", margin: "4px 4px" }} />
+            <button
+              onClick={() => { setOpen(false); setMenuOpen(false); }}
+              style={{ display: "flex", alignItems: "center", gap: 8, width: "100%", padding: "6px 8px", border: "none", background: "transparent", color: "var(--text-sidebar)", borderRadius: 4, fontSize: 11.5, cursor: "pointer", textAlign: "left", fontFamily: "var(--font-ui)" }}
+              onMouseEnter={e => e.currentTarget.style.background = "oklch(26% 0.014 250)"}
+              onMouseLeave={e => e.currentTarget.style.background = "transparent"}>
+              <Icon name="close" size={11} style={{ color: "oklch(60% 0.010 250)" }} />
+              <span style={{ flex: 1 }}>Hide panel</span>
+            </button>
+          </div>
+        )}
+      </div>
+
+      {/* Body */}
+      {open && <Comp />}
+    </div>
+  );
+};
+
+const Sidebar = ({ screen, setScreen, aiStatus }) => {
+  // Unified suite nav. Items without `page` are screens local to THIS (Search)
+  // app; items with a `page` jump to another app via the shell.
+  const navItems = [
+    { id: "search", icon: "search", label: "Search" },
+    { id: "saved", icon: "bookmark", label: "Saved" },
+    { id: "history", icon: "history", label: "History" },
+    { id: "databases", icon: "database", label: "Databases" },
+    { id: "analytics", icon: "info", label: "About index", page: "analytics" },
+    { id: "index", icon: "server", label: "Index", page: "index" },
+  ];
+  const bottomItems = [
+    { id: "settings", icon: "settings", label: "Settings" },
+    { id: "admin", icon: "admin", label: "Admin" },
+  ];
+  const nav = (item) => {
+    if (item.page) {
+      const files = { analytics: "Research Analytics.html", index: "Index Manager.html" };
+      if (window.parent !== window) window.parent.postMessage({ suiteNav: item.page }, "*");
+      else if (files[item.page]) window.location.href = files[item.page];
+      return;
+    }
+    setScreen(item.id);
+  };
+
+  return (
+    <aside style={{ width: "var(--sidebar-width)", background: "var(--bg-sidebar)", display: "flex", flexDirection: "column", height: "100%", flexShrink: 0, position: "relative" }}>
+      {/* Logo */}
+      <div style={{ padding: "20px 18px 16px", borderBottom: "1px solid oklch(28% 0.010 250)" }}>
+        <div style={{ display: "flex", alignItems: "center", gap: 9 }}>
+          <div style={{ width: 28, height: 28, borderRadius: 6, background: "var(--accent-red)", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
+            <Icon name="search" size={14} style={{ color: "white" }} />
+          </div>
+          <div>
+            <div style={{ color: "var(--text-sidebar-active)", fontSize: 13, fontWeight: 600, lineHeight: 1.2 }}>SFU Library</div>
+            <div style={{ color: "oklch(55% 0.010 250)", fontSize: 11, lineHeight: 1.2 }}>Academic Search</div>
+          </div>
+        </div>
+      </div>
+
+      {/* Nav */}
+      <nav style={{ padding: "10px 8px 6px", display: "flex", flexDirection: "column", gap: 2 }} data-comment-anchor="sidebar-nav">
+        {navItems.map(item => (
+          <button key={item.id} onClick={() => nav(item)} style={{ display: "flex", alignItems: "center", gap: 10, padding: "8px 10px", borderRadius: 6, border: "none", background: screen === item.id ? "var(--bg-sidebar-active)" : "transparent", color: screen === item.id ? "var(--text-sidebar-active)" : "var(--text-sidebar)", fontSize: 13, fontWeight: screen === item.id ? 500 : 400, textAlign: "left", width: "100%", transition: "background 0.15s, color 0.15s", cursor: "pointer" }}
+            onMouseEnter={e => { if (screen !== item.id) e.currentTarget.style.background = "var(--bg-sidebar-hover)"; }}
+            onMouseLeave={e => { if (screen !== item.id) e.currentTarget.style.background = "transparent"; }}>
+            <Icon name={item.icon} size={15} />
+            {item.label}
+          </button>
+        ))}
+      </nav>
+
+      {/* Dead-space panel — Session Replay by default; selectable / hideable */}
+      <SidebarPanel />
+
+      {/* AI Status */}
+      <div style={{ margin: "0 8px 10px", padding: "10px 12px", borderRadius: 7, background: aiStatus === "online" ? "oklch(28% 0.035 145)" : "oklch(28% 0.012 250)", border: `1px solid ${aiStatus === "online" ? "oklch(36% 0.055 145)" : "oklch(32% 0.010 250)"}` }}>
+        <div style={{ display: "flex", alignItems: "center", gap: 7 }}>
+          <div style={{ width: 7, height: 7, borderRadius: "50%", background: aiStatus === "online" ? "oklch(72% 0.17 145)" : "oklch(55% 0.010 250)", flexShrink: 0 }} />
+          <div>
+            <div style={{ fontSize: 11, color: aiStatus === "online" ? "oklch(72% 0.17 145)" : "oklch(55% 0.010 250)", fontWeight: 500 }}>
+              AI {aiStatus === "online" ? "Online" : "Offline"}
+            </div>
+            <div style={{ fontSize: 10, color: "oklch(50% 0.010 250)", marginTop: 1 }}>
+              {aiStatus === "online" ? "Qwen3-1.7B · Ollama" : "Keyword fallback active"}
+            </div>
+          </div>
+        </div>
+      </div>
+
+      {/* Bottom */}
+      <div style={{ padding: "8px", borderTop: "1px solid oklch(28% 0.010 250)", display: "flex", flexDirection: "column", gap: 2 }}>
+        {bottomItems.map(item => (
+          <button key={item.id} onClick={() => setScreen(item.id)} style={{ display: "flex", alignItems: "center", gap: 10, padding: "7px 10px", borderRadius: 6, border: "none", background: screen === item.id ? "var(--bg-sidebar-active)" : "transparent", color: screen === item.id ? "var(--text-sidebar-active)" : "var(--text-sidebar)", fontSize: 13, fontWeight: screen === item.id ? 500 : 400, textAlign: "left", width: "100%", cursor: "pointer" }}
+            onMouseEnter={e => { if (screen !== item.id) e.currentTarget.style.background = "var(--bg-sidebar-hover)"; }}
+            onMouseLeave={e => { if (screen !== item.id) e.currentTarget.style.background = "transparent"; }}>
+            <Icon name={item.icon} size={15} />
+            {item.label}
+          </button>
+        ))}
+      </div>
+    </aside>
+  );
+};
+
+// ─── SEARCH BAR ─────────────────────────────────────────────────────────────
+
+const SearchBar = ({ query, setQuery, onSearch, loading, filters, setFilters, compact = false }) => {
+  const [focused, setFocused] = React.useState(false);
+
+  const handleKey = (e) => {
+    if (e.key === "Enter") onSearch();
+  };
+
+  return (
+    <div style={{ width: "100%" }}>
+      <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
+        <div style={{ flex: 1, display: "flex", alignItems: "center", gap: 0, background: "var(--bg-panel)", border: `1.5px solid ${focused ? "var(--accent-red)" : "var(--border)"}`, borderRadius: compact ? 8 : 10, padding: compact ? "0 12px" : "0 14px", boxShadow: focused ? "0 0 0 3px var(--accent-red-light)" : "none", transition: "border-color 0.15s, box-shadow 0.15s" }}>
+          <Icon name="search" size={16} style={{ color: focused ? "var(--accent-red)" : "var(--text-muted)", flexShrink: 0, transition: "color 0.15s" }} />
+          <input
+            value={query}
+            onChange={e => setQuery(e.target.value)}
+            onKeyDown={handleKey}
+            onFocus={() => setFocused(true)}
+            onBlur={() => setFocused(false)}
+            placeholder="Search the library — try natural language…"
+            style={{ flex: 1, border: "none", background: "transparent", outline: "none", padding: compact ? "9px 10px" : "12px 10px", fontSize: compact ? 13 : 15, color: "var(--text)", fontFamily: "var(--font-ui)" }}
+          />
+          {query && (
+            <button onClick={() => setQuery("")} style={{ border: "none", background: "transparent", padding: 4, color: "var(--text-muted)", cursor: "pointer", borderRadius: 4, display: "flex", alignItems: "center" }}>
+              <Icon name="close" size={14} />
+            </button>
+          )}
+        </div>
+        <button onClick={onSearch} disabled={loading} style={{ padding: compact ? "9px 16px" : "12px 20px", background: "var(--accent-red)", color: "white", border: "none", borderRadius: compact ? 8 : 10, fontSize: 13, fontWeight: 500, cursor: loading ? "not-allowed" : "pointer", opacity: loading ? 0.7 : 1, display: "flex", alignItems: "center", gap: 6, whiteSpace: "nowrap", flexShrink: 0 }}>
+          {loading ? <div style={{ width: 14, height: 14, border: "2px solid rgba(255,255,255,0.4)", borderTopColor: "white", borderRadius: "50%", animation: "spin 0.7s linear infinite" }} /> : <Icon name="search" size={14} />}
+          {compact ? "Search" : "Search"}
+        </button>
+      </div>
+
+      {/* Filter row */}
+      {!compact && (
+        <div style={{ display: "flex", gap: 8, marginTop: 8, flexWrap: "wrap" }}>
+          {[
+            { key: "type", label: "Type", options: ["All", "Article", "Book", "Thesis", "Conference"] },
+            { key: "date", label: "Date", options: ["Any time", "Last year", "Last 5 years", "Last 10 years"] },
+            { key: "access", label: "Access", options: ["Any", "Open Access", "SFU Library", "Unpaywall"] },
+            { key: "sort", label: "Sort", options: ["Relevance", "Most Recent", "Most Cited", "Title A–Z"] },
+          ].map(f => (
+            <div key={f.key} style={{ position: "relative" }}>
+              <select
+                value={filters[f.key] || f.options[0]}
+                onChange={e => setFilters({ ...filters, [f.key]: e.target.value })}
+                style={{ appearance: "none", background: "var(--bg-panel)", border: "1px solid var(--border)", borderRadius: 6, padding: "5px 24px 5px 10px", fontSize: 12, color: "var(--text)", cursor: "pointer", fontFamily: "var(--font-ui)" }}
+              >
+                {f.options.map(o => <option key={o}>{o}</option>)}
+              </select>
+              <Icon name="chevronDown" size={12} style={{ position: "absolute", right: 6, top: "50%", transform: "translateY(-50%)", color: "var(--text-muted)", pointerEvents: "none" }} />
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+};
+
+// ─── AI INTERPRETATION BOX ───────────────────────────────────────────────────
+
+const AIInterpretationBox = ({ query, expanded }) => {
+  const [open, setOpen] = React.useState(true);
+  if (!query) return null;
+  return (
+    <div style={{ background: "var(--bg-panel)", border: "1px solid var(--border-light)", borderRadius: 8, padding: "10px 14px", marginBottom: 16 }}>
+      <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", gap: 8 }}>
+        <div style={{ display: "flex", gap: 8, alignItems: "flex-start", flex: 1 }}>
+          <Icon name="sparkle" size={14} style={{ color: "var(--accent-red)", marginTop: 2, flexShrink: 0 }} />
+          <div>
+            <span style={{ fontSize: 12, color: "var(--text-secondary)", fontWeight: 500 }}>AI understood: </span>
+            <span style={{ fontSize: 12, color: "var(--text)", fontFamily: "var(--font-ui)" }}>
+              <strong style={{ fontWeight: 600 }}>"machine learning"</strong> AND <strong style={{ fontWeight: 600 }}>"drug discovery"</strong>
+            </span>
+            {open && (
+              <div style={{ marginTop: 5, display: "flex", flexWrap: "wrap", gap: 4 }}>
+                <span style={{ fontSize: 11, color: "var(--text-muted)", marginRight: 4 }}>Expanded with:</span>
+                {["neural networks", "binding affinity", "QSAR", "computational pharmacology", "deep learning", "drug-target interaction"].map(t => (
+                  <span key={t} style={{ fontSize: 11, padding: "2px 7px", background: "var(--accent-red-light)", color: "var(--accent-red)", borderRadius: 3, fontWeight: 400 }}>{t}</span>
+                ))}
+              </div>
+            )}
+          </div>
+        </div>
+        <button onClick={() => setOpen(!open)} style={{ border: "none", background: "transparent", color: "var(--text-muted)", cursor: "pointer", padding: 2, flexShrink: 0, display: "flex", alignItems: "center" }}>
+          <Icon name={open ? "chevronDown" : "chevronRight"} size={14} />
+        </button>
+      </div>
+    </div>
+  );
+};
+
+// ─── SOURCE THUMBNAIL (journal cover preview) ────────────────────────────────
+
+const SOURCE_COVERS = {
+  "Molecular Informatics":            { tone: "oklch(38% 0.12 265)", fg: "oklch(96% 0.02 80)", pub: "Wiley", motif: "grid" },
+  "Drug Discovery Today":             { tone: "oklch(34% 0.10 25)",  fg: "oklch(96% 0.02 80)", pub: "Elsevier", motif: "bar" },
+  "Nature Machine Intelligence":      { tone: "oklch(22% 0.018 250)", fg: "oklch(96% 0.02 80)", pub: "Springer Nature", motif: "rule" },
+  "Journal of Chemical Information and Modeling": { tone: "oklch(40% 0.08 145)", fg: "oklch(96% 0.02 80)", pub: "ACS", motif: "diag" },
+  "Science":                          { tone: "oklch(34% 0.13 30)",  fg: "oklch(96% 0.02 80)", pub: "AAAS", motif: "rule" },
+  "ACS Central Science":              { tone: "oklch(45% 0.13 200)", fg: "oklch(96% 0.02 80)", pub: "ACS", motif: "grid" },
+  "Nature Communications":            { tone: "oklch(28% 0.06 60)",  fg: "oklch(96% 0.02 80)", pub: "Springer Nature", motif: "bar" },
+};
+
+const SourceThumbnail = ({ result }) => {
+  const cfg = SOURCE_COVERS[result.source] || { tone: "oklch(36% 0.04 250)", fg: "oklch(96% 0.02 80)", pub: "—", motif: "rule" };
+  const titleAbbr = result.source
+    .replace(/Journal of /i, "J. ")
+    .replace(/and /gi, "& ");
+
+  return (
+    <div
+      aria-hidden="true"
+      style={{
+        width: 64,
+        height: 86,
+        flexShrink: 0,
+        borderRadius: 3,
+        background: cfg.tone,
+        color: cfg.fg,
+        boxShadow: "0 1px 2px oklch(0% 0 0 / 0.20), 0 4px 10px oklch(0% 0 0 / 0.10), inset -1px 0 0 oklch(0% 0 0 / 0.15), inset 1px 0 0 oklch(100% 0 0 / 0.06)",
+        position: "relative",
+        overflow: "hidden",
+        fontFamily: "var(--font-serif)",
+        display: "flex",
+        flexDirection: "column",
+        padding: "6px 5px 5px",
+      }}
+    >
+      {/* spine highlight */}
+      <div style={{ position: "absolute", left: 0, top: 0, bottom: 0, width: 3, background: "linear-gradient(to right, oklch(0% 0 0 / 0.18), transparent)" }} />
+
+      {/* publisher tag */}
+      <div style={{ fontSize: 5.5, fontFamily: "var(--font-ui)", letterSpacing: "0.12em", textTransform: "uppercase", opacity: 0.7, fontWeight: 500 }}>
+        {cfg.pub}
+      </div>
+
+      {/* journal title */}
+      <div style={{ fontSize: titleAbbr.length > 18 ? 8 : 9.5, fontWeight: 500, lineHeight: 1.05, marginTop: 3, textWrap: "balance" }}>
+        {titleAbbr}
+      </div>
+
+      {/* motif */}
+      <div style={{ flex: 1, marginTop: 4, position: "relative", opacity: 0.55 }}>
+        {cfg.motif === "grid" && (
+          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 1.5, height: "100%" }}>
+            {Array.from({ length: 9 }).map((_, i) => (
+              <div key={i} style={{ background: cfg.fg, opacity: 0.10 + (i % 3) * 0.08, borderRadius: 1 }} />
+            ))}
+          </div>
+        )}
+        {cfg.motif === "bar" && (
+          <div style={{ display: "flex", alignItems: "flex-end", gap: 1.5, height: "100%" }}>
+            {[0.4, 0.7, 0.55, 0.85, 0.3, 0.6, 0.45].map((h, i) => (
+              <div key={i} style={{ flex: 1, height: `${h * 100}%`, background: cfg.fg, opacity: 0.45, borderRadius: 0.5 }} />
+            ))}
+          </div>
+        )}
+        {cfg.motif === "rule" && (
+          <div style={{ display: "flex", flexDirection: "column", gap: 2, marginTop: 2 }}>
+            {[100, 80, 60, 90, 70].map((w, i) => (
+              <div key={i} style={{ height: 1, width: `${w}%`, background: cfg.fg, opacity: 0.35 }} />
+            ))}
+          </div>
+        )}
+        {cfg.motif === "diag" && (
+          <div style={{ height: "100%", background: `repeating-linear-gradient(45deg, transparent 0 4px, ${cfg.fg.replace(")", " / 0.18)")} 4px 5px)` }} />
+        )}
+      </div>
+
+      {/* footer: vol / year */}
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-end", fontSize: 6, fontFamily: "var(--font-ui)", letterSpacing: "0.06em", opacity: 0.85, fontWeight: 500, marginTop: 3 }}>
+        <span>VOL {result.volume}</span>
+        <span>{result.year}</span>
+      </div>
+    </div>
+  );
+};
+
+// ─── RESULT CARD ─────────────────────────────────────────────────────────────
+
+// Shared registry of every result the user has seen, so the Saved screen can
+// resolve bookmarked ids even when results came from the live backend (which
+// returns papers not present in the sample data).
+window.__sfuResults = window.__sfuResults || {};
+
+const ResultCard = ({ result, index, onClick, saved, onSave }) => {
+  const [copied, setCopied] = React.useState(null);
+  React.useEffect(() => { window.__sfuResults[result.id] = result; }, [result]);
+
+  const handleCopy = (format, e) => {
+    e.stopPropagation();
+    const citations = {
+      APA: `${result.authors.join(", ")} (${result.year}). ${result.title}. *${result.source}*, *${result.volume}*(${result.issue}). https://doi.org/${result.doi}`,
+      MLA: `${result.authors[0]} et al. "${result.title}." *${result.source}* ${result.volume}.${result.issue} (${result.year}).`,
+      BibTeX: `@article{${result.id},\n  title={${result.title}},\n  author={${result.authors.join(" and ")}},\n  journal={${result.source}},\n  year={${result.year}}\n}`,
+    };
+    setCopied(format);
+    setTimeout(() => setCopied(null), 2000);
+  };
+
+  return (
+    <div
+      onClick={() => onClick(result)}
+      style={{ background: "var(--bg-panel)", border: "1px solid var(--border-light)", borderRadius: 10, padding: "16px 18px", marginBottom: 8, cursor: "pointer", transition: "border-color 0.15s, box-shadow 0.15s" }}
+      onMouseEnter={e => { e.currentTarget.style.borderColor = "var(--border)"; e.currentTarget.style.boxShadow = "var(--shadow-sm)"; }}
+      onMouseLeave={e => { e.currentTarget.style.borderColor = "var(--border-light)"; e.currentTarget.style.boxShadow = "none"; }}
+    >
+      <div style={{ display: "flex", gap: 14 }}>
+        {/* Index */}
+        <div style={{ width: 22, flexShrink: 0, color: "var(--text-muted)", fontSize: 12, paddingTop: 3, textAlign: "right" }}>{index}.</div>
+
+        {/* Source thumbnail */}
+        <SourceThumbnail result={result} />
+
+        {/* Content */}
+        <div style={{ flex: 1, minWidth: 0 }}>
+          <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", gap: 12, marginBottom: 4 }}>
+            <h3 style={{ fontFamily: "var(--font-serif)", fontSize: 15, fontWeight: 500, color: "var(--text)", lineHeight: 1.4, margin: 0, flex: 1, textWrap: "pretty" }}>
+              {result.title}
+            </h3>
+            <button onClick={e => { e.stopPropagation(); onSave(result.id); }} style={{ border: "none", background: "transparent", color: saved ? "var(--accent-red)" : "var(--text-muted)", cursor: "pointer", padding: 4, flexShrink: 0, display: "flex", borderRadius: 4, transition: "color 0.15s" }}>
+              <Icon name="bookmark" size={14} style={{ fill: saved ? "var(--accent-red)" : "none" }} />
+            </button>
+          </div>
+
+          {/* Authors + source */}
+          <p style={{ fontSize: 12, color: "var(--text-secondary)", marginBottom: 6, lineHeight: 1.4 }}>
+            {result.authors.slice(0, 3).join(", ")}{result.authors.length > 3 ? " et al." : ""} · {result.source} · {result.year}
+            {result.volume ? ` · Vol. ${result.volume}` : ""}
+          </p>
+
+          {/* TLDR */}
+          {result.tldr && (
+            <p style={{ fontSize: 12.5, color: "var(--text-secondary)", marginBottom: 8, lineHeight: 1.55, display: "-webkit-box", WebkitLineClamp: 2, WebkitBoxOrient: "vertical", overflow: "hidden" }}>
+              {result.tldr}
+            </p>
+          )}
+
+          {/* Footer row */}
+          <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
+            <AccessBadge access={result.access} compact />
+            <CitationCount n={result.cited_by} />
+
+            <div style={{ marginLeft: "auto", display: "flex", gap: 4, flexShrink: 0 }} onClick={e => e.stopPropagation()}>
+              {["APA", "MLA", "BibTeX"].map(fmt => (
+                <button key={fmt} onClick={e => handleCopy(fmt, e)} style={{ fontSize: 11, padding: "3px 7px", border: "1px solid var(--border)", borderRadius: 4, background: copied === fmt ? "var(--accent-teal-light)" : "var(--bg)", color: copied === fmt ? "var(--accent-teal)" : "var(--text-secondary)", cursor: "pointer", fontFamily: "var(--font-ui)", display: "flex", alignItems: "center", gap: 3, transition: "all 0.15s" }}>
+                  {copied === fmt ? <Icon name="check" size={10} /> : <Icon name="copy" size={10} />}
+                  {fmt}
+                </button>
+              ))}
+              <button onClick={e => e.stopPropagation()} style={{ fontSize: 11, padding: "3px 7px", border: "1px solid var(--border)", borderRadius: 4, background: "var(--bg)", color: "var(--text-secondary)", cursor: "pointer", fontFamily: "var(--font-ui)", display: "flex", alignItems: "center", gap: 3 }}>
+                <Icon name="zotero" size={10} />
+                Zotero
+              </button>
+              <a href="#" onClick={e => e.stopPropagation()} style={{ fontSize: 11, padding: "3px 7px", border: "1px solid var(--border)", borderRadius: 4, background: "var(--bg)", color: "var(--text-secondary)", cursor: "pointer", fontFamily: "var(--font-ui)", display: "flex", alignItems: "center", gap: 3, textDecoration: "none" }}>
+                <Icon name="externalLink" size={10} />
+                {result.access?.type === "open_access" ? "PDF" : "Access"}
+              </a>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+};
+
+// ─── RESULT DETAIL PANEL ─────────────────────────────────────────────────────
+
+const ResultDetail = ({ result, onClose, saved, onSave }) => {
+  const [activeTab, setActiveTab] = React.useState("abstract");
+  const [copied, setCopied] = React.useState(null);
+
+  if (!result) return null;
+
+  const citationFormats = {
+    APA: `${result.authors.join(", ")} (${result.year}). ${result.title}. *${result.source}*, *${result.volume}*(${result.issue}). https://doi.org/${result.doi}`,
+    MLA: `${result.authors[0]} et al. "${result.title}." *${result.source}* ${result.volume}.${result.issue} (${result.year}).`,
+    Chicago: `${result.authors.join(", ")}. "${result.title}." *${result.source}* ${result.volume}, no. ${result.issue} (${result.year}).`,
+    BibTeX: `@article{${result.id},\n  title     = {${result.title}},\n  author    = {${result.authors.join(" and ")}},\n  journal   = {${result.source}},\n  volume    = {${result.volume}},\n  number    = {${result.issue}},\n  year      = {${result.year}},\n  doi       = {${result.doi}}\n}`,
+  };
+
+  return (
+    <div style={{ width: 400, borderLeft: "1px solid var(--border)", background: "var(--bg-panel)", display: "flex", flexDirection: "column", height: "100%", flexShrink: 0 }}>
+      {/* Header */}
+      <div style={{ padding: "14px 16px", borderBottom: "1px solid var(--border-light)", display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+        <span style={{ fontSize: 12, fontWeight: 500, color: "var(--text-secondary)" }}>Paper Details</span>
+        <button onClick={onClose} style={{ border: "none", background: "transparent", cursor: "pointer", color: "var(--text-muted)", padding: 4, borderRadius: 4, display: "flex" }}>
+          <Icon name="close" size={14} />
+        </button>
+      </div>
+
+      <div style={{ flex: 1, overflow: "auto", padding: "16px" }}>
+        {/* Title */}
+        <h2 style={{ fontFamily: "var(--font-serif)", fontSize: 16, fontWeight: 500, lineHeight: 1.45, color: "var(--text)", marginBottom: 10, textWrap: "pretty" }}>
+          {result.title}
+        </h2>
+
+        {/* Authors */}
+        <p style={{ fontSize: 12.5, color: "var(--text-secondary)", marginBottom: 10, lineHeight: 1.5 }}>
+          {result.authors.join(", ")}
+        </p>
+
+        {/* Meta grid */}
+        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "8px 16px", marginBottom: 14, padding: "10px 12px", background: "var(--bg)", borderRadius: 7 }}>
+          {[
+            { label: "Journal", value: result.source },
+            { label: "Year", value: result.year },
+            { label: "Volume", value: `${result.volume} (${result.issue})` },
+            { label: "Citations", value: result.cited_by.toLocaleString() },
+            { label: "Type", value: result.type },
+            { label: "DOI", value: result.doi.slice(0, 24) + "…" },
+          ].map(({ label, value }) => (
+            <div key={label}>
+              <div style={{ fontSize: 10, color: "var(--text-muted)", textTransform: "uppercase", letterSpacing: "0.06em", marginBottom: 2 }}>{label}</div>
+              <div style={{ fontSize: 12, color: "var(--text)", fontWeight: 500 }}>{value}</div>
+            </div>
+          ))}
+        </div>
+
+        {/* Access */}
+        <div style={{ padding: "10px 12px", borderRadius: 7, background: result.access?.type === "open_access" ? "var(--accent-teal-light)" : result.access?.type.startsWith("sfu") ? "var(--accent-red-light)" : "var(--bg)", marginBottom: 14, display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8 }}>
+          <div>
+            <div style={{ fontSize: 11, fontWeight: 600, color: result.access?.type === "open_access" ? "var(--accent-teal)" : result.access?.type.startsWith("sfu") ? "var(--accent-red)" : "var(--text-muted)", marginBottom: 2 }}>
+              {result.access?.type === "open_access" ? "Open Access" : result.access?.type === "unpaywall_oa" ? "Free Copy Available" : result.access?.type.startsWith("sfu") ? "SFU Library Access" : "Limited Access"}
+            </div>
+            <div style={{ fontSize: 11, color: "var(--text-secondary)" }}>{result.access?.label}</div>
+          </div>
+          <a href="#" style={{ fontSize: 11, padding: "5px 10px", background: "white", border: "none", borderRadius: 5, color: "var(--accent-red)", fontWeight: 600, cursor: "pointer", textDecoration: "none", fontFamily: "var(--font-ui)", display: "flex", alignItems: "center", gap: 4 }}>
+            <Icon name="externalLink" size={11} />
+            Open
+          </a>
+        </div>
+
+        {/* Topics */}
+        <div style={{ display: "flex", flexWrap: "wrap", gap: 5, marginBottom: 14 }}>
+          {result.topics?.map(t => (
+            <span key={t} style={{ fontSize: 11, padding: "3px 8px", background: "var(--bg)", border: "1px solid var(--border)", borderRadius: 4, color: "var(--text-secondary)" }}>{t}</span>
+          ))}
+        </div>
+
+        {/* Tabs */}
+        <div style={{ display: "flex", borderBottom: "1px solid var(--border-light)", marginBottom: 12 }}>
+          {["abstract", "citations", "export"].map(tab => (
+            <button key={tab} onClick={() => setActiveTab(tab)} style={{ flex: 1, padding: "7px 0", border: "none", background: "transparent", fontSize: 12, fontWeight: activeTab === tab ? 500 : 400, color: activeTab === tab ? "var(--accent-red)" : "var(--text-muted)", cursor: "pointer", borderBottom: `2px solid ${activeTab === tab ? "var(--accent-red)" : "transparent"}`, transition: "color 0.15s", fontFamily: "var(--font-ui)", textTransform: "capitalize" }}>
+              {tab}
+            </button>
+          ))}
+        </div>
+
+        {activeTab === "abstract" && (
+          <div>
+            {result.tldr && (
+              <div style={{ padding: "8px 10px", background: "var(--accent-red-light)", borderRadius: 6, marginBottom: 10 }}>
+                <div style={{ fontSize: 10, fontWeight: 600, color: "var(--accent-red)", textTransform: "uppercase", letterSpacing: "0.06em", marginBottom: 4 }}>AI Summary (TLDR)</div>
+                <p style={{ fontSize: 12.5, color: "var(--text)", lineHeight: 1.5 }}>{result.tldr}</p>
+              </div>
+            )}
+            <p style={{ fontSize: 12.5, color: "var(--text-secondary)", lineHeight: 1.65 }}>{result.abstract}</p>
+          </div>
+        )}
+
+        {activeTab === "citations" && (
+          <div>
+            <p style={{ fontSize: 12, color: "var(--text-muted)", marginBottom: 10 }}>Cited by {result.cited_by.toLocaleString()} works via Semantic Scholar</p>
+            {[1, 2, 3].map(i => (
+              <div key={i} style={{ padding: "10px 0", borderBottom: "1px solid var(--border-light)" }}>
+                <p style={{ fontSize: 12, fontFamily: "var(--font-serif)", color: "var(--text)", lineHeight: 1.4, marginBottom: 4 }}>Related paper title {i} citing this work in the context of drug discovery</p>
+                <p style={{ fontSize: 11, color: "var(--text-muted)" }}>Author et al. · Journal · 202{i + 2}</p>
+              </div>
+            ))}
+            <button style={{ marginTop: 10, fontSize: 12, color: "var(--accent-red)", background: "transparent", border: "none", cursor: "pointer", fontFamily: "var(--font-ui)", display: "flex", alignItems: "center", gap: 4 }}>
+              View all on Semantic Scholar <Icon name="externalLink" size={12} />
+            </button>
+          </div>
+        )}
+
+        {activeTab === "export" && (
+          <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+            {Object.entries(citationFormats).map(([fmt, text]) => (
+              <div key={fmt} style={{ border: "1px solid var(--border)", borderRadius: 7, overflow: "hidden" }}>
+                <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "7px 10px", background: "var(--bg)", borderBottom: "1px solid var(--border)" }}>
+                  <span style={{ fontSize: 11, fontWeight: 600, color: "var(--text-secondary)", letterSpacing: "0.04em" }}>{fmt}</span>
+                  <button onClick={() => setCopied(fmt)} style={{ fontSize: 10, padding: "2px 8px", background: copied === fmt ? "var(--accent-teal-light)" : "white", color: copied === fmt ? "var(--accent-teal)" : "var(--text-secondary)", border: "1px solid var(--border)", borderRadius: 4, cursor: "pointer", fontFamily: "var(--font-ui)", display: "flex", alignItems: "center", gap: 3 }}>
+                    {copied === fmt ? <><Icon name="check" size={10} /> Copied</> : <><Icon name="copy" size={10} /> Copy</>}
+                  </button>
+                </div>
+                <div style={{ padding: "8px 10px", fontSize: 11, color: "var(--text-secondary)", lineHeight: 1.6, fontFamily: fmt === "BibTeX" ? "monospace" : "var(--font-ui)", whiteSpace: "pre-wrap", maxHeight: 80, overflow: "auto" }}>
+                  {text}
+                </div>
+              </div>
+            ))}
+            <button style={{ marginTop: 4, padding: "8px 0", background: "var(--bg)", border: "1px solid var(--border)", borderRadius: 7, fontSize: 12, color: "var(--text-secondary)", cursor: "pointer", fontFamily: "var(--font-ui)", display: "flex", alignItems: "center", justifyContent: "center", gap: 6, width: "100%" }}>
+              <Icon name="zotero" size={13} />
+              Save all to Zotero…
+            </button>
+          </div>
+        )}
+      </div>
+
+      {/* Footer actions */}
+      <div style={{ borderTop: "1px solid var(--border-light)", padding: "12px 16px", display: "flex", gap: 8 }}>
+        <button onClick={() => onSave(result.id)} style={{ flex: 1, padding: "7px 0", background: saved ? "var(--accent-red-light)" : "var(--bg)", border: `1px solid ${saved ? "var(--accent-red-mid)" : "var(--border)"}`, borderRadius: 6, fontSize: 12, color: saved ? "var(--accent-red)" : "var(--text-secondary)", cursor: "pointer", fontFamily: "var(--font-ui)", display: "flex", alignItems: "center", justifyContent: "center", gap: 5 }}>
+          <Icon name="bookmark" size={13} style={{ fill: saved ? "var(--accent-red)" : "none" }} />
+          {saved ? "Saved" : "Save"}
+        </button>
+        <button style={{ flex: 1, padding: "7px 0", background: "var(--bg)", border: "1px solid var(--border)", borderRadius: 6, fontSize: 12, color: "var(--text-secondary)", cursor: "pointer", fontFamily: "var(--font-ui)", display: "flex", alignItems: "center", justifyContent: "center", gap: 5 }}>
+          <Icon name="zotero" size={13} />
+          Zotero
+        </button>
+        <a href="#" style={{ flex: 1, padding: "7px 0", background: "var(--accent-red)", border: "none", borderRadius: 6, fontSize: 12, color: "white", cursor: "pointer", fontFamily: "var(--font-ui)", display: "flex", alignItems: "center", justifyContent: "center", gap: 5, textDecoration: "none", fontWeight: 500 }}>
+          <Icon name="externalLink" size={13} />
+          Access
+        </a>
+      </div>
+    </div>
+  );
+};
+
+// ─── SEARCH SCREEN ───────────────────────────────────────────────────────────
+
+// ─── SEARCH PROVENANCE CARD ──────────────────────────────────────────────────
+// Travels with the result set. A plain-language account of what THIS search
+// actually covered and where it is blind. Every field maps to a value the
+// retriever already exposes via get_search_provenance — nothing is invented.
+
+const PROV_SUBJECTS = ["Natural Sciences", "Health & Medicine", "Social Sciences", "Engineering & CS", "Arts & Humanities"];
+const PROV_ERAS = ["pre-2010", "2010–present"];
+const provKey = (s, e) => s + "|" + e;
+
+const EnginePill = ({ label, ok }) => (
+  <span style={{
+    display: "inline-flex", alignItems: "center", gap: 5, padding: "3px 9px", borderRadius: 5,
+    fontSize: 11.5, fontWeight: 500, whiteSpace: "nowrap",
+    background: ok ? "var(--accent-teal-light)" : "var(--accent-red-light)",
+    color: ok ? "var(--accent-teal)" : "var(--accent-red)",
+    border: "1px solid " + (ok ? "transparent" : "var(--accent-red)"),
+  }}>
+    <Icon name={ok ? "check" : "close"} size={11} />
+    {label}
+  </span>
+);
+
+const ProvRow = ({ tone = "neutral", icon, title, children, muted = false }) => {
+  const tones = {
+    warn:    { bg: "var(--accent-amber-light)", ic: "oklch(52% 0.13 75)" },
+    alert:   { bg: "var(--accent-red-light)",   ic: "var(--accent-red)" },
+    ok:      { bg: "var(--accent-teal-light)",  ic: "var(--accent-teal)" },
+    neutral: { bg: "var(--bg)",                 ic: "var(--text-muted)" },
+  };
+  const t = tones[tone];
+  return (
+    <div style={{ display: "flex", gap: 12, padding: muted ? "11px 0 2px" : "14px 0", borderTop: "1px solid var(--border-light)" }}>
+      <span style={{ width: 26, height: 26, borderRadius: 7, background: t.bg, color: t.ic, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0, marginTop: 1 }}>
+        <Icon name={icon} size={muted ? 13 : 15} />
+      </span>
+      <div style={{ flex: 1, minWidth: 0 }}>
+        <div style={{ fontSize: muted ? 12 : 13.5, fontWeight: 600, color: muted ? "var(--text-secondary)" : "var(--text)", marginBottom: 3 }}>{title}</div>
+        <div style={{ fontSize: muted ? 11.5 : 12.5, color: muted ? "var(--text-muted)" : "var(--text-secondary)", lineHeight: 1.55 }}>{children}</div>
+      </div>
+    </div>
+  );
+};
+
+const ProvAction = ({ icon, children, onClick, busy }) => (
+  <button onClick={onClick} disabled={busy} style={{
+    display: "inline-flex", alignItems: "center", gap: 6, padding: "6px 11px", borderRadius: 6,
+    border: "1px solid var(--accent-red)", background: "var(--bg-panel)", color: "var(--accent-red)",
+    fontSize: 12, fontWeight: 500, cursor: busy ? "default" : "pointer", opacity: busy ? 0.6 : 1,
+  }}
+  onMouseEnter={e => { if (!busy) e.currentTarget.style.background = "var(--accent-red-light)"; }}
+  onMouseLeave={e => { e.currentTarget.style.background = "var(--bg-panel)"; }}>
+    <Icon name={icon} size={13} />
+    {children}
+  </button>
+);
+
+const SearchProvenanceCard = ({ degraded }) => {
+  const [open, setOpen] = React.useState(true);
+  // The router sent this query to a single discipline bucket (Social Sciences),
+  // and the default __recent persona pruned everything before 2010.
+  const [searched, setSearched] = React.useState(() => new Set([provKey("Social Sciences", "2010–present")]));
+  const [unpacking, setUnpacking] = React.useState(false);
+  const [profileOpen, setProfileOpen] = React.useState(false);
+
+  const total = PROV_SUBJECTS.length * PROV_ERAS.length; // 10
+  const count = searched.size;
+  const full = count === total;
+  const isOn = (s, e) => searched.has(provKey(s, e));
+  const eraPruned = PROV_SUBJECTS.some(s => isOn(s, "2010–present") && !isOn(s, "pre-2010"));
+  const missingSubjects = PROV_SUBJECTS.filter(s => !isOn(s, "2010–present") && !isOn(s, "pre-2010"));
+
+  const widen = () => {
+    setUnpacking(true);
+    setProfileOpen(false);
+    setTimeout(() => {
+      const all = new Set();
+      PROV_SUBJECTS.forEach(s => PROV_ERAS.forEach(e => all.add(provKey(s, e))));
+      setSearched(all);
+      setUnpacking(false);
+    }, 750);
+  };
+  const removeDate = () => setSearched(prev => {
+    const n = new Set(prev);
+    PROV_SUBJECTS.forEach(s => { if (n.has(provKey(s, "2010–present"))) n.add(provKey(s, "pre-2010")); });
+    return n;
+  });
+  const addSubject = (s) => { setSearched(prev => new Set(prev).add(provKey(s, "2010–present"))); setProfileOpen(false); };
+
+  const goAbout = () => { if (window.parent !== window) window.parent.postMessage({ suiteNav: "analytics" }, "*"); else window.location.href = "Research Analytics.html"; };
+
+  const sev = degraded ? { color: "var(--accent-red)", bg: "var(--accent-red-light)" }
+            : full ? { color: "var(--accent-teal)", bg: "var(--accent-teal-light)" }
+            : { color: "oklch(52% 0.13 75)", bg: "var(--accent-amber-light)" };
+
+  return (
+    <div style={{ background: "var(--bg-panel)", border: "1px solid var(--border-light)", borderRadius: 10, marginBottom: 16, boxShadow: "var(--shadow-sm)", overflow: "hidden" }} data-comment-anchor="search-provenance">
+      {/* Always-visible header — coverage at a glance */}
+      <button onClick={() => setOpen(!open)} style={{ width: "100%", display: "flex", alignItems: "center", gap: 11, padding: "12px 16px", border: "none", background: "transparent", textAlign: "left" }}>
+        <span style={{ width: 28, height: 28, borderRadius: 8, background: sev.bg, color: sev.color, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
+          <Icon name={degraded ? "warning" : full ? "check" : "info"} size={16} />
+        </span>
+        <div style={{ flex: 1, minWidth: 0 }}>
+          <div style={{ fontSize: 13, color: "var(--text)", fontWeight: 600 }}>
+            What this search covered
+          </div>
+          <div style={{ fontSize: 12, color: "var(--text-muted)", marginTop: 1 }}>
+            Read <strong style={{ color: sev.color }}>{count} of {total}</strong> index sections
+            {degraded ? " · 1 engine unavailable" : full ? " · full index" : " · partial coverage"}
+          </div>
+        </div>
+        <span style={{ fontSize: 11, color: "var(--text-muted)", display: "flex", alignItems: "center", gap: 6, flexShrink: 0 }}>
+          {open ? "Hide" : "Details"}
+          <Icon name={open ? "chevronDown" : "chevronRight"} size={14} />
+        </span>
+      </button>
+
+      {open && (
+        <div style={{ padding: "0 16px 16px" }}>
+          {/* Loud degraded banner */}
+          {degraded && (
+            <div style={{ display: "flex", gap: 10, padding: "11px 13px", background: "var(--accent-red-light)", borderRadius: 8, borderLeft: "3px solid var(--accent-red)", marginBottom: 4 }}>
+              <Icon name="warning" size={15} style={{ color: "var(--accent-red)", flexShrink: 0, marginTop: 1 }} />
+              <div style={{ fontSize: 12.5, color: "var(--text)", lineHeight: 1.5 }}>
+                <strong style={{ fontWeight: 600 }}>The semantic-sparse engine (SPLADE) was unavailable for this query.</strong> Results came from keyword and dense matching only — a paper that matches your topic in meaning but not in exact wording may be missing. Re-run later for the full mix.
+              </div>
+            </div>
+          )}
+
+          {/* Engine mix jumps to the top when degraded */}
+          {degraded && (
+            <ProvRow tone="alert" icon="cpu" title="Which engines ran">
+              <div style={{ display: "flex", flexWrap: "wrap", gap: 6, marginTop: 6, marginBottom: 6 }}>
+                <EnginePill label="Keyword" ok={true} />
+                <EnginePill label="Semantic-sparse (SPLADE)" ok={false} />
+                <EnginePill label="Semantic-dense" ok={true} />
+              </div>
+              Results were fused from 2 of 3 engines with Reciprocal Rank Fusion (k = 60), which weights each engine equally.
+            </ProvRow>
+          )}
+
+          {/* 1 · PARTIAL COVERAGE — the lead */}
+          <ProvRow tone={full ? "ok" : "warn"} icon="server" title={full ? "Full index searched" : "Most of the index was not searched"}>
+            {full
+              ? "Every section was unpacked and searched, across all five disciplines and both eras. This is now a complete view of the index."
+              : <>Your query was routed to a single section — <strong style={{ color: "var(--text)" }}>Social Sciences · 2010–present</strong>. The other {total - count} sections stayed in cold storage or were pruned by your date filter, including <strong style={{ color: "var(--text)" }}>Arts &amp; Humanities</strong>, where much of this literature sits, and everything published before 2010.</>}
+
+            {/* Section grid */}
+            <div style={{ marginTop: 12, display: "grid", gridTemplateColumns: "118px 1fr 1fr", gap: 5, alignItems: "center" }}>
+              <span />
+              {PROV_ERAS.map(e => <span key={e} style={{ fontSize: 10.5, color: "var(--text-muted)", textAlign: "center", letterSpacing: "0.03em" }}>{e}</span>)}
+              {PROV_SUBJECTS.map(s => (
+                <React.Fragment key={s}>
+                  <span style={{ fontSize: 11.5, color: "var(--text-secondary)", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{s}</span>
+                  {PROV_ERAS.map(e => {
+                    const on = isOn(s, e);
+                    return (
+                      <div key={e} style={{
+                        height: 28, borderRadius: 5, display: "flex", alignItems: "center", justifyContent: "center", gap: 4,
+                        fontSize: 10.5, fontWeight: 500,
+                        background: on ? "var(--accent-teal-light)" : "var(--bg)",
+                        border: on ? "1px solid var(--accent-teal)" : "1px dashed var(--border)",
+                        color: on ? "var(--accent-teal)" : "var(--text-muted)",
+                      }}>
+                        {on ? <><Icon name="check" size={11} /> searched</> : "cold"}
+                      </div>
+                    );
+                  })}
+                </React.Fragment>
+              ))}
+            </div>
+
+            {/* Affordances — each maps to a real retriever action */}
+            {!full && (
+              <div style={{ display: "flex", flexWrap: "wrap", gap: 8, marginTop: 13, position: "relative" }}>
+                <ProvAction icon="server" onClick={widen} busy={unpacking}>
+                  {unpacking ? "Unpacking sections…" : "Widen search — unpack cold sections"}
+                </ProvAction>
+                {eraPruned && (
+                  <ProvAction icon="history" onClick={removeDate}>Remove date filter (pre-2010)</ProvAction>
+                )}
+                {missingSubjects.length > 0 && (
+                  <div style={{ position: "relative" }}>
+                    <ProvAction icon="filter" onClick={() => setProfileOpen(o => !o)}>Switch subject profile</ProvAction>
+                    {profileOpen && (
+                      <div style={{ position: "absolute", top: "calc(100% + 4px)", left: 0, zIndex: 5, background: "var(--bg-panel)", border: "1px solid var(--border)", borderRadius: 8, boxShadow: "var(--shadow-md)", padding: 4, minWidth: 180 }}>
+                        {missingSubjects.map(s => (
+                          <button key={s} onClick={() => addSubject(s)} style={{ display: "block", width: "100%", textAlign: "left", padding: "7px 10px", border: "none", background: "transparent", borderRadius: 5, fontSize: 12.5, color: "var(--text)" }}
+                            onMouseEnter={e => e.currentTarget.style.background = "var(--bg)"}
+                            onMouseLeave={e => e.currentTarget.style.background = "transparent"}>
+                            Add {s}
+                          </button>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                )}
+              </div>
+            )}
+          </ProvRow>
+
+          {/* 2 · LANGUAGE / ENGLISH BIAS */}
+          <ProvRow tone="warn" icon="info" title="Tuned for English">
+            Matching favours English. Scholarship written in other languages — including Indigenous-language and non-English-venue work — ranks lower or is missed entirely, because the semantic model and the section vocabularies are English-only.
+          </ProvRow>
+
+          {/* 3 · RECENCY / ERA DEFAULT */}
+          <ProvRow tone="warn" icon="history" title="Recent work is favoured by default">
+            Your profile defaults to recent material (2010 onward) and the ranker adds a small recency boost. Foundational and historical work is under-represented unless you remove the date filter above.
+          </ProvRow>
+
+          {/* 4 · ENGINE MIX (healthy) */}
+          {!degraded && (
+            <ProvRow tone="ok" icon="cpu" title="Which engines ran">
+              <div style={{ display: "flex", flexWrap: "wrap", gap: 6, marginTop: 6, marginBottom: 6 }}>
+                <EnginePill label="Keyword" ok={true} />
+                <EnginePill label="Semantic-sparse (SPLADE)" ok={true} />
+                <EnginePill label="Semantic-dense" ok={true} />
+              </div>
+              All three engines ran and were fused with Reciprocal Rank Fusion (k = 60), which weights each engine equally — a result strong in only one method can be pushed down by the others.
+            </ProvRow>
+          )}
+
+          {/* 5 · OA / ABSTRACT SKEW */}
+          <ProvRow tone="neutral" icon="book" title="Open access & missing abstracts">
+            About <strong style={{ color: "var(--text)" }}>38%</strong> of these results are open access. A handful were missing abstracts (the source metadata failed to load) and may rank lower, since the ranker rewards records with complete text to judge.
+          </ProvRow>
+
+          {/* 6 · EXACT WORDING */}
+          <ProvRow tone="neutral" icon="search" title="Keyword matching is literal">
+            The keyword engine does not match word variants or spellings on its own — "labour" ≠ "labor", "fisheries" ≠ "fishing". If results look thin, try alternate forms and spellings.
+          </ProvRow>
+
+          {/* 7 · QUANTIZATION — de-emphasized footnote */}
+          <ProvRow tone="neutral" icon="cpu" title="Speed trade-offs" muted={true}>
+            For speed, very long queries are compressed to their most important terms and a small number of borderline matches may be dropped. Measured impact on recall is minor.
+          </ProvRow>
+
+          {/* Footer */}
+          <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12, flexWrap: "wrap", marginTop: 14, paddingTop: 12, borderTop: "1px solid var(--border-light)" }}>
+            <span style={{ fontSize: 11, color: "var(--text-muted)", fontFamily: "var(--font-ui)" }}>
+              Fields from <code style={{ fontFamily: "ui-monospace, monospace", fontSize: 10.5, background: "var(--bg)", padding: "1px 5px", borderRadius: 3, border: "1px solid var(--border-light)" }}>get_search_provenance</code> · index of 150,413,098 documents
+            </span>
+            <button onClick={goAbout} style={{ display: "inline-flex", alignItems: "center", gap: 5, border: "none", background: "transparent", color: "var(--accent-red)", fontSize: 12, fontWeight: 600, cursor: "pointer" }}>
+              About this index <Icon name="chevronRight" size={13} />
+            </button>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+};
+
+const SearchScreen = ({ savedIds, toggleSave, degraded, setAiStatus }) => {
+  const [query, setQuery] = React.useState("");
+  const [filters, setFilters] = React.useState({ type: "All", date: "Any time", access: "Any", sort: "Relevance" });
+  const [results, setResults] = React.useState([]);
+  const [loading, setLoading] = React.useState(false);
+  const [searched, setSearched] = React.useState(false);
+  const [selected, setSelected] = React.useState(null);
+  const [usingMock, setUsingMock] = React.useState(false);
+
+  // Live search via SFUApi; transparently falls back to sample data when the
+  // backend is unreachable, and raises the shared demo-data banner so the user
+  // always knows when results aren't live.
+  const doSearch = async () => {
+    if (!query.trim()) return;
+    setLoading(true);
+    setSelected(null);
+    try {
+      const res = await window.SFUApi.search(query, filters);
+      const liveHasResults = res.source === "live" && res.results && res.results.length > 0;
+      // We display sample data when the backend is down OR when it returned
+      // nothing (e.g. a degraded leg). Either way the user must be told.
+      const showingMock = !liveHasResults;
+      const list = liveHasResults ? res.results : (window.SFUMock.results || []);
+      setResults(list);
+      setUsingMock(showingMock);
+      if (window.SFUUI) {
+        let msg;
+        if (showingMock && res.source === "live") {
+          msg = "Live backend returned no results — showing sample data."
+              + ((res.notes && res.notes.length) ? " " + res.notes[0] : "");
+        }
+        window.SFUUI.setMockBanner(showingMock, msg);
+      }
+      // AI/backend status tracks reachability, not whether we showed samples.
+      if (setAiStatus) setAiStatus(res.source === "live" ? "online" : "offline");
+    } catch (e) {
+      setResults(window.SFUMock.results || []);
+      setUsingMock(true);
+      if (window.SFUUI) window.SFUUI.setMockBanner(true);
+      if (setAiStatus) setAiStatus("offline");
+    } finally {
+      setLoading(false);
+      setSearched(true);
+    }
+  };
+
+  // Landing state
+  if (!searched) {
+    return (
+      <div style={{ flex: 1, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", padding: "0 60px 60px" }}>
+        <div style={{ marginBottom: 32, textAlign: "center" }}>
+          <div style={{ width: 52, height: 52, borderRadius: 14, background: "var(--accent-red)", display: "inline-flex", alignItems: "center", justifyContent: "center", marginBottom: 16 }}>
+            <Icon name="search" size={22} style={{ color: "white" }} />
+          </div>
+          <h1 style={{ fontSize: 26, fontFamily: "var(--font-serif)", fontWeight: 500, color: "var(--text)", marginBottom: 8 }}>Research begins here.</h1>
+          <p style={{ fontSize: 14, color: "var(--text-muted)", maxWidth: 400, lineHeight: 1.6 }}>Search 250M+ scholarly works with AI-powered query understanding and SFU library access resolution.</p>
+        </div>
+        <div style={{ width: "100%", maxWidth: 600 }}>
+          <SearchBar query={query} setQuery={setQuery} onSearch={doSearch} loading={loading} filters={filters} setFilters={setFilters} />
+        </div>
+        {/* Example queries */}
+        <div style={{ marginTop: 24, display: "flex", flexWrap: "wrap", gap: 8, justifyContent: "center", maxWidth: 580 }}>
+          <span style={{ fontSize: 12, color: "var(--text-muted)", width: "100%", textAlign: "center", marginBottom: 4 }}>Try:</span>
+          {["indigenous knowledge systems in climate adaptation", "recent ML papers for drug discovery", "CRISPR gene editing in salmon, open access", "climate change BC fisheries 2020–2025"].map(ex => (
+            <button key={ex} onClick={() => { setQuery(ex); }} style={{ fontSize: 12, padding: "6px 12px", background: "var(--bg-panel)", border: "1px solid var(--border)", borderRadius: 16, color: "var(--text-secondary)", cursor: "pointer", fontFamily: "var(--font-ui)", transition: "border-color 0.15s, color 0.15s" }}
+              onMouseEnter={e => { e.currentTarget.style.borderColor = "var(--accent-red)"; e.currentTarget.style.color = "var(--accent-red)"; }}
+              onMouseLeave={e => { e.currentTarget.style.borderColor = "var(--border)"; e.currentTarget.style.color = "var(--text-secondary)"; }}>
+              {ex}
+            </button>
+          ))}
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div style={{ flex: 1, display: "flex", flexDirection: "column", minHeight: 0 }}>
+      {/* Search bar header */}
+      <div style={{ padding: "14px 20px 12px", borderBottom: "1px solid var(--border-light)", background: "var(--bg-panel)" }}>
+        <SearchBar query={query} setQuery={setQuery} onSearch={doSearch} loading={loading} filters={filters} setFilters={setFilters} compact />
+      </div>
+
+      {/* Results area */}
+      <div style={{ flex: 1, display: "flex", minHeight: 0 }}>
+        {/* Results list */}
+        <div style={{ flex: 1, overflow: "auto", padding: "16px 20px" }}>
+          {loading ? (
+            <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+              <div style={{ fontSize: 13, color: "var(--text-muted)", marginBottom: 8, display: "flex", alignItems: "center", gap: 8 }}>
+                <div style={{ width: 14, height: 14, border: "2px solid var(--accent-red-light)", borderTopColor: "var(--accent-red)", borderRadius: "50%", animation: "spin 0.7s linear infinite" }} />
+                Searching OpenAlex · Resolving SFU access…
+              </div>
+              {[1, 2, 3].map(i => (
+                <div key={i} style={{ background: "var(--bg-panel)", border: "1px solid var(--border-light)", borderRadius: 10, padding: "16px 18px", height: 110 }}>
+                  <div style={{ height: 14, background: "var(--border)", borderRadius: 3, width: "75%", marginBottom: 8, animation: "pulse 1.4s ease infinite" }} />
+                  <div style={{ height: 10, background: "var(--border)", borderRadius: 3, width: "50%", marginBottom: 10, animation: "pulse 1.4s ease infinite" }} />
+                  <div style={{ height: 10, background: "var(--border)", borderRadius: 3, width: "90%", animation: "pulse 1.4s ease infinite" }} />
+                </div>
+              ))}
+            </div>
+          ) : (
+            <>
+              <SearchProvenanceCard degraded={degraded} />
+              <AIInterpretationBox query={query} />
+              <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 12 }}>
+                <span style={{ fontSize: 12.5, color: "var(--text-muted)" }}>
+                  <strong style={{ color: "var(--text)", fontWeight: 600 }}>{results.length}</strong> results for <em>"{query}"</em>
+                </span>
+              </div>
+              {results.map((r, i) => (
+                <ResultCard key={r.id} result={r} index={i + 1} onClick={setSelected} saved={savedIds.has(r.id)} onSave={toggleSave} />
+              ))}
+            </>
+          )}
+        </div>
+
+        {/* Detail panel */}
+        {selected && (
+          <ResultDetail result={selected} onClose={() => setSelected(null)} saved={savedIds.has(selected.id)} onSave={toggleSave} />
+        )}
+      </div>
+    </div>
+  );
+};
+
+// ─── SAVED / HISTORY SCREENS ─────────────────────────────────────────────────
+
+const SavedScreen = ({ savedIds, toggleSave }) => {
+  // Resolve saved ids against both the sample data and any live results seen.
+  const pool = {};
+  MOCK_RESULTS.forEach(r => { pool[r.id] = r; });
+  Object.assign(pool, window.__sfuResults || {});
+  const saved = Array.from(savedIds).map(id => pool[id]).filter(Boolean);
+  const [selected, setSelected] = React.useState(null);
+  return (
+    <div style={{ flex: 1, display: "flex", minHeight: 0 }}>
+      <div style={{ flex: 1, overflow: "auto", padding: "20px" }}>
+        <h2 style={{ fontFamily: "var(--font-serif)", fontSize: 18, fontWeight: 500, marginBottom: 4, color: "var(--text)" }}>Saved Papers</h2>
+        <p style={{ fontSize: 12.5, color: "var(--text-muted)", marginBottom: 16 }}>{saved.length} papers saved</p>
+        {saved.length === 0 ? (
+          <div style={{ textAlign: "center", padding: "60px 0", color: "var(--text-muted)" }}>
+            <Icon name="bookmark" size={32} style={{ marginBottom: 12, opacity: 0.3 }} />
+            <p style={{ fontSize: 14 }}>No saved papers yet.<br />Bookmark results from your searches.</p>
+          </div>
+        ) : saved.map((r, i) => (
+          <ResultCard key={r.id} result={r} index={i + 1} onClick={setSelected} saved={true} onSave={toggleSave} />
+        ))}
+      </div>
+      {selected && <ResultDetail result={selected} onClose={() => setSelected(null)} saved={savedIds.has(selected.id)} onSave={toggleSave} />}
+    </div>
+  );
+};
+
+// ─── HISTORY · SESSION REPLAY ────────────────────────────────────────────────
+// Session replay lives here now (it was removed from the analytics redesign).
+// Each past search is a replayable session: the query, what the system did, and
+// every result you opened, saved, or cited — on a scrubbable timeline.
+
+const HISTORY_SESSIONS = [
+  {
+    id: "hs-1", q: "machine learning drug discovery", time: "Today · 2:41 PM",
+    results: 47, duration_s: SESSION.duration_s, opened: 2, saved: 1, refined: 1,
+    events: SESSION.events,
+  },
+  {
+    id: "hs-2", q: "CRISPR salmon gene editing, open access", time: "Today · 11:08 AM",
+    results: 23, duration_s: 38, opened: 1, saved: 1, refined: 1,
+    events: [
+      { id: "e0", t: 0,  icon: "search",       label: 'Searched "CRISPR salmon gene editing"', detail: "Free-text query · NL parser engaged", kind: "query" },
+      { id: "e1", t: 4,  icon: "sparkle",      label: "AI expanded query",          detail: "+Cas9, +gene knockout, +aquaculture, +transgenic", kind: "ai" },
+      { id: "e2", t: 6,  icon: "activity",     label: "23 results returned",        detail: "318 candidates → 50 ranked → 23 after OA filter", kind: "system" },
+      { id: "e3", t: 9,  icon: "filter",       label: "Filtered: Open Access",      detail: "47 → 23 results · is_oa = true", kind: "filter" },
+      { id: "e4", t: 16, icon: "book",         label: "Opened Wargelius 2021",      detail: '"CRISPR-Cas9 editing in Atlantic salmon" · OA', kind: "open" },
+      { id: "e5", t: 24, icon: "copy",         label: "Copied BibTeX citation",     detail: "Wargelius, A. (2021). Transgenesis…", kind: "action" },
+      { id: "e6", t: 33, icon: "bookmark",     label: "Saved to library",           detail: "Folder · Aquaculture Genetics", kind: "action" },
+    ],
+  },
+  {
+    id: "hs-3", q: "REM thesis BC salmon populations", time: "Yesterday · 4:15 PM",
+    results: 8, duration_s: 31, opened: 1, saved: 1, refined: 0,
+    events: [
+      { id: "e0", t: 0,  icon: "search",   label: 'Searched "REM thesis BC salmon populations"', detail: "Routed to Environmental · grey-literature pass", kind: "query" },
+      { id: "e1", t: 5,  icon: "activity", label: "8 results returned",          detail: "Thin pool · 8 candidates, no dedup needed", kind: "system" },
+      { id: "e2", t: 12, icon: "book",     label: "Opened SFU thesis",           detail: '"Population dynamics of Fraser sockeye" · SFU Summit', kind: "open" },
+      { id: "e3", t: 21, icon: "bookmark", label: "Saved to library",            detail: "Folder · Thesis References", kind: "action" },
+    ],
+  },
+  {
+    id: "hs-4", q: "climate change Pacific salmon fisheries 2020", time: "Yesterday · 2:02 PM",
+    results: 31, duration_s: 26, opened: 1, saved: 0, refined: 1,
+    events: [
+      { id: "e0", t: 0,  icon: "search",   label: 'Searched "climate change Pacific salmon fisheries"', detail: "Date filter 2020+ · era pruning active", kind: "query" },
+      { id: "e1", t: 3,  icon: "sparkle",  label: "AI expanded query",           detail: "+ocean warming, +stock collapse, +adaptation", kind: "ai" },
+      { id: "e2", t: 6,  icon: "activity", label: "31 results returned",         detail: "Pre-2010 sections skipped by date filter", kind: "system" },
+      { id: "e3", t: 14, icon: "book",     label: "Opened Crozier 2019",         detail: '"Climate vulnerability of Pacific salmon"', kind: "open" },
+      { id: "e4", t: 21, icon: "copy",     label: "Copied APA citation",         detail: "Crozier, L. G., et al. (2019)…", kind: "action" },
+    ],
+  },
+  {
+    id: "hs-5", q: "neural networks clinical diagnosis radiology", time: "May 1 · 10:22 AM",
+    results: 62, duration_s: 40, opened: 1, saved: 1, refined: 1,
+    events: [
+      { id: "e0", t: 0,  icon: "search",   label: 'Searched "neural networks clinical diagnosis"', detail: "Routed to Health & Medicine · 2010–present", kind: "query" },
+      { id: "e1", t: 4,  icon: "sparkle",  label: "AI expanded query",           detail: "+CNN, +medical imaging, +deep learning, +CAD", kind: "ai" },
+      { id: "e2", t: 7,  icon: "activity", label: "62 results returned",         detail: "540 candidates → 50 ranked → 62 after expansion", kind: "system" },
+      { id: "e3", t: 15, icon: "book",     label: "Opened Esteva 2017",          detail: '"Dermatologist-level classification…" · cited 9,210 ×', kind: "open" },
+      { id: "e4", t: 24, icon: "filter",   label: "Filtered: Peer-reviewed",     detail: "62 → 51 results", kind: "filter" },
+      { id: "e5", t: 33, icon: "bookmark", label: "Saved to library",            detail: "Folder · Radiology AI", kind: "action" },
+    ],
+  },
+];
+
+const SessionTimeline = ({ session }) => {
+  const [playhead, setPlayhead] = React.useState(session.duration_s);
+  const [playing, setPlaying] = React.useState(false);
+  const [selected, setSelected] = React.useState(null);
+
+  // Reset whenever the session changes.
+  React.useEffect(() => { setPlayhead(session.duration_s); setPlaying(false); setSelected(null); }, [session.id]);
+
+  React.useEffect(() => {
+    if (!playing) return;
+    const iv = setInterval(() => {
+      setPlayhead(p => {
+        if (p >= session.duration_s) { setPlaying(false); return session.duration_s; }
+        return p + 1;
+      });
+    }, 90);
+    return () => clearInterval(iv);
+  }, [playing, session.duration_s]);
+
+  const play = () => {
+    if (playhead >= session.duration_s) setPlayhead(0);
+    setPlaying(p => !p);
+  };
+
+  const stats = [
+    { label: "Duration", value: `00:${String(session.duration_s).padStart(2, "0")}` },
+    { label: "Events", value: session.events.length },
+    { label: "Opened", value: session.opened },
+    { label: "Saved", value: session.saved },
+    { label: "Refinements", value: session.refined },
+  ];
+
+  return (
+    <div style={{ display: "flex", flexDirection: "column", minHeight: 0, height: "100%" }}>
+      {/* Header */}
+      <div style={{ padding: "20px 24px 16px", borderBottom: "1px solid var(--border-light)" }}>
+        <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", gap: 16, flexWrap: "wrap" }}>
+          <div style={{ minWidth: 0 }}>
+            <div style={{ fontSize: 11, fontWeight: 500, letterSpacing: "0.07em", textTransform: "uppercase", color: "var(--text-muted)", marginBottom: 6 }}>Session replay</div>
+            <h3 style={{ fontFamily: "var(--font-serif)", fontSize: 20, fontWeight: 500, color: "var(--text)", lineHeight: 1.25 }}>"{session.q}"</h3>
+            <div style={{ fontSize: 12, color: "var(--text-muted)", marginTop: 4 }}>{session.time} · {session.results} results</div>
+          </div>
+          <button style={{ display: "inline-flex", alignItems: "center", gap: 6, padding: "7px 12px", border: "1px solid var(--border)", borderRadius: 7, background: "var(--bg-panel)", fontSize: 12.5, color: "var(--text-secondary)", flexShrink: 0 }}>
+            <Icon name="search" size={13} /> Resume in Search
+          </button>
+        </div>
+        {/* Stat chips */}
+        <div style={{ display: "flex", gap: 18, marginTop: 14, flexWrap: "wrap" }}>
+          {stats.map(s => (
+            <div key={s.label}>
+              <div style={{ fontFamily: "var(--font-serif)", fontSize: 18, fontWeight: 500, color: "var(--text)", lineHeight: 1 }}>{s.value}</div>
+              <div style={{ fontSize: 10.5, color: "var(--text-muted)", letterSpacing: "0.05em", textTransform: "uppercase", marginTop: 3 }}>{s.label}</div>
+            </div>
+          ))}
+        </div>
+        {/* Scrubber */}
+        <div style={{ display: "flex", alignItems: "center", gap: 10, marginTop: 16 }}>
+          <button onClick={play} style={{ width: 28, height: 28, borderRadius: "50%", background: "var(--accent-red)", border: "none", color: "white", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
+            {playing
+              ? <svg width="9" height="10" viewBox="0 0 9 10" fill="currentColor"><rect x="0" y="0" width="3" height="10" rx="1"/><rect x="6" y="0" width="3" height="10" rx="1"/></svg>
+              : <svg width="9" height="10" viewBox="0 0 9 10" fill="currentColor"><path d="M0 0v10l9-5L0 0Z"/></svg>}
+          </button>
+          <span style={{ fontFamily: "var(--font-mono)", fontSize: 11.5, color: "var(--text-secondary)" }}>00:{String(playhead).padStart(2, "0")}</span>
+          <div style={{ position: "relative", flex: 1, height: 16, display: "flex", alignItems: "center" }}>
+            <div style={{ position: "absolute", left: 0, right: 0, height: 4, background: "var(--bg-soft, var(--border-light))", borderRadius: 2 }} />
+            <div style={{ position: "absolute", left: 0, height: 4, width: `${(playhead / session.duration_s) * 100}%`, background: "var(--accent-red-mid)", borderRadius: 2 }} />
+            {session.events.map(ev => (
+              <div key={ev.id} onClick={() => { setPlayhead(ev.t); setSelected(ev.id); }} title={ev.label}
+                style={{ position: "absolute", left: `${(ev.t / session.duration_s) * 100}%`, transform: "translateX(-50%)", width: 7, height: 7, borderRadius: "50%", background: KIND_COLOR[ev.kind].dot, boxShadow: "0 0 0 2px var(--bg-panel)", cursor: "pointer" }} />
+            ))}
+          </div>
+          <span style={{ fontFamily: "var(--font-mono)", fontSize: 11.5, color: "var(--text-muted)" }}>00:{String(session.duration_s).padStart(2, "0")}</span>
+        </div>
+      </div>
+
+      {/* Timeline */}
+      <div style={{ flex: 1, overflow: "auto", padding: "20px 24px 28px" }}>
+        <div style={{ position: "relative" }}>
+          {/* Rail */}
+          <div style={{ position: "absolute", left: 51, top: 8, bottom: 8, width: 2, background: "var(--border-light)" }} />
+          <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
+            {session.events.map(ev => {
+              const reached = ev.t <= playhead;
+              const kc = KIND_COLOR[ev.kind];
+              const isSel = selected === ev.id;
+              return (
+                <button key={ev.id} onClick={() => setSelected(isSel ? null : ev.id)}
+                  style={{ display: "grid", gridTemplateColumns: "38px 26px 1fr", alignItems: "flex-start", gap: 8, padding: "8px 10px", borderRadius: 8, border: "1px solid " + (isSel ? "var(--border)" : "transparent"), background: isSel ? "var(--bg-panel)" : "transparent", textAlign: "left", opacity: reached ? 1 : 0.4, transition: "opacity 0.15s", cursor: "pointer", position: "relative" }}>
+                  <span style={{ fontFamily: "var(--font-mono)", fontSize: 10.5, color: "var(--text-muted)", textAlign: "right", paddingTop: 5 }}>+{ev.t}s</span>
+                  <span style={{ width: 26, height: 26, borderRadius: "50%", background: reached ? kc.dot : "var(--border)", color: "white", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 1, boxShadow: "0 0 0 3px var(--bg)" }}>
+                    <Icon name={ev.icon} size={13} />
+                  </span>
+                  <span style={{ paddingTop: 1, minWidth: 0 }}>
+                    <span style={{ fontSize: 13, fontWeight: 500, color: "var(--text)", display: "block" }}>{ev.label}</span>
+                    <span style={{ fontSize: 12, color: "var(--text-secondary)", lineHeight: 1.5, display: "block", marginTop: 2 }}>{ev.detail}</span>
+                    <span style={{ fontSize: 10, color: kc.lane, fontWeight: 500, letterSpacing: "0.05em", textTransform: "uppercase", marginTop: 4, display: "inline-block" }}>{ev.kind}</span>
+                  </span>
+                </button>
+              );
+            })}
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+};
+
+const HistoryScreen = () => {
+  const [activeId, setActiveId] = React.useState(HISTORY_SESSIONS[0].id);
+  const session = HISTORY_SESSIONS.find(s => s.id === activeId) || HISTORY_SESSIONS[0];
+  return (
+    <div style={{ flex: 1, display: "flex", minHeight: 0 }}>
+      {/* Session list */}
+      <div style={{ width: 320, flexShrink: 0, borderRight: "1px solid var(--border-light)", overflow: "auto", padding: "20px 16px", background: "var(--bg-panel)" }}>
+        <h2 style={{ fontFamily: "var(--font-serif)", fontSize: 18, fontWeight: 500, marginBottom: 3, color: "var(--text)" }}>History</h2>
+        <p style={{ fontSize: 12, color: "var(--text-muted)", marginBottom: 16 }}>
+          Stored locally · <button style={{ border: "none", background: "none", color: "var(--accent-red)", fontSize: 12, cursor: "pointer", fontFamily: "var(--font-ui)" }}>Clear all</button>
+        </p>
+        <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+          {HISTORY_SESSIONS.map(s => {
+            const on = s.id === activeId;
+            return (
+              <button key={s.id} onClick={() => setActiveId(s.id)}
+                style={{ display: "flex", flexDirection: "column", gap: 6, padding: "12px 14px", borderRadius: 9, border: "1px solid " + (on ? "var(--accent-red)" : "var(--border-light)"), background: on ? "var(--accent-red-light)" : "var(--bg)", textAlign: "left", cursor: "pointer", transition: "border-color 0.12s" }}>
+                <div style={{ fontSize: 13, color: "var(--text)", fontWeight: 500, lineHeight: 1.35 }}>{s.q}</div>
+                <div style={{ fontSize: 11, color: "var(--text-muted)" }}>{s.time} · {s.results} results</div>
+                <div style={{ display: "flex", gap: 12, fontFamily: "var(--font-mono)", fontSize: 10.5, color: "var(--text-muted)" }}>
+                  <span>00:{String(s.duration_s).padStart(2, "0")}</span>
+                  <span>{s.opened} opened</span>
+                  <span style={{ color: s.saved ? "var(--accent-red)" : "var(--text-muted)" }}>{s.saved} saved</span>
+                </div>
+              </button>
+            );
+          })}
+        </div>
+      </div>
+      {/* Replay */}
+      <div style={{ flex: 1, minWidth: 0, overflow: "hidden" }}>
+        <SessionTimeline session={session} />
+      </div>
+    </div>
+  );
+};
+
+// ─── DATABASES SCREEN ────────────────────────────────────────────────────────
+
+const DatabasesScreen = () => {
+  const [search, setSearch] = React.useState("");
+  const filtered = MOCK_DATABASES.filter(d =>
+    d.name.toLowerCase().includes(search.toLowerCase()) ||
+    d.subjects.some(s => s.toLowerCase().includes(search.toLowerCase()))
+  );
+  return (
+    <div style={{ flex: 1, overflow: "auto", padding: "20px" }}>
+      <h2 style={{ fontFamily: "var(--font-serif)", fontSize: 18, fontWeight: 500, marginBottom: 4, color: "var(--text)" }}>SFU Library Databases</h2>
+      <p style={{ fontSize: 12.5, color: "var(--text-muted)", marginBottom: 14 }}>764 subscription databases · Registry synced daily</p>
+      <div style={{ display: "flex", alignItems: "center", gap: 0, background: "var(--bg-panel)", border: "1px solid var(--border)", borderRadius: 7, padding: "0 10px", marginBottom: 14, maxWidth: 400 }}>
+        <Icon name="search" size={14} style={{ color: "var(--text-muted)" }} />
+        <input value={search} onChange={e => setSearch(e.target.value)} placeholder="Filter databases…" style={{ flex: 1, border: "none", background: "transparent", outline: "none", padding: "8px 8px", fontSize: 13, color: "var(--text)", fontFamily: "var(--font-ui)" }} />
+      </div>
+      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(280px, 1fr))", gap: 8 }}>
+        {filtered.map(db => (
+          <div key={db.id} style={{ background: "var(--bg-panel)", border: "1px solid var(--border-light)", borderRadius: 8, padding: "12px 14px" }}>
+            <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", marginBottom: 4 }}>
+              <span style={{ fontSize: 13, fontWeight: 500, color: "var(--text)" }}>{db.name}</span>
+              <span style={{ fontSize: 10, padding: "2px 6px", borderRadius: 3, background: db.free ? "var(--accent-teal-light)" : "var(--accent-red-light)", color: db.free ? "var(--accent-teal)" : "var(--accent-red)", fontWeight: 500, whiteSpace: "nowrap", marginLeft: 6, flexShrink: 0 }}>
+                {db.free ? "Free" : "SFU Sub."}
+              </span>
+            </div>
+            <div style={{ fontSize: 11, color: "var(--text-muted)", marginBottom: 5 }}>{db.provider}</div>
+            <div style={{ display: "flex", flexWrap: "wrap", gap: 3 }}>
+              {db.subjects.map(s => <span key={s} style={{ fontSize: 10, padding: "1px 6px", background: "var(--bg)", border: "1px solid var(--border)", borderRadius: 3, color: "var(--text-secondary)" }}>{s}</span>)}
+              {db.proxy && <span style={{ fontSize: 10, padding: "1px 6px", background: "var(--bg)", border: "1px solid var(--border)", borderRadius: 3, color: "var(--text-secondary)" }}>EZProxy</span>}
+            </div>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+};
+
+// ─── SETTINGS SCREEN ─────────────────────────────────────────────────────────
+
+const SettingsScreen = () => {
+  const [tab, setTab] = React.useState("llm");
+  const [llmBackend, setLlmBackend] = React.useState("ollama");
+  const [ollamaUrl, setOllamaUrl] = React.useState("http://localhost:11434/v1");
+  const [model, setModel] = React.useState("qwen3:1.7b");
+  const [zoteroKey, setZoteroKey] = React.useState("••••••••••••••••");
+  const [dictTab, setDictTab] = React.useState("abbreviations");
+  const [dictEntries, setDictEntries] = React.useState([
+    { abbr: "REM", full: "Resource & Environmental Management" },
+    { abbr: "FASS", full: "Faculty of Arts & Social Sciences" },
+    { abbr: "ILL", full: "Interlibrary Loan" },
+    { abbr: "LCSH", full: "Library of Congress Subject Headings" },
+  ]);
+
+  const settingsTabs = [
+    { id: "llm", label: "LLM Backend" },
+    { id: "zotero", label: "Zotero" },
+    { id: "dictionary", label: "Dictionary" },
+    { id: "privacy", label: "Privacy" },
+  ];
+
+  return (
+    <div style={{ flex: 1, overflow: "auto", padding: "20px 24px" }}>
+      <h2 style={{ fontFamily: "var(--font-serif)", fontSize: 18, fontWeight: 500, marginBottom: 16, color: "var(--text)" }}>Settings</h2>
+
+      {/* Tab bar */}
+      <div style={{ display: "flex", gap: 0, borderBottom: "1px solid var(--border-light)", marginBottom: 20 }}>
+        {settingsTabs.map(t => (
+          <button key={t.id} onClick={() => setTab(t.id)} style={{ padding: "8px 16px", border: "none", background: "transparent", fontSize: 13, fontWeight: tab === t.id ? 500 : 400, color: tab === t.id ? "var(--accent-red)" : "var(--text-secondary)", cursor: "pointer", borderBottom: `2px solid ${tab === t.id ? "var(--accent-red)" : "transparent"}`, fontFamily: "var(--font-ui)", transition: "color 0.15s" }}>
+            {t.label}
+          </button>
+        ))}
+      </div>
+
+      <div style={{ maxWidth: 560 }}>
+
+        {/* LLM Backend */}
+        {tab === "llm" && (
+          <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
+            <div>
+              <label style={{ fontSize: 12, fontWeight: 500, color: "var(--text-secondary)", display: "block", marginBottom: 8, textTransform: "uppercase", letterSpacing: "0.05em" }}>Inference Backend</label>
+              <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+                {[
+                  { id: "ollama", name: "Ollama", desc: "Default · hot-swap models · localhost:11434", recommended: true },
+                  { id: "llamacpp", name: "llama.cpp server", desc: "Lowest overhead · best for bundled apps" },
+                  { id: "lmstudio", name: "LM Studio", desc: "Polished GUI · bring your own backend" },
+                  { id: "cloud", name: "Cloud API (OpenAI / Groq)", desc: "Higher accuracy · requires internet" },
+                ].map(b => (
+                  <label key={b.id} style={{ display: "flex", alignItems: "flex-start", gap: 10, padding: "10px 12px", border: `1.5px solid ${llmBackend === b.id ? "var(--accent-red)" : "var(--border)"}`, borderRadius: 8, cursor: "pointer", background: llmBackend === b.id ? "var(--accent-red-light)" : "var(--bg-panel)", transition: "all 0.15s" }}>
+                    <input type="radio" name="backend" value={b.id} checked={llmBackend === b.id} onChange={e => setLlmBackend(e.target.value)} style={{ marginTop: 2, accentColor: "var(--accent-red)" }} />
+                    <div>
+                      <div style={{ fontSize: 13, fontWeight: 500, color: "var(--text)", display: "flex", alignItems: "center", gap: 6 }}>
+                        {b.name}
+                        {b.recommended && <span style={{ fontSize: 10, padding: "1px 5px", background: "var(--accent-teal-light)", color: "var(--accent-teal)", borderRadius: 3, fontWeight: 500 }}>Recommended</span>}
+                      </div>
+                      <div style={{ fontSize: 11.5, color: "var(--text-muted)", marginTop: 2 }}>{b.desc}</div>
+                    </div>
+                  </label>
+                ))}
+              </div>
+            </div>
+
+            <div>
+              <label style={{ fontSize: 12, fontWeight: 500, color: "var(--text-secondary)", display: "block", marginBottom: 6, textTransform: "uppercase", letterSpacing: "0.05em" }}>API URL</label>
+              <input value={ollamaUrl} onChange={e => setOllamaUrl(e.target.value)} style={{ width: "100%", padding: "8px 10px", border: "1px solid var(--border)", borderRadius: 6, fontSize: 12.5, color: "var(--text)", background: "var(--bg-panel)", fontFamily: "monospace", outline: "none" }} />
+            </div>
+
+            <div>
+              <label style={{ fontSize: 12, fontWeight: 500, color: "var(--text-secondary)", display: "block", marginBottom: 6, textTransform: "uppercase", letterSpacing: "0.05em" }}>Model</label>
+              <div style={{ display: "flex", gap: 8 }}>
+                <input value={model} onChange={e => setModel(e.target.value)} style={{ flex: 1, padding: "8px 10px", border: "1px solid var(--border)", borderRadius: 6, fontSize: 12.5, color: "var(--text)", background: "var(--bg-panel)", fontFamily: "monospace", outline: "none" }} />
+                <button style={{ padding: "8px 14px", background: "var(--accent-red)", color: "white", border: "none", borderRadius: 6, fontSize: 12, fontWeight: 500, cursor: "pointer", fontFamily: "var(--font-ui)", display: "flex", alignItems: "center", gap: 5, flexShrink: 0 }}>
+                  <Icon name="activity" size={13} />
+                  Test
+                </button>
+              </div>
+              <p style={{ fontSize: 11, color: "var(--text-muted)", marginTop: 5 }}>Recommended: <code style={{ fontFamily: "monospace", background: "var(--bg)", padding: "1px 4px", borderRadius: 3 }}>qwen3:1.7b</code> (~1.5 GB, Apache 2.0)</p>
+            </div>
+
+            <div style={{ padding: "10px 14px", background: "var(--bg)", border: "1px solid var(--border-light)", borderRadius: 8, display: "flex", alignItems: "center", gap: 10 }}>
+              <div style={{ width: 8, height: 8, borderRadius: "50%", background: "oklch(72% 0.17 145)", flexShrink: 0 }} />
+              <div>
+                <div style={{ fontSize: 12, fontWeight: 500, color: "var(--text)" }}>Connected · Qwen3-1.7B ready</div>
+                <div style={{ fontSize: 11, color: "var(--text-muted)" }}>Query parsing · 500ms avg latency · GPU: None (CPU inference)</div>
+              </div>
+            </div>
+
+            <button style={{ padding: "9px 0", background: "var(--accent-red)", color: "white", border: "none", borderRadius: 7, fontSize: 13, fontWeight: 500, cursor: "pointer", fontFamily: "var(--font-ui)", width: "100%" }}>Save Changes</button>
+          </div>
+        )}
+
+        {/* Zotero */}
+        {tab === "zotero" && (
+          <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
+            <div style={{ padding: "12px 14px", background: "oklch(93% 0.04 200)", border: "1px solid oklch(82% 0.07 200)", borderRadius: 8, display: "flex", gap: 10 }}>
+              <Icon name="info" size={14} style={{ color: "var(--accent-teal)", flexShrink: 0, marginTop: 1 }} />
+              <p style={{ fontSize: 12.5, color: "var(--text-secondary)", lineHeight: 1.55 }}>Get your API key from <strong style={{ color: "var(--accent-teal)" }}>zotero.org/settings/keys</strong>. Zotero integration lets you save papers directly to your library with one click.</p>
+            </div>
+            {[
+              { label: "API Key", value: zoteroKey, setter: setZoteroKey, type: "password" },
+              { label: "User ID", value: "1234567", setter: () => {}, type: "text" },
+            ].map(({ label, value, setter, type }) => (
+              <div key={label}>
+                <label style={{ fontSize: 12, fontWeight: 500, color: "var(--text-secondary)", display: "block", marginBottom: 6, textTransform: "uppercase", letterSpacing: "0.05em" }}>{label}</label>
+                <input type={type} value={value} onChange={e => setter(e.target.value)} style={{ width: "100%", padding: "8px 10px", border: "1px solid var(--border)", borderRadius: 6, fontSize: 12.5, color: "var(--text)", background: "var(--bg-panel)", fontFamily: "monospace", outline: "none" }} />
+              </div>
+            ))}
+            <div>
+              <label style={{ fontSize: 12, fontWeight: 500, color: "var(--text-secondary)", display: "block", marginBottom: 6, textTransform: "uppercase", letterSpacing: "0.05em" }}>Default Collection</label>
+              <select style={{ width: "100%", padding: "8px 10px", border: "1px solid var(--border)", borderRadius: 6, fontSize: 12.5, color: "var(--text)", background: "var(--bg-panel)", fontFamily: "var(--font-ui)", appearance: "none", outline: "none" }}>
+                <option>My Library (root)</option>
+                <option>Research / Drug Discovery</option>
+                <option>Research / CRISPR</option>
+              </select>
+            </div>
+            <button style={{ padding: "9px 0", background: "var(--accent-red)", color: "white", border: "none", borderRadius: 7, fontSize: 13, fontWeight: 500, cursor: "pointer", fontFamily: "var(--font-ui)", width: "100%", display: "flex", alignItems: "center", justifyContent: "center", gap: 6 }}>
+              <Icon name="check" size={14} /> Verify & Save
+            </button>
+          </div>
+        )}
+
+        {/* Custom Dictionary */}
+        {tab === "dictionary" && (
+          <div>
+            <p style={{ fontSize: 12.5, color: "var(--text-muted)", marginBottom: 14, lineHeight: 1.6 }}>Custom dictionary entries improve query parsing without retraining the LLM. Entries are applied pre- and post-LLM inference.</p>
+
+            <div style={{ display: "flex", gap: 0, borderBottom: "1px solid var(--border-light)", marginBottom: 14 }}>
+              {["abbreviations", "synonyms", "stop expansions"].map(t => (
+                <button key={t} onClick={() => setDictTab(t)} style={{ padding: "7px 14px", border: "none", background: "transparent", fontSize: 12, fontWeight: dictTab === t ? 500 : 400, color: dictTab === t ? "var(--accent-red)" : "var(--text-muted)", cursor: "pointer", borderBottom: `2px solid ${dictTab === t ? "var(--accent-red)" : "transparent"}`, fontFamily: "var(--font-ui)", textTransform: "capitalize" }}>
+                  {t}
+                </button>
+              ))}
+            </div>
+
+            {dictTab === "abbreviations" && (
+              <div>
+                <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 10 }}>
+                  <span style={{ fontSize: 12, color: "var(--text-muted)" }}>{dictEntries.length} entries</span>
+                  <button style={{ fontSize: 12, padding: "5px 10px", background: "var(--accent-red)", color: "white", border: "none", borderRadius: 5, cursor: "pointer", fontFamily: "var(--font-ui)", display: "flex", alignItems: "center", gap: 4 }}>
+                    <Icon name="plus" size={12} /> Add Entry
+                  </button>
+                </div>
+                <div style={{ border: "1px solid var(--border)", borderRadius: 8, overflow: "hidden" }}>
+                  <div style={{ display: "grid", gridTemplateColumns: "120px 1fr 64px", background: "var(--bg)", padding: "7px 12px", borderBottom: "1px solid var(--border)" }}>
+                    {["Abbreviation", "Expansion", ""].map(h => <span key={h} style={{ fontSize: 11, fontWeight: 600, color: "var(--text-muted)", textTransform: "uppercase", letterSpacing: "0.05em" }}>{h}</span>)}
+                  </div>
+                  {dictEntries.map((e, i) => (
+                    <div key={i} style={{ display: "grid", gridTemplateColumns: "120px 1fr 64px", padding: "9px 12px", borderBottom: i < dictEntries.length - 1 ? "1px solid var(--border-light)" : "none", alignItems: "center" }}>
+                      <span style={{ fontSize: 12.5, fontFamily: "monospace", fontWeight: 600, color: "var(--text)" }}>{e.abbr}</span>
+                      <span style={{ fontSize: 12.5, color: "var(--text-secondary)" }}>{e.full}</span>
+                      <div style={{ display: "flex", gap: 4 }}>
+                        <button style={{ border: "none", background: "transparent", color: "var(--text-muted)", cursor: "pointer", padding: 3, borderRadius: 3, display: "flex" }}><Icon name="edit" size={13} /></button>
+                        <button onClick={() => setDictEntries(dictEntries.filter((_, j) => j !== i))} style={{ border: "none", background: "transparent", color: "var(--text-muted)", cursor: "pointer", padding: 3, borderRadius: 3, display: "flex" }}><Icon name="trash" size={13} /></button>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {dictTab === "synonyms" && (
+              <div style={{ padding: "20px 0", textAlign: "center", color: "var(--text-muted)" }}>
+                <Icon name="book" size={28} style={{ marginBottom: 10, opacity: 0.3 }} />
+                <p style={{ fontSize: 13 }}>No synonyms defined yet.<br />Add entries to improve query recall.</p>
+              </div>
+            )}
+
+            {dictTab === "stop expansions" && (
+              <div style={{ padding: "20px 0" }}>
+                <p style={{ fontSize: 12.5, color: "var(--text-secondary)", marginBottom: 10, lineHeight: 1.6 }}>Terms the AI should <em>not</em> expand. Useful for acronyms like "BC" (province) or "SFU".</p>
+                <div style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>
+                  {["SFU", "BC", "UBC", "FIPPA"].map(term => (
+                    <div key={term} style={{ display: "flex", alignItems: "center", gap: 4, padding: "4px 8px", background: "var(--bg-panel)", border: "1px solid var(--border)", borderRadius: 5 }}>
+                      <span style={{ fontSize: 12, fontFamily: "monospace", fontWeight: 600, color: "var(--text)" }}>{term}</span>
+                      <button style={{ border: "none", background: "transparent", color: "var(--text-muted)", cursor: "pointer", padding: 1, display: "flex" }}><Icon name="close" size={11} /></button>
+                    </div>
+                  ))}
+                  <button style={{ padding: "4px 10px", background: "transparent", border: "1px dashed var(--border)", borderRadius: 5, fontSize: 12, color: "var(--text-muted)", cursor: "pointer", fontFamily: "var(--font-ui)", display: "flex", alignItems: "center", gap: 4 }}>
+                    <Icon name="plus" size={11} /> Add
+                  </button>
+                </div>
+              </div>
+            )}
+
+            <div style={{ marginTop: 14, display: "flex", gap: 8 }}>
+              <button style={{ flex: 1, padding: "7px 0", background: "var(--bg)", border: "1px solid var(--border)", borderRadius: 6, fontSize: 12, color: "var(--text-secondary)", cursor: "pointer", fontFamily: "var(--font-ui)", display: "flex", alignItems: "center", justifyContent: "center", gap: 5 }}>
+                <Icon name="download" size={13} /> Export JSON
+              </button>
+              <button style={{ flex: 1, padding: "7px 0", background: "var(--accent-red)", color: "white", border: "none", borderRadius: 6, fontSize: 12, fontWeight: 500, cursor: "pointer", fontFamily: "var(--font-ui)" }}>Save Dictionary</button>
+            </div>
+          </div>
+        )}
+
+        {/* Privacy */}
+        {tab === "privacy" && (
+          <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
+            <div style={{ padding: "10px 14px", background: "var(--accent-red-light)", border: "1px solid var(--accent-red-mid)", borderRadius: 8 }}>
+              <div style={{ fontSize: 12, fontWeight: 600, color: "var(--accent-red)", marginBottom: 4 }}>FIPPA Compliance</div>
+              <p style={{ fontSize: 12.5, color: "var(--text-secondary)", lineHeight: 1.55 }}>Query parsing uses a local Ollama model. No search queries leave your machine. External API calls send only search terms to public, non-authenticated endpoints.</p>
+            </div>
+            {[
+              { label: "Query Logging", desc: "Store search history locally for history/analytics", defaultOn: true },
+              { label: "Anonymous Usage Stats", desc: "Send anonymous query count to help improve the system", defaultOn: false },
+              { label: "LLM Query Parsing", desc: "Use local Qwen3-1.7B for natural language understanding", defaultOn: true },
+              { label: "SPECTER2 Reranking", desc: "Fetch embeddings from Semantic Scholar API", defaultOn: true },
+            ].map(({ label, desc, defaultOn }) => {
+              const [on, setOn] = React.useState(defaultOn);
+              return (
+                <div key={label} style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", gap: 12, padding: "10px 12px", background: "var(--bg-panel)", border: "1px solid var(--border-light)", borderRadius: 8 }}>
+                  <div>
+                    <div style={{ fontSize: 13, fontWeight: 500, color: "var(--text)" }}>{label}</div>
+                    <div style={{ fontSize: 11.5, color: "var(--text-muted)", marginTop: 2 }}>{desc}</div>
+                  </div>
+                  <button onClick={() => setOn(!on)} style={{ width: 38, height: 22, borderRadius: 11, background: on ? "var(--accent-red)" : "var(--border)", border: "none", cursor: "pointer", position: "relative", flexShrink: 0, transition: "background 0.2s" }}>
+                    <div style={{ width: 16, height: 16, borderRadius: "50%", background: "white", position: "absolute", top: 3, left: on ? 19 : 3, transition: "left 0.2s", boxShadow: "0 1px 3px rgba(0,0,0,0.2)" }} />
+                  </button>
+                </div>
+              );
+            })}
+          </div>
+        )}
+      </div>
+    </div>
+  );
+};
+
+// ─── ADMIN SCREEN ────────────────────────────────────────────────────────────
+
+const AdminScreen = () => {
+  const [tab, setTab] = React.useState("overview");
+
+  const modelVersions = [
+    { version: "v3", date: "2026-02-15", examples: 487, accuracy: "82%", status: "Active" },
+    { version: "v2", date: "2026-01-10", examples: 312, accuracy: "78%", status: "Archived" },
+    { version: "v1", date: "2025-12-01", examples: 200, accuracy: "71%", status: "Archived" },
+    { version: "base", date: "—", examples: "—", accuracy: "65%", status: "Fallback" },
+  ];
+
+  const pendingQueries = [
+    { q: "REM thesis on salmon in BC", llm_out: '{"terms": ["REM", "thesis", "salmon"], "material_type": "thesis"}', refined: "Resource Environmental Management salmon British Columbia" },
+    { q: "FASS paper indigenous studies 2023", llm_out: '{"terms": ["FASS", "indigenous", "studies"], "date_from": "2023"}', refined: "Faculty Arts Social Sciences indigenous studies 2023" },
+    { q: "ILL electronic resource access", llm_out: '{"terms": ["ILL", "electronic", "resource"], "material_type": "any"}', refined: "Interlibrary loan electronic resource access" },
+  ];
+
+  return (
+    <div style={{ flex: 1, overflow: "auto", padding: "20px 24px" }}>
+      <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 16 }}>
+        <div style={{ width: 28, height: 28, borderRadius: 6, background: "var(--accent-red)", display: "flex", alignItems: "center", justifyContent: "center" }}>
+          <Icon name="admin" size={14} style={{ color: "white" }} />
+        </div>
+        <div>
+          <h2 style={{ fontFamily: "var(--font-serif)", fontSize: 17, fontWeight: 500, color: "var(--text)", lineHeight: 1.2 }}>Admin Dashboard</h2>
+          <span style={{ fontSize: 11, color: "var(--text-muted)" }}>JWT protected · admin@sfu.ca</span>
+        </div>
+      </div>
+
+      <div style={{ display: "flex", gap: 0, borderBottom: "1px solid var(--border-light)", marginBottom: 20 }}>
+        {["overview", "models", "curate", "logs"].map(t => (
+          <button key={t} onClick={() => setTab(t)} style={{ padding: "8px 16px", border: "none", background: "transparent", fontSize: 13, fontWeight: tab === t ? 500 : 400, color: tab === t ? "var(--accent-red)" : "var(--text-secondary)", cursor: "pointer", borderBottom: `2px solid ${tab === t ? "var(--accent-red)" : "transparent"}`, fontFamily: "var(--font-ui)", textTransform: "capitalize", transition: "color 0.15s" }}>
+            {t}
+          </button>
+        ))}
+      </div>
+
+      {/* Overview */}
+      {tab === "overview" && (
+        <div>
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: 10, marginBottom: 20 }}>
+            {[
+              { label: "Queries (30d)", value: "1,247", icon: "search", color: "var(--accent-red)" },
+              { label: "User Refinements", value: "312 (25%)", icon: "edit", color: "var(--accent-amber)" },
+              { label: "Est. Accuracy", value: "~75%", icon: "activity", color: "var(--accent-teal)" },
+              { label: "Avg Latency", value: "487ms", icon: "cpu", color: "oklch(52% 0.14 280)" },
+            ].map(({ label, value, icon, color }) => (
+              <div key={label} style={{ background: "var(--bg-panel)", border: "1px solid var(--border-light)", borderRadius: 8, padding: "12px 14px" }}>
+                <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 8 }}>
+                  <span style={{ fontSize: 11, color: "var(--text-muted)", textTransform: "uppercase", letterSpacing: "0.05em" }}>{label}</span>
+                  <Icon name={icon} size={14} style={{ color }} />
+                </div>
+                <div style={{ fontSize: 20, fontWeight: 600, color: "var(--text)", fontVariantNumeric: "tabular-nums" }}>{value}</div>
+              </div>
+            ))}
+          </div>
+
+          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 14 }}>
+            {/* Active model */}
+            <div style={{ background: "var(--bg-panel)", border: "1px solid var(--border-light)", borderRadius: 8, padding: "14px 16px" }}>
+              <div style={{ fontSize: 11, fontWeight: 600, color: "var(--text-muted)", textTransform: "uppercase", letterSpacing: "0.05em", marginBottom: 10 }}>Active Model</div>
+              <div style={{ fontSize: 15, fontWeight: 600, color: "var(--text)", marginBottom: 4 }}>qwen3-1.7b-sfu-v3</div>
+              <div style={{ fontSize: 12, color: "var(--text-secondary)", marginBottom: 8 }}>Fine-tuned 2026-02-15 · 487 training examples</div>
+              <div style={{ display: "flex", gap: 6 }}>
+                <span style={{ fontSize: 11, padding: "2px 8px", background: "oklch(93% 0.05 145)", color: "oklch(42% 0.14 145)", borderRadius: 4, fontWeight: 500 }}>82% accuracy</span>
+                <span style={{ fontSize: 11, padding: "2px 8px", background: "var(--accent-teal-light)", color: "var(--accent-teal)", borderRadius: 4, fontWeight: 500 }}>Active</span>
+              </div>
+            </div>
+
+            {/* Improvement options */}
+            <div style={{ background: "var(--bg-panel)", border: "1px solid var(--border-light)", borderRadius: 8, padding: "14px 16px" }}>
+              <div style={{ fontSize: 11, fontWeight: 600, color: "var(--text-muted)", textTransform: "uppercase", letterSpacing: "0.05em", marginBottom: 10 }}>Improvement</div>
+              <div style={{ marginBottom: 8 }}>
+                <div style={{ fontSize: 12.5, fontWeight: 500, color: "var(--text)", marginBottom: 2 }}>RAG Examples</div>
+                <div style={{ fontSize: 12, color: "var(--text-muted)", marginBottom: 6 }}>234 curated pairs ready</div>
+                <button style={{ fontSize: 11, padding: "4px 10px", background: "var(--bg)", border: "1px solid var(--border)", borderRadius: 5, color: "var(--text-secondary)", cursor: "pointer", fontFamily: "var(--font-ui)" }}>Review & Curate Queries</button>
+              </div>
+              <div>
+                <div style={{ fontSize: 12.5, fontWeight: 500, color: "var(--text)", marginBottom: 2 }}>Fine-Tune (requires GPU)</div>
+                <div style={{ fontSize: 12, color: "var(--text-muted)", marginBottom: 6 }}>487 training examples available</div>
+                <button style={{ fontSize: 11, padding: "4px 10px", background: "var(--accent-red)", color: "white", border: "none", borderRadius: 5, cursor: "pointer", fontFamily: "var(--font-ui)", fontWeight: 500 }}>Start Fine-Tune Job</button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Models */}
+      {tab === "models" && (
+        <div>
+          <div style={{ background: "var(--bg-panel)", border: "1px solid var(--border-light)", borderRadius: 8, overflow: "hidden", marginBottom: 16 }}>
+            <div style={{ display: "grid", gridTemplateColumns: "80px 1fr 80px 80px 80px 100px", padding: "8px 14px", background: "var(--bg)", borderBottom: "1px solid var(--border)" }}>
+              {["Version", "Date", "Examples", "Accuracy", "Status", "Actions"].map(h => (
+                <span key={h} style={{ fontSize: 11, fontWeight: 600, color: "var(--text-muted)", textTransform: "uppercase", letterSpacing: "0.05em" }}>{h}</span>
+              ))}
+            </div>
+            {modelVersions.map((m, i) => (
+              <div key={i} style={{ display: "grid", gridTemplateColumns: "80px 1fr 80px 80px 80px 100px", padding: "10px 14px", borderBottom: i < modelVersions.length - 1 ? "1px solid var(--border-light)" : "none", alignItems: "center", background: m.status === "Active" ? "oklch(98% 0.008 145)" : "transparent" }}>
+                <span style={{ fontSize: 13, fontWeight: 600, color: "var(--text)", fontFamily: "monospace" }}>{m.version}</span>
+                <span style={{ fontSize: 12, color: "var(--text-secondary)" }}>{m.date}</span>
+                <span style={{ fontSize: 12, color: "var(--text-secondary)" }}>{m.examples}</span>
+                <span style={{ fontSize: 13, fontWeight: 600, color: m.status === "Active" ? "oklch(42% 0.14 145)" : "var(--text-secondary)" }}>{m.accuracy}</span>
+                <span style={{ fontSize: 11, padding: "2px 7px", borderRadius: 4, background: m.status === "Active" ? "oklch(93% 0.05 145)" : m.status === "Fallback" ? "var(--accent-red-light)" : "var(--bg)", color: m.status === "Active" ? "oklch(42% 0.14 145)" : m.status === "Fallback" ? "var(--accent-red)" : "var(--text-muted)", fontWeight: 500, display: "inline-block" }}>{m.status}</span>
+                <div style={{ display: "flex", gap: 4 }}>
+                  {m.status !== "Active" && <button style={{ fontSize: 10, padding: "2px 7px", background: "var(--accent-red-light)", color: "var(--accent-red)", border: "none", borderRadius: 4, cursor: "pointer", fontFamily: "var(--font-ui)", fontWeight: 500 }}>Activate</button>}
+                  <button style={{ fontSize: 10, padding: "2px 7px", background: "var(--bg)", border: "1px solid var(--border)", borderRadius: 4, cursor: "pointer", fontFamily: "var(--font-ui)", color: "var(--text-secondary)" }}>Log</button>
+                </div>
+              </div>
+            ))}
+          </div>
+
+          <div style={{ background: "var(--bg-panel)", border: "1px solid var(--border-light)", borderRadius: 8, padding: "16px" }}>
+            <div style={{ fontSize: 13, fontWeight: 500, color: "var(--text)", marginBottom: 10 }}>Schedule Fine-Tuning</div>
+            <div style={{ display: "flex", gap: 8, alignItems: "center", marginBottom: 10 }}>
+              <select style={{ flex: 1, padding: "7px 10px", border: "1px solid var(--border)", borderRadius: 6, fontSize: 12.5, color: "var(--text)", background: "var(--bg)", fontFamily: "var(--font-ui)", outline: "none" }}>
+                <option>Every month</option><option>Every 2 weeks</option><option>Manual only</option>
+              </select>
+              <button style={{ padding: "7px 14px", background: "var(--accent-red)", color: "white", border: "none", borderRadius: 6, fontSize: 12.5, fontWeight: 500, cursor: "pointer", fontFamily: "var(--font-ui)", whiteSpace: "nowrap" }}>
+                Run Now
+              </button>
+            </div>
+            <p style={{ fontSize: 11.5, color: "var(--text-muted)", lineHeight: 1.5 }}>Last run: <strong>2026-02-15</strong> · accuracy 75% → 82% · duration 52 min on A100</p>
+          </div>
+        </div>
+      )}
+
+      {/* Curate queries */}
+      {tab === "curate" && (
+        <div>
+          <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 14 }}>
+            <div>
+              <p style={{ fontSize: 13, fontWeight: 500, color: "var(--text)" }}>Query Curation</p>
+              <p style={{ fontSize: 12, color: "var(--text-muted)" }}>23 / 156 pending reviewed</p>
+            </div>
+            <div style={{ display: "flex", gap: 8 }}>
+              <select style={{ padding: "5px 10px", border: "1px solid var(--border)", borderRadius: 5, fontSize: 12, color: "var(--text)", background: "var(--bg-panel)", fontFamily: "var(--font-ui)", outline: "none" }}>
+                <option>Refined only</option><option>All queries</option>
+              </select>
+              <select style={{ padding: "5px 10px", border: "1px solid var(--border)", borderRadius: 5, fontSize: 12, color: "var(--text)", background: "var(--bg-panel)", fontFamily: "var(--font-ui)", outline: "none" }}>
+                <option>Last 7 days</option><option>Last 30 days</option>
+              </select>
+            </div>
+          </div>
+
+          <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+            {pendingQueries.map((pq, i) => (
+              <div key={i} style={{ background: "var(--bg-panel)", border: "1px solid var(--border-light)", borderRadius: 8, padding: "14px 16px" }}>
+                <div style={{ fontSize: 12, color: "var(--text-muted)", marginBottom: 4 }}>User query</div>
+                <div style={{ fontSize: 13, fontWeight: 500, color: "var(--text)", marginBottom: 8 }}>"{pq.q}"</div>
+                <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10, marginBottom: 10 }}>
+                  <div>
+                    <div style={{ fontSize: 10, fontWeight: 600, color: "var(--text-muted)", textTransform: "uppercase", letterSpacing: "0.05em", marginBottom: 4 }}>LLM Output</div>
+                    <pre style={{ fontSize: 11, background: "var(--bg)", padding: "6px 8px", borderRadius: 5, color: "var(--text-secondary)", overflowX: "auto", margin: 0, border: "1px solid var(--border)" }}>{pq.llm_out}</pre>
+                  </div>
+                  <div>
+                    <div style={{ fontSize: 10, fontWeight: 600, color: "var(--text-muted)", textTransform: "uppercase", letterSpacing: "0.05em", marginBottom: 4 }}>User Refined To</div>
+                    <div style={{ fontSize: 12, background: "oklch(93% 0.05 145)", padding: "6px 8px", borderRadius: 5, color: "oklch(32% 0.10 145)", border: "1px solid oklch(84% 0.07 145)", fontStyle: "italic" }}>"{pq.refined}"</div>
+                  </div>
+                </div>
+                <div style={{ display: "flex", gap: 6 }}>
+                  <button style={{ flex: 1, padding: "6px 0", background: "oklch(93% 0.05 145)", color: "oklch(42% 0.14 145)", border: "1px solid oklch(84% 0.07 145)", borderRadius: 5, fontSize: 12, fontWeight: 500, cursor: "pointer", fontFamily: "var(--font-ui)", display: "flex", alignItems: "center", justifyContent: "center", gap: 4 }}>
+                    <Icon name="check" size={12} /> Add to training
+                  </button>
+                  <button style={{ flex: 1, padding: "6px 0", background: "var(--bg)", color: "var(--text-muted)", border: "1px solid var(--border)", borderRadius: 5, fontSize: 12, cursor: "pointer", fontFamily: "var(--font-ui)" }}>
+                    Skip
+                  </button>
+                  <button style={{ padding: "6px 12px", background: "var(--bg)", color: "var(--accent-amber)", border: "1px solid var(--accent-amber-light)", borderRadius: 5, fontSize: 12, cursor: "pointer", fontFamily: "var(--font-ui)", display: "flex", alignItems: "center", gap: 4 }}>
+                    <Icon name="warning" size={12} /> Flag
+                  </button>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* Logs */}
+      {tab === "logs" && (
+        <div>
+          <div style={{ background: "#0d1117", borderRadius: 8, padding: "14px 16px", fontFamily: "monospace", fontSize: 11.5, color: "#8b949e", lineHeight: 1.7, maxHeight: 480, overflow: "auto" }}>
+            {[
+              { time: "14:41:02", level: "INFO", msg: "Query parsed: 'machine learning drug discovery' → {terms: ['machine learning', 'drug discovery'], material_type: 'article'}", color: "#8b949e" },
+              { time: "14:41:03", level: "INFO", msg: "OpenAlex: 50 results fetched in 312ms", color: "#8b949e" },
+              { time: "14:41:03", level: "INFO", msg: "Semantic Scholar: SPECTER2 embeddings batch 50/50 in 487ms", color: "#8b949e" },
+              { time: "14:41:03", level: "INFO", msg: "Access resolver: 12 OA, 23 SFU proxy, 8 Unpaywall, 7 DOI fallback", color: "#8b949e" },
+              { time: "14:41:03", level: "INFO", msg: "Reranker: NDCG@10 pipeline complete in 2ms", color: "#8b949e" },
+              { time: "14:41:04", level: "INFO", msg: "Returned 7 results to UI in 1.2s total", color: "#8b949e" },
+              { time: "11:08:15", level: "WARN", msg: "Semantic Scholar rate limit hit (1 req/s), backing off 1.2s", color: "#d29922" },
+              { time: "11:08:16", level: "INFO", msg: "Circuit breaker: semantic_scholar CLOSED (healthy)", color: "#8b949e" },
+              { time: "11:07:52", level: "INFO", msg: "Ollama heartbeat OK · model=qwen3:1.7b · latency=23ms", color: "#8b949e" },
+              { time: "11:00:00", level: "INFO", msg: "Solr registry refreshed: 764 records cached (~198KB)", color: "#3fb950" },
+              { time: "10:45:33", level: "ERROR", msg: "Unpaywall: 10.1039/D3SC01234X not found — DOI fallback used", color: "#f85149" },
+            ].map((log, i) => (
+              <div key={i} style={{ display: "flex", gap: 10 }}>
+                <span style={{ color: "#484f58", flexShrink: 0 }}>{log.time}</span>
+                <span style={{ color: log.level === "ERROR" ? "#f85149" : log.level === "WARN" ? "#d29922" : "#3fb950", flexShrink: 0, width: 36 }}>{log.level}</span>
+                <span style={{ color: log.color }}>{log.msg}</span>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+};
+
+// ─── MAIN APP ────────────────────────────────────────────────────────────────
+
+const App = () => {
+  const [screen, setScreen] = React.useState("search");
+  const [savedIds, setSavedIds] = React.useState(new Set());
+  // AI/backend status: probed live on mount and updated by each search. "online"
+  // means the live search backend answered; "offline" means we're on fallback.
+  const [aiStatus, setAiStatus] = React.useState("online");
+
+  // Probe backend reachability on mount so the sidebar status + demo banner are
+  // accurate before the first search.
+  React.useEffect(() => {
+    let cancelled = false;
+    if (window.SFUApi) {
+      window.SFUApi.health().then((r) => {
+        if (cancelled) return;
+        const online = r.source === "live";
+        setAiStatus(online ? "online" : "offline");
+        if (window.SFUUI) window.SFUUI.setMockBanner(!online);
+      });
+    }
+    return () => { cancelled = true; };
+  }, []);
+
+  // Shell handshake: announce readiness, then accept screen requests so that
+  // selecting a Search sub-screen (Saved / History / …) from another app lands
+  // on the right screen here.
+  React.useEffect(() => {
+    const onMsg = (e) => {
+      if (e.data && typeof e.data.suiteScreen === "string") setScreen(e.data.suiteScreen);
+    };
+    window.addEventListener("message", onMsg);
+    if (window.parent !== window) window.parent.postMessage({ suiteReady: "search" }, "*");
+    return () => window.removeEventListener("message", onMsg);
+  }, []);
+
+  const TWEAK_DEFAULTS = /*EDITMODE-BEGIN*/{
+    "accentColor": "teal",
+    "density": "comfortable",
+    "showTLDR": true,
+    "aiInterpretation": true,
+    "degradedRun": false
+  }/*EDITMODE-END*/;
+
+  const [tweaks, setTweak] = useTweaks(TWEAK_DEFAULTS);
+
+  const toggleSave = (id) => {
+    setSavedIds(prev => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id); else next.add(id);
+      return next;
+    });
+  };
+
+  const accentMap = {
+    red: { main: "oklch(52% 0.18 25)", light: "oklch(94% 0.04 25)", mid: "oklch(70% 0.10 25)" },
+    blue: { main: "oklch(50% 0.18 255)", light: "oklch(94% 0.04 255)", mid: "oklch(70% 0.10 255)" },
+    teal: { main: "oklch(50% 0.16 195)", light: "oklch(94% 0.04 195)", mid: "oklch(70% 0.10 195)" },
+  };
+  const accent = accentMap[tweaks.accentColor] || accentMap.red;
+
+  return (
+    <>
+      <style>{`
+        @keyframes spin { to { transform: rotate(360deg); } }
+        @keyframes pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.5; } }
+        :root {
+          --accent-red: ${accent.main};
+          --accent-red-light: ${accent.light};
+          --accent-red-mid: ${accent.mid};
+          --spacing-card: ${tweaks.density === "compact" ? "10px 14px" : "16px 18px"};
+        }
+      `}</style>
+      <div style={{ display: "flex", height: "100vh", overflow: "hidden" }}>
+        <Sidebar screen={screen} setScreen={setScreen} aiStatus={aiStatus} />
+        <main style={{ flex: 1, display: "flex", flexDirection: "column", minWidth: 0, overflow: "hidden" }}>
+          {screen === "search" && <SearchScreen savedIds={savedIds} toggleSave={toggleSave} degraded={tweaks.degradedRun} setAiStatus={setAiStatus} />}
+          {screen === "saved" && <SavedScreen savedIds={savedIds} toggleSave={toggleSave} />}
+          {screen === "history" && <HistoryScreen />}
+          {screen === "databases" && <DatabasesScreen />}
+          {screen === "settings" && <SettingsScreen />}
+          {screen === "admin" && <AdminScreen />}
+        </main>
+      </div>
+      <TweaksPanel>
+        <TweakSection label="Appearance" />
+        <TweakRadio label="Accent Color" value={tweaks.accentColor} options={["red","blue","teal"]} onChange={v => setTweak("accentColor", v)} />
+        <TweakRadio label="Density" value={tweaks.density} options={["comfortable","compact"]} onChange={v => setTweak("density", v)} />
+        <TweakSection label="Results" />
+        <TweakToggle label="Show TLDR summaries" value={tweaks.showTLDR} onChange={v => setTweak("showTLDR", v)} />
+        <TweakToggle label="Show AI interpretation" value={tweaks.aiInterpretation} onChange={v => setTweak("aiInterpretation", v)} />
+        <TweakSection label="Provenance" />
+        <TweakToggle label="Simulate degraded run (SPLADE down)" value={tweaks.degradedRun} onChange={v => setTweak("degradedRun", v)} />
+      </TweaksPanel>
+    </>
+  );
+};
+
+ReactDOM.createRoot(document.getElementById("root")).render(<App />);
+</script>
+</body>
+</html>

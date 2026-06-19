@@ -1,0 +1,101 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>SFU Library — Suite</title>
+<style>
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+  html, body { height: 100%; overflow: hidden; }
+  body { background: oklch(18% 0.012 250); }
+  main.suite-frame { width: 100%; height: 100%; background: oklch(97.5% 0.006 80); }
+  main.suite-frame iframe { width: 100%; height: 100%; border: none; display: block; }
+</style>
+</head>
+<body>
+
+<!-- No top bar: every app reaches every other app from the shared left sidebar.
+     The shell is just a full-bleed iframe that swaps which app is mounted. -->
+<main class="suite-frame">
+  <iframe id="appframe" title="SFU Library app"></iframe>
+</main>
+
+<script>
+(function () {
+  var frame = document.getElementById("appframe");
+
+  var PAGES = {
+    search:    "search.html",
+    analytics: "analytics.html",
+    index:     "index_manager.html",
+  };
+  // Sub-screens that live INSIDE the Search app. Selecting one of these from
+  // any other app loads the Search app and asks it to open that screen.
+  var SEARCH_SCREENS = ["search", "saved", "history", "databases", "settings", "admin"];
+
+  var current = null;       // which app id is mounted
+  var pendingScreen = null; // screen to hand to the Search app once it's ready
+  var shellLoaded = false;
+
+  function pageIdFor(nav) {
+    if (PAGES[nav]) return nav;
+    if (SEARCH_SCREENS.indexOf(nav) !== -1) return "search";
+    return "search";
+  }
+
+  // Mount an app via fetch + srcdoc — loading the file directly in an iframe
+  // lets the inner page's preview instrumentation clobber the outer pane
+  // registration, which breaks preview/screenshot tooling. srcdoc keeps this
+  // shell as the only registered page; relative asset URLs still resolve
+  // against the project root because srcdoc inherits the parent base URL.
+  function mount(pageId, screen) {
+    pendingScreen = screen || null;
+    if (pageId === current) {
+      // Same app already mounted — just forward the screen request.
+      if (pendingScreen) sendScreen(pendingScreen);
+      return;
+    }
+    current = pageId;
+    localStorage.setItem("suite-page", pageId);
+    var src = PAGES[pageId] || PAGES.search;
+    fetch(src)
+      .then(function (r) { if (!r.ok) throw new Error(r.status); return r.text(); })
+      .then(function (html) { frame.srcdoc = html; })
+      .catch(function () {
+        frame.srcdoc = "<p style='font-family:sans-serif;padding:20px'>Could not load " + src + "</p>";
+      });
+  }
+
+  function sendScreen(screen) {
+    try { frame.contentWindow.postMessage({ suiteScreen: screen }, "*"); } catch (e) {}
+  }
+
+  // Navigation requests from any inner app's sidebar.
+  window.addEventListener("message", function (e) {
+    var d = e.data;
+    if (!d) return;
+    // Inner app announces it has mounted and is listening.
+    if (d.suiteReady) {
+      if (pendingScreen) { sendScreen(pendingScreen); pendingScreen = null; }
+      return;
+    }
+    if (typeof d.suiteNav === "string") {
+      var pageId = pageIdFor(d.suiteNav);
+      // If the nav target is a Search sub-screen, carry it through.
+      var screen = (SEARCH_SCREENS.indexOf(d.suiteNav) !== -1) ? d.suiteNav
+                 : (typeof d.screen === "string" ? d.screen : null);
+      mount(pageId, screen);
+    }
+  });
+
+  function start() {
+    shellLoaded = true;
+    mount(localStorage.getItem("suite-page") || "search", null);
+  }
+  if (document.readyState === "complete") start();
+  else window.addEventListener("load", start);
+})();
+</script>
+
+</body>
+</html>

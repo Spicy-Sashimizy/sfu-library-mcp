@@ -8,7 +8,7 @@ swap (see `THIN_CLIENT_SWAP.md` for what this container now runs).
 
 | Doc | What it is |
 |---|---|
-| `THIN_CLIENT_SWAP.md` | **Start here** — this container's architecture: engines (incl. era sub-sections, abstracts v3, meta v2, dense warm cache), serving swap, hot/cold structure, migration, removals |
+| `THIN_CLIENT_SWAP.md` | **Start here** — this container's architecture: engines (incl. era sub-sections, abstracts v3, meta v2, dense warm cache), serving swap, hot/cold structure, **web GUI (SFU Library Suite at `/app` + `/api/*` endpoints)**, migration, removals |
 | `STORAGE_BUDGET_150M.md` | Whole-DB storage budget: measured levers + implementation status, all-levers totals (300.9→188.8 GB), mainline hypothetical (274→~112 GB), degradation accounting, BMP quirks |
 | `LEXICAL_STORAGE_RESEARCH.md` | Storage/compression research + measured results (§8 sidecar variants incl. SLM decode, §7 multilingual + front coding, §9 all-levers matrix) |
 | `DENSE_WARMCACHE_RESEARCH.md` | Query-driven dense warm cache: literature lineage (database cracking, CrackIVF) + the v1 design implemented in `lib/thinclient/dense_cache.py` |

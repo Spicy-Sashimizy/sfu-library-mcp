@@ -14,14 +14,17 @@ Endpoints:
 """
 
 import contextlib
+import json
 import os
 from collections.abc import AsyncIterator
+from pathlib import Path
 
 import uvicorn
 from starlette.applications import Starlette
 from starlette.requests import Request
-from starlette.responses import JSONResponse
-from starlette.routing import Route
+from starlette.responses import JSONResponse, RedirectResponse
+from starlette.routing import Mount, Route
+from starlette.staticfiles import StaticFiles
 
 from mcp.server import Server
 from mcp.server.streamable_http_manager import StreamableHTTPSessionManager
@@ -29,7 +32,15 @@ from mcp.types import Tool, TextContent
 
 from lib.logging_setup import setup_logging
 from lib.config import load_config, validate_config
-from lib.tools import TOOL_DEFINITIONS, get_tool_definitions, handle_tool_call
+from lib.tools import (
+    TOOL_DEFINITIONS,
+    get_tool_definitions,
+    handle_tool_call,
+    search_academic_structured,
+)
+
+# Static web GUI (the SFU Library Suite). Served read-only at /app.
+WEB_DIR = Path(__file__).resolve().parent.parent / "web"
 
 config = load_config()
 logger = setup_logging(level=config.log_level, log_file=config.log_file)
@@ -76,6 +87,81 @@ async def engagement(request: Request) -> JSONResponse:
     return JSONResponse({"recorded": n})
 
 
+# ── GUI REST endpoints (consumed by web/lib/api.js) ──────────────────────────
+# Thin JSON wrappers so the browser never has to drive the MCP JSON-RPC
+# handshake. Each reuses the existing tool logic. The GUI degrades to mock data
+# on any non-2xx, so these stay simple and surface real errors as 5xx.
+
+def _tool_json(result) -> dict:
+    """Parse the first TextContent of a tool result as JSON (tools that emit
+    JSON), else wrap the raw text under {'text': ...}."""
+    if not result:
+        return {}
+    text = getattr(result[0], "text", "") or ""
+    try:
+        return json.loads(text)
+    except (ValueError, TypeError):
+        return {"text": text}
+
+
+async def api_search(request: Request) -> JSONResponse:
+    """Structured academic search for the GUI result cards."""
+    try:
+        args = await request.json()
+    except Exception:
+        return JSONResponse({"error": "invalid JSON body"}, status_code=400)
+    if not isinstance(args, dict) or not args.get("query"):
+        return JSONResponse({"error": "missing 'query'"}, status_code=400)
+    try:
+        data = await search_academic_structured(args)
+        return JSONResponse(data)
+    except Exception as e:
+        logger.exception("GUI search failed")
+        return JSONResponse({"error": str(e)}, status_code=500)
+
+
+async def api_index_status(request: Request) -> JSONResponse:
+    """Index metrics + pack state + unpack jobs (for the Index Manager app)."""
+    try:
+        result = await handle_tool_call("get_index_status", {})
+        return JSONResponse(_tool_json(result))
+    except Exception as e:
+        logger.exception("GUI index_status failed")
+        return JSONResponse({"error": str(e)}, status_code=500)
+
+
+async def api_personas(request: Request) -> JSONResponse:
+    """Persona registry + live/cold section lists (for the Index Manager app)."""
+    try:
+        result = await handle_tool_call("list_personas", {})
+        return JSONResponse(_tool_json(result))
+    except Exception as e:
+        logger.exception("GUI personas failed")
+        return JSONResponse({"error": str(e)}, status_code=500)
+
+
+async def api_unpack(request: Request) -> JSONResponse:
+    """Kick off a background section unpack (for the Index Manager app)."""
+    try:
+        payload = await request.json()
+    except Exception:
+        return JSONResponse({"error": "invalid JSON body"}, status_code=400)
+    section = (payload or {}).get("section", "")
+    if not section:
+        return JSONResponse({"error": "missing 'section'"}, status_code=400)
+    try:
+        result = await handle_tool_call("request_section_unpack", {"section": section})
+        return JSONResponse({"ok": True, "message": getattr(result[0], "text", "") if result else ""})
+    except Exception as e:
+        logger.exception("GUI unpack failed")
+        return JSONResponse({"error": str(e)}, status_code=500)
+
+
+async def app_root(request: Request) -> RedirectResponse:
+    """/app -> the suite shell."""
+    return RedirectResponse(url="/app/suite.html")
+
+
 session_manager = StreamableHTTPSessionManager(
     app=mcp_server,
     json_response=True,
@@ -89,14 +175,26 @@ async def lifespan(app: Starlette) -> AsyncIterator[None]:
         yield
 
 
-_starlette = Starlette(
-    lifespan=lifespan,
-    routes=[
-        Route("/health", health_check, methods=["GET"]),
-        Route("/analytics", analytics, methods=["GET"]),
-        Route("/engagement", engagement, methods=["POST"]),
-    ],
-)
+_routes = [
+    Route("/health", health_check, methods=["GET"]),
+    Route("/analytics", analytics, methods=["GET"]),
+    Route("/engagement", engagement, methods=["POST"]),
+    Route("/api/search", api_search, methods=["POST"]),
+    Route("/api/index_status", api_index_status, methods=["GET"]),
+    Route("/api/personas", api_personas, methods=["GET"]),
+    Route("/api/unpack", api_unpack, methods=["POST"]),
+    Route("/app", app_root, methods=["GET"]),
+]
+
+# Serve the static web GUI only if the bundle is present (keeps the server
+# usable in headless/index-only deployments that don't ship the GUI).
+if WEB_DIR.is_dir():
+    _routes.append(Mount("/app", app=StaticFiles(directory=str(WEB_DIR), html=True)))
+    logger.info("Serving web GUI from %s at /app", WEB_DIR)
+else:
+    logger.info("Web GUI dir %s not found; /app disabled", WEB_DIR)
+
+_starlette = Starlette(lifespan=lifespan, routes=_routes)
 
 
 async def app(scope, receive, send):

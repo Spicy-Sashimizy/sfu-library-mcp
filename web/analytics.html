@@ -1,0 +1,503 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>About this index — SFU Library</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,300;0,9..40,400;0,9..40,500;0,9..40,600;1,9..40,400&family=Lora:ital,wght@0,400;0,500;0,600&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<script src="vendor/react.production.min.js"></script>
+<script src="vendor/react-dom.production.min.js"></script>
+<script src="vendor/babel.min.js"></script>
+<!-- Shared suite client: live backend with mock fallback + demo-data banner -->
+<script src="lib/mock.js"></script>
+<script src="lib/api.js"></script>
+<script src="lib/ui.js"></script>
+<style>
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+  :root {
+    --bg: oklch(97.5% 0.006 80);
+    --bg-panel: oklch(99% 0.004 80);
+    --bg-soft: oklch(95% 0.008 80);
+    --bg-sidebar: oklch(18% 0.012 250);
+    --bg-sidebar-hover: oklch(24% 0.014 250);
+    --bg-sidebar-active: oklch(28% 0.016 250);
+    --text: oklch(16% 0.012 250);
+    --text-secondary: oklch(40% 0.014 250);
+    --text-muted: oklch(58% 0.010 250);
+    --text-faint: oklch(72% 0.008 250);
+    --text-sidebar: oklch(78% 0.010 250);
+    --text-sidebar-active: oklch(96% 0.006 80);
+    --border: oklch(88% 0.010 250);
+    --border-light: oklch(93% 0.007 250);
+
+    --c-red: oklch(58% 0.16 25);
+    --c-red-soft: oklch(92% 0.04 25);
+    --c-teal: oklch(60% 0.10 200);
+    --c-teal-soft: oklch(93% 0.035 200);
+    --c-amber: oklch(72% 0.12 75);
+    --c-amber-soft: oklch(95% 0.04 75);
+    --c-amber-ink: oklch(50% 0.11 70);
+    --c-green: oklch(64% 0.11 145);
+    --c-green-soft: oklch(94% 0.04 145);
+    --c-violet: oklch(58% 0.10 295);
+    --c-indigo: oklch(55% 0.10 260);
+
+    --shadow-sm: 0 1px 2px oklch(0% 0 0 / 0.04);
+    --shadow-md: 0 1px 3px oklch(0% 0 0 / 0.06), 0 1px 2px oklch(0% 0 0 / 0.04);
+
+    --radius: 10px;
+    --radius-sm: 6px;
+    --radius-lg: 14px;
+
+    --font-ui: 'DM Sans', system-ui, sans-serif;
+    --font-serif: 'Lora', Georgia, serif;
+    --font-mono: 'JetBrains Mono', ui-monospace, monospace;
+
+    --sidebar-width: 220px;
+  }
+  html, body, #root { height: 100%; }
+  body { font-family: var(--font-ui); background: var(--bg); color: var(--text); font-size: 14px; line-height: 1.5; -webkit-font-smoothing: antialiased; }
+  ::-webkit-scrollbar { width: 8px; height: 8px; }
+  ::-webkit-scrollbar-track { background: transparent; }
+  ::-webkit-scrollbar-thumb { background: var(--border); border-radius: 4px; }
+  ::-webkit-scrollbar-thumb:hover { background: var(--text-faint); }
+  button { cursor: pointer; font-family: var(--font-ui); }
+</style>
+</head>
+<body>
+<div id="root"></div>
+<script type="text/babel">
+
+// ─── ICONS ─────────────────────────────────────────────────────────────
+const Icon = ({ name, size = 16, style = {} }) => {
+  const I = {
+    search: <svg width={size} height={size} viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><circle cx="9" cy="9" r="6"/><path d="m16 16-3.5-3.5"/></svg>,
+    bookmark: <svg width={size} height={size} viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d="M5 3h10v14l-5-3-5 3V3Z"/></svg>,
+    history: <svg width={size} height={size} viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><circle cx="10" cy="10" r="7"/><path d="M10 6v4l2.5 2.5"/></svg>,
+    database: <svg width={size} height={size} viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><ellipse cx="10" cy="5.5" rx="7" ry="2.5"/><path d="M3 5.5v4c0 1.38 3.13 2.5 7 2.5s7-1.12 7-2.5v-4"/><path d="M3 9.5v4c0 1.38 3.13 2.5 7 2.5s7-1.12 7-2.5v-4"/></svg>,
+    chart: <svg width={size} height={size} viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d="M3 17h14"/><path d="M6 14V9M10 14V5M14 14v-6"/></svg>,
+    settings: <svg width={size} height={size} viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><circle cx="10" cy="10" r="2.5"/><path d="M10 2v2M10 16v2M2 10h2M16 10h2M4.22 4.22l1.42 1.42M14.36 14.36l1.42 1.42M4.22 15.78l1.42-1.42M14.36 5.64l1.42-1.42"/></svg>,
+    admin: <svg width={size} height={size} viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d="M10 2L3 6v4c0 4.4 3.03 8.52 7 9.5 3.97-.98 7-5.1 7-9.5V6L10 2Z"/></svg>,
+    server: <svg width={size} height={size} viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><rect x="3" y="3.5" width="14" height="5.5" rx="1.2"/><rect x="3" y="11" width="14" height="5.5" rx="1.2"/><path d="M6 6.25h.01M6 13.75h.01"/></svg>,
+    globe: <svg width={size} height={size} viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><circle cx="10" cy="10" r="7.5"/><path d="M2.5 10h15M10 2.5c2 2.2 3 4.8 3 7.5s-1 5.3-3 7.5c-2-2.2-3-4.8-3-7.5s1-5.3 3-7.5Z"/></svg>,
+    route: <svg width={size} height={size} viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><circle cx="5" cy="15" r="2"/><circle cx="15" cy="5" r="2"/><path d="M7 15h5a3 3 0 0 0 3-3V7"/></svg>,
+    clock: <svg width={size} height={size} viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><circle cx="10" cy="10" r="7.5"/><path d="M10 5.5V10l3 2"/></svg>,
+    scale: <svg width={size} height={size} viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d="M10 3v14M5 17h10M4 7l-2 5a3 3 0 0 0 6 0L6 7Zm10 0-2 5a3 3 0 0 0 6 0l-2-5ZM4 7l6-2 6 2"/></svg>,
+    check: <svg width={size} height={size} viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="m4 10.5 4 4 8-9"/></svg>,
+    chevronDown: <svg width={size} height={size} viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="m5 8 5 5 5-5"/></svg>,
+    chevronRight: <svg width={size} height={size} viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="m8 5 5 5-5 5"/></svg>,
+    arrowLeft: <svg width={size} height={size} viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="m10 5-5 5 5 5"/><path d="M5 10h11"/></svg>,
+    info: <svg width={size} height={size} viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><circle cx="10" cy="10" r="7"/><path d="M10 9v5M10 6.5v.5"/></svg>,
+    wrench: <svg width={size} height={size} viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d="M14 5.5a3.5 3.5 0 0 1-4.6 3.3l-4 4a1.7 1.7 0 0 1-2.4-2.4l4-4A3.5 3.5 0 0 1 14.5 2l-2 2 1.5 1.5 2-2c.3.6.5 1.2.5 2Z"/></svg>,
+  };
+  return <span style={{ display: "inline-flex", alignItems: "center", ...style }}>{I[name] || null}</span>;
+};
+
+// ─── SIDEBAR ───────────────────────────────────────────────────────────
+const Sidebar = ({ active }) => {
+  const top = [
+    { id: "search", icon: "search", label: "Search" },
+    { id: "saved", icon: "bookmark", label: "Saved" },
+    { id: "history", icon: "history", label: "History" },
+    { id: "databases", icon: "database", label: "Databases" },
+    { id: "analytics", icon: "info", label: "About index" },
+    { id: "index", icon: "server", label: "Index" },
+  ];
+  const bot = [
+    { id: "settings", icon: "settings", label: "Settings" },
+    { id: "admin", icon: "admin", label: "Admin" },
+  ];
+  const go = (id) => {
+    if (id === active) return;
+    if (window.parent !== window) window.parent.postMessage({ suiteNav: id }, "*");
+  };
+  const Item = ({ item }) => (
+    <button onClick={() => go(item.id)}
+      onMouseEnter={e => { if (active !== item.id) e.currentTarget.style.background = "var(--bg-sidebar-hover)"; }}
+      onMouseLeave={e => { if (active !== item.id) e.currentTarget.style.background = "transparent"; }}
+      style={{ display: "flex", alignItems: "center", gap: 10, padding: "8px 10px", borderRadius: 6, border: "none", cursor: "pointer", transition: "background 0.15s",
+        background: active === item.id ? "var(--bg-sidebar-active)" : "transparent",
+        color: active === item.id ? "var(--text-sidebar-active)" : "var(--text-sidebar)",
+        fontSize: 13, fontWeight: active === item.id ? 500 : 400, textAlign: "left", width: "100%" }}>
+      <Icon name={item.icon} size={15} />
+      {item.label}
+    </button>
+  );
+  return (
+    <aside style={{ width: "var(--sidebar-width)", background: "var(--bg-sidebar)", display: "flex", flexDirection: "column", height: "100%", flexShrink: 0, position: "sticky", top: 0 }}>
+      <div style={{ padding: "20px 18px 16px", borderBottom: "1px solid oklch(28% 0.010 250)" }}>
+        <div style={{ display: "flex", alignItems: "center", gap: 9 }}>
+          <div style={{ width: 28, height: 28, borderRadius: 6, background: "var(--c-red)", display: "flex", alignItems: "center", justifyContent: "center" }}>
+            <Icon name="search" size={14} style={{ color: "white" }} />
+          </div>
+          <div>
+            <div style={{ color: "var(--text-sidebar-active)", fontSize: 13, fontWeight: 600, lineHeight: 1.2 }}>SFU Library</div>
+            <div style={{ color: "oklch(55% 0.010 250)", fontSize: 11, lineHeight: 1.2 }}>Academic Search</div>
+          </div>
+        </div>
+      </div>
+      <nav style={{ flex: 1, padding: "10px 8px", display: "flex", flexDirection: "column", gap: 2 }}>
+        {top.map(i => <Item key={i.id} item={i} />)}
+      </nav>
+      <div style={{ padding: 8, borderTop: "1px solid oklch(28% 0.010 250)", display: "flex", flexDirection: "column", gap: 2 }}>
+        {bot.map(i => <Item key={i.id} item={i} />)}
+      </div>
+    </aside>
+  );
+};
+
+// ─── CORPUS DISCLOSURES (items 1–5) ────────────────────────────────────
+const DISCLOSURES = [
+  {
+    id: 1, tone: "warn", icon: "database",
+    title: "One source — and it has a shape",
+    what: "Everything searchable comes from a single OpenAlex snapshot (June 2026). OpenAlex is strong on journal articles and conference papers, and noticeably thin on books, theses, grey literature, humanities monographs, and non-English venues.",
+    matters: "If a work isn't in that snapshot, no search here can surface it — no matter how you phrase the query.",
+    todo: "For books and humanities, also use the library catalogue and subject databases.",
+  },
+  {
+    id: 2, tone: "warn", icon: "globe",
+    title: "Tuned for English",
+    what: "The semantic model (a bert-base-uncased SPLADE encoder) and every section's vocabulary are English-only. Meaning-based matching effectively doesn't apply to other languages.",
+    matters: "Scholarship in other languages — including Indigenous-language work and non-English-venue research — ranks lower or is missed entirely.",
+    todo: "Search your key terms in the source language too, and lean on language-specific databases.",
+  },
+  {
+    id: 3, tone: "warn", icon: "route",
+    title: "One discipline per query",
+    what: "The router assigns each query to a single subject bucket, in priority order. Roughly 7 million documents sit in an unrouted \u201cother\u201d bucket the router rarely reaches.",
+    matters: "A cross-disciplinary topic gets sent to just one discipline's section — the other side of the topic is never searched.",
+    todo: "Re-run under a different subject profile, or use \u201cWiden search\u201d on the coverage card attached to your results.",
+  },
+  {
+    id: 4, tone: "warn", icon: "clock",
+    title: "Recent by default",
+    what: "The index is split at the year 2010. The default reader profile favours 2010-onward material, and the ranker adds a recency weight (0.15) on top.",
+    matters: "Pre-2010 foundational and historical work ranks lower, and an active date filter can prune it from the search entirely.",
+    todo: "Remove the date filter from the coverage card to bring older eras back into scope.",
+  },
+  {
+    id: 5, tone: "good", icon: "scale",
+    title: "Ranked by text, not by prestige",
+    what: "Results are ordered purely by how well their text matches your query. Citation counts, journal impact, and author reputation play no part in ranking.",
+    matters: "This avoids a rich-get-richer bias — but it also means a highly-cited landmark paper gets no automatic lift. Judge quality yourself.",
+    todo: null,
+    positive: true,
+  },
+];
+
+const DisclosureCard = ({ d, n }) => {
+  const tones = {
+    warn: { bar: "var(--c-amber)", ic: "var(--c-amber-ink)", icbg: "var(--c-amber-soft)" },
+    good: { bar: "var(--c-green)", ic: "oklch(42% 0.10 145)", icbg: "var(--c-green-soft)" },
+  };
+  const t = tones[d.tone];
+  return (
+    <section style={{ background: "var(--bg-panel)", border: "1px solid var(--border-light)", borderLeft: `3px solid ${t.bar}`, borderRadius: "var(--radius-lg)", padding: "24px 28px", display: "flex", gap: 18, boxShadow: "var(--shadow-sm)" }}>
+      <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 8, flexShrink: 0 }}>
+        <span style={{ width: 38, height: 38, borderRadius: 10, background: t.icbg, color: t.ic, display: "flex", alignItems: "center", justifyContent: "center" }}>
+          <Icon name={d.icon} size={19} />
+        </span>
+        <span style={{ fontFamily: "var(--font-mono)", fontSize: 11, color: "var(--text-faint)" }}>{String(n).padStart(2, "0")}</span>
+      </div>
+      <div style={{ flex: 1, minWidth: 0 }}>
+        <h3 style={{ fontFamily: "var(--font-serif)", fontSize: 18, fontWeight: 500, color: "var(--text)", marginBottom: 8, display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
+          {d.title}
+          {d.positive && <span style={{ fontSize: 10.5, fontWeight: 500, letterSpacing: "0.06em", textTransform: "uppercase", padding: "2px 8px", borderRadius: 4, background: "var(--c-green-soft)", color: "oklch(42% 0.10 145)" }}>By design</span>}
+        </h3>
+        <p style={{ fontSize: 13.5, color: "var(--text-secondary)", lineHeight: 1.6, marginBottom: 12, maxWidth: "70ch" }}>{d.what}</p>
+        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 14 }} className="disc-grid">
+          <div style={{ padding: "11px 14px", background: "var(--bg-soft)", borderRadius: 8 }}>
+            <div style={{ fontSize: 10.5, fontWeight: 600, letterSpacing: "0.07em", textTransform: "uppercase", color: "var(--text-muted)", marginBottom: 4 }}>Why it matters</div>
+            <p style={{ fontSize: 12.5, color: "var(--text-secondary)", lineHeight: 1.55 }}>{d.matters}</p>
+          </div>
+          {d.todo && (
+            <div style={{ padding: "11px 14px", background: "var(--c-teal-soft)", borderRadius: 8 }}>
+              <div style={{ fontSize: 10.5, fontWeight: 600, letterSpacing: "0.07em", textTransform: "uppercase", color: "oklch(40% 0.10 200)", marginBottom: 4 }}>What to do</div>
+              <p style={{ fontSize: 12.5, color: "oklch(34% 0.07 200)", lineHeight: 1.55 }}>{d.todo}</p>
+            </div>
+          )}
+        </div>
+      </div>
+    </section>
+  );
+};
+
+// ─── INDEX DISTRIBUTION DASHBOARD ──────────────────────────────────────
+const TOTAL_DOCS = 150413098;
+const fmtM = n => (n / 1e6).toFixed(1) + "M";
+
+const DISCIPLINES = [
+  { name: "Health & Medicine", v: 41.2, color: "var(--c-red)" },
+  { name: "Natural Sciences", v: 38.0, color: "var(--c-teal)" },
+  { name: "Engineering & CS", v: 24.8, color: "var(--c-indigo)" },
+  { name: "Social Sciences", v: 22.4, color: "var(--c-amber)" },
+  { name: "Arts & Humanities", v: 17.0, color: "var(--c-violet)" },
+  { name: "Other / unrouted", v: 7.0, color: "oklch(72% 0.012 250)" },
+];
+const ERAS = [
+  { name: "2010 – present", pct: 63, color: "var(--c-teal)" },
+  { name: "pre-2010", pct: 37, color: "oklch(72% 0.012 250)" },
+];
+const LANGS = [
+  { name: "English", pct: 76 },
+  { name: "Chinese", pct: 6 },
+  { name: "Spanish", pct: 4 },
+  { name: "German", pct: 3 },
+  { name: "French", pct: 3 },
+  { name: "Other (40+ languages)", pct: 8 },
+];
+
+const Panel = ({ icon, title, sub, children }) => (
+  <section style={{ background: "var(--bg-panel)", border: "1px solid var(--border-light)", borderRadius: "var(--radius-lg)", padding: "24px 26px", display: "flex", flexDirection: "column", gap: 18, boxShadow: "var(--shadow-sm)" }}>
+    <header style={{ display: "flex", gap: 11, alignItems: "flex-start" }}>
+      <span style={{ width: 30, height: 30, borderRadius: 8, background: "var(--bg-soft)", color: "var(--text-secondary)", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
+        <Icon name={icon} size={16} />
+      </span>
+      <div>
+        <h3 style={{ fontFamily: "var(--font-serif)", fontSize: 16.5, fontWeight: 500, color: "var(--text)", lineHeight: 1.2 }}>{title}</h3>
+        <p style={{ fontSize: 12, color: "var(--text-muted)", marginTop: 2 }}>{sub}</p>
+      </div>
+    </header>
+    {children}
+  </section>
+);
+
+const DisciplineBars = () => {
+  const max = Math.max(...DISCIPLINES.map(d => d.v));
+  return (
+    <div style={{ display: "flex", flexDirection: "column", gap: 11 }}>
+      {DISCIPLINES.map(d => (
+        <div key={d.name} style={{ display: "grid", gridTemplateColumns: "132px 1fr 52px", alignItems: "center", gap: 12 }}>
+          <span style={{ fontSize: 12.5, color: "var(--text)", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{d.name}</span>
+          <div style={{ height: 14, background: "var(--bg-soft)", borderRadius: 4, overflow: "hidden" }}>
+            <div style={{ width: `${(d.v / max) * 100}%`, height: "100%", background: d.color, borderRadius: 4 }} />
+          </div>
+          <span style={{ fontFamily: "var(--font-mono)", fontSize: 11.5, color: "var(--text-secondary)", textAlign: "right" }}>{d.v}M</span>
+        </div>
+      ))}
+    </div>
+  );
+};
+
+const StackBar = ({ rows }) => (
+  <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
+    <div style={{ display: "flex", height: 38, borderRadius: 8, overflow: "hidden", border: "1px solid var(--border-light)" }}>
+      {rows.map(r => (
+        <div key={r.name} title={`${r.name}: ${r.pct}%`} style={{ width: `${r.pct}%`, background: r.color || "var(--c-teal)", display: "flex", alignItems: "center", justifyContent: "center" }}>
+          {r.pct >= 12 && <span style={{ fontFamily: "var(--font-mono)", fontSize: 12, fontWeight: 500, color: "white" }}>{r.pct}%</span>}
+        </div>
+      ))}
+    </div>
+    <div style={{ display: "flex", flexDirection: "column", gap: 7 }}>
+      {rows.map(r => (
+        <div key={r.name} style={{ display: "flex", alignItems: "center", gap: 9, fontSize: 12.5 }}>
+          <span style={{ width: 10, height: 10, borderRadius: 3, background: r.color || "var(--c-teal)", flexShrink: 0 }} />
+          <span style={{ color: "var(--text)", flex: 1 }}>{r.name}</span>
+          <span style={{ fontFamily: "var(--font-mono)", fontSize: 11.5, color: "var(--text-secondary)" }}>{r.pct}%</span>
+        </div>
+      ))}
+    </div>
+  </div>
+);
+
+const LangBars = () => {
+  const palette = ["var(--c-teal)", "var(--c-indigo)", "var(--c-amber)", "var(--c-violet)", "var(--c-green)", "oklch(72% 0.012 250)"];
+  return <StackBar rows={LANGS.map((l, i) => ({ ...l, color: palette[i] }))} />;
+};
+
+// ─── OPERATOR / METHODOLOGY (collapsible, de-emphasized) ───────────────
+const OP_METRICS = [
+  { label: "NDCG@10", value: "0.561", note: "mean over the eval set" },
+  { label: "Recall@50", value: "0.967", note: "vs 0.966 un-quantized" },
+  { label: "RRF k", value: "60", note: "rank-fusion constant" },
+  { label: "Dense seed", value: "600k", note: "+ warm-cache delta" },
+];
+const LEG_LATENCY = [
+  { leg: "Keyword (tantivy)", ms: 34, color: "var(--c-teal)" },
+  { leg: "Semantic-sparse (SPLADE)", ms: 88, color: "var(--c-indigo)" },
+  { leg: "Semantic-dense", ms: 61, color: "var(--c-violet)" },
+  { leg: "Rerank + fuse", ms: 47, color: "var(--c-amber)" },
+];
+
+const OperatorSection = ({ metrics = OP_METRICS, latency = LEG_LATENCY }) => {
+  const [open, setOpen] = React.useState(false);
+  const maxMs = Math.max(...latency.map(l => l.ms));
+  return (
+    <section style={{ background: "var(--bg-panel)", border: "1px solid var(--border-light)", borderRadius: "var(--radius-lg)", boxShadow: "var(--shadow-sm)", overflow: "hidden" }}>
+      <button onClick={() => setOpen(o => !o)} style={{ width: "100%", display: "flex", alignItems: "center", gap: 13, padding: "18px 26px", border: "none", background: "transparent", textAlign: "left" }}>
+        <span style={{ width: 32, height: 32, borderRadius: 8, background: "var(--bg-soft)", color: "var(--text-secondary)", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
+          <Icon name="wrench" size={16} />
+        </span>
+        <div style={{ flex: 1 }}>
+          <div style={{ fontSize: 14, fontWeight: 600, color: "var(--text)" }}>Operator &amp; methodology</div>
+          <div style={{ fontSize: 12, color: "var(--text-muted)", marginTop: 1 }}>Measured-quality metrics and per-engine timing — for people maintaining or auditing the system.</div>
+        </div>
+        <Icon name={open ? "chevronDown" : "chevronRight"} size={16} style={{ color: "var(--text-muted)" }} />
+      </button>
+      {open && (
+        <div style={{ padding: "4px 26px 26px" }}>
+          <div style={{ display: "flex", gap: 10, padding: "11px 14px", background: "var(--c-amber-soft)", borderRadius: 8, marginBottom: 20 }}>
+            <Icon name="info" size={15} style={{ color: "var(--c-amber-ink)", flexShrink: 0, marginTop: 1 }} />
+            <p style={{ fontSize: 12.5, color: "var(--text-secondary)", lineHeight: 1.55 }}>
+              These are engineering measurements, not a quality guarantee. A single NDCG figure says how well the ranker reproduced a labelled test set — it does <strong>not</strong> certify that any given search was complete or unbiased. The disclosures above are the honest answer to that question.
+            </p>
+          </div>
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: 12, marginBottom: 22 }} className="op-grid">
+            {metrics.map(m => (
+              <div key={m.label} style={{ padding: "14px 16px", background: "var(--bg-soft)", borderRadius: 10 }}>
+                <div style={{ fontSize: 10.5, fontWeight: 600, letterSpacing: "0.07em", textTransform: "uppercase", color: "var(--text-muted)", marginBottom: 6 }}>{m.label}</div>
+                <div style={{ fontFamily: "var(--font-serif)", fontSize: 26, fontWeight: 500, color: "var(--text)", lineHeight: 1 }}>{m.value}</div>
+                <div style={{ fontSize: 11, color: "var(--text-muted)", marginTop: 5 }}>{m.note}</div>
+              </div>
+            ))}
+          </div>
+          <div style={{ fontSize: 11, fontWeight: 600, letterSpacing: "0.07em", textTransform: "uppercase", color: "var(--text-muted)", marginBottom: 12 }}>Per-engine latency · median ms</div>
+          <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+            {latency.map(l => (
+              <div key={l.leg} style={{ display: "grid", gridTemplateColumns: "190px 1fr 44px", alignItems: "center", gap: 12 }}>
+                <span style={{ fontSize: 12.5, color: "var(--text)" }}>{l.leg}</span>
+                <div style={{ height: 12, background: "var(--bg-soft)", borderRadius: 4, overflow: "hidden" }}>
+                  <div style={{ width: `${(l.ms / maxMs) * 100}%`, height: "100%", background: l.color, borderRadius: 4 }} />
+                </div>
+                <span style={{ fontFamily: "var(--font-mono)", fontSize: 11.5, color: "var(--text-secondary)", textAlign: "right" }}>{l.ms}</span>
+              </div>
+            ))}
+          </div>
+          <p style={{ fontSize: 12, color: "var(--text-muted)", lineHeight: 1.6, marginTop: 20, maxWidth: "78ch" }}>
+            Three retrieval legs run in parallel and are combined with Reciprocal Rank Fusion (k = 60). The dense leg is a 600k-vector seed plus a warm-cache delta against the full {TOTAL_DOCS.toLocaleString()}-document corpus, so semantic coverage is query-driven, not exhaustive. SPLADE keeps the top 64 query terms; impact weights are 8-bit quantized. Index split at era boundary 2010, 5 subjects × 2 eras = 10 sections.
+          </p>
+        </div>
+      )}
+    </section>
+  );
+};
+
+// ─── PAGE ──────────────────────────────────────────────────────────────
+const FACTS = [
+  { label: "Documents", value: TOTAL_DOCS.toLocaleString() },
+  { label: "Source", value: "OpenAlex", sub: "June 2026 snapshot" },
+  { label: "Sections", value: "10", sub: "5 subjects × 2 eras" },
+  { label: "Era boundary", value: "2010", sub: "recent vs historical" },
+];
+
+// Merge the live /analytics bundle over the static prototype constants. Falls
+// back to the constants on any panel that's stubbed/awaiting data.
+function deriveLive(bundle) {
+  const panels = (bundle && bundle.panels) || {};
+  const kpis = panels.kpis || {};
+  const ndcg = panels.ndcg_by_subject || {};
+  const facts = FACTS.map(f => {
+    if (f.label === "Documents" && kpis.documents) return { ...f, value: Number(kpis.documents).toLocaleString() };
+    if (f.label === "Source" && kpis.snapshot) return { ...f, sub: kpis.snapshot };
+    return f;
+  });
+  let metrics = OP_METRICS;
+  if (ndcg.status === "ok" && Array.isArray(ndcg.subjects) && ndcg.subjects.length) {
+    const mean = ndcg.subjects.reduce((a, s) => a + (s.ndcg || 0), 0) / ndcg.subjects.length;
+    metrics = OP_METRICS.map(m => m.label === "NDCG@10" ? { ...m, value: mean.toFixed(3) } : m);
+  }
+  return { facts, metrics };
+}
+
+const App = () => {
+  const [{ facts, metrics }, setLive] = React.useState({ facts: FACTS, metrics: OP_METRICS });
+  React.useEffect(() => {
+    let cancelled = false;
+    if (window.SFUApi) {
+      window.SFUApi.analytics().then(res => {
+        if (cancelled) return;
+        if (window.SFUUI) window.SFUUI.setMockBanner(res.source === "mock");
+        if (res.source === "live") setLive(deriveLive(res.data));
+      });
+    }
+    return () => { cancelled = true; };
+  }, []);
+  const goSearch = () => { if (window.parent !== window) window.parent.postMessage({ suiteNav: "search" }, "*"); else window.location.href = "search.html"; };
+  return (
+    <div style={{ display: "flex", height: "100%", minHeight: "100vh" }} data-screen-label="About this index">
+      <Sidebar active="analytics" />
+      <main style={{ flex: 1, overflow: "auto", display: "flex", flexDirection: "column" }}>
+        {/* Header */}
+        <header style={{ padding: "32px 48px 28px", borderBottom: "1px solid var(--border-light)", background: "var(--bg-panel)" }}>
+          <div style={{ fontSize: 11.5, fontWeight: 500, letterSpacing: "0.08em", textTransform: "uppercase", color: "var(--text-muted)", marginBottom: 8 }}>About this index</div>
+          <h1 style={{ fontFamily: "var(--font-serif)", fontSize: 31, fontWeight: 500, color: "var(--text)", lineHeight: 1.15, marginBottom: 8, textWrap: "balance" }}>
+            What the search reads from — and where it's thin
+          </h1>
+          <p style={{ fontSize: 14.5, color: "var(--text-secondary)", maxWidth: "72ch", lineHeight: 1.6 }}>
+            Read this before treating a search as a complete picture of the literature. It describes the whole collection behind the search box — its single source, its language and discipline skew, and how it's split by era. The coverage card on each result set tells you which of these limits hit <em>your</em> specific search.
+          </p>
+          <button onClick={goSearch} style={{ marginTop: 18, display: "inline-flex", alignItems: "center", gap: 7, padding: "8px 14px", border: "1px solid var(--border)", borderRadius: 8, background: "var(--bg-panel)", fontSize: 13, color: "var(--text-secondary)" }}>
+            <Icon name="arrowLeft" size={14} /> Back to search
+          </button>
+        </header>
+
+        <div style={{ padding: "28px 48px 56px", display: "flex", flexDirection: "column", gap: 28, maxWidth: 1180 }}>
+          {/* Facts strip */}
+          <div style={{ display: "flex", gap: 14, flexWrap: "wrap" }}>
+            {facts.map(f => (
+              <div key={f.label} style={{ flex: "1 1 200px", minWidth: 180, padding: "18px 22px", background: "var(--bg-panel)", border: "1px solid var(--border-light)", borderRadius: "var(--radius)", boxShadow: "var(--shadow-sm)" }}>
+                <div style={{ fontSize: 11, fontWeight: 500, letterSpacing: "0.07em", textTransform: "uppercase", color: "var(--text-muted)", marginBottom: 7 }}>{f.label}</div>
+                <div style={{ fontFamily: "var(--font-serif)", fontSize: 25, fontWeight: 500, color: "var(--text)", lineHeight: 1 }}>{f.value}</div>
+                {f.sub && <div style={{ fontSize: 12, color: "var(--text-muted)", marginTop: 5 }}>{f.sub}</div>}
+              </div>
+            ))}
+          </div>
+
+          {/* Disclosures */}
+          <div>
+            <div style={{ display: "flex", alignItems: "baseline", justifyContent: "space-between", gap: 16, marginBottom: 16, flexWrap: "wrap" }}>
+              <h2 style={{ fontFamily: "var(--font-serif)", fontSize: 21, fontWeight: 500, color: "var(--text)" }}>Five things the collection won't tell you on its own</h2>
+              <span style={{ fontSize: 12, color: "var(--text-muted)" }}>Ordered by how easily they distort a literature review</span>
+            </div>
+            <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
+              {DISCLOSURES.map((d, i) => <DisclosureCard key={d.id} d={d} n={i + 1} />)}
+            </div>
+          </div>
+
+          {/* Distribution dashboard */}
+          <div>
+            <div style={{ display: "flex", alignItems: "baseline", justifyContent: "space-between", gap: 16, marginBottom: 16, flexWrap: "wrap" }}>
+              <h2 style={{ fontFamily: "var(--font-serif)", fontSize: 21, fontWeight: 500, color: "var(--text)" }}>The shape of the index</h2>
+              <span style={{ fontSize: 12, color: "var(--text-muted)" }}>Approximate · section manifests, June 2026</span>
+            </div>
+            <div style={{ display: "grid", gridTemplateColumns: "1.3fr 1fr", gap: 18 }} className="dist-grid">
+              <Panel icon="route" title="By discipline" sub="How the router's buckets divide the corpus">
+                <DisciplineBars />
+              </Panel>
+              <div style={{ display: "flex", flexDirection: "column", gap: 18 }}>
+                <Panel icon="clock" title="By era" sub="Split at the 2010 boundary">
+                  <StackBar rows={ERAS} />
+                </Panel>
+                <Panel icon="globe" title="By language" sub="Semantic matching applies to English only">
+                  <LangBars />
+                </Panel>
+              </div>
+            </div>
+          </div>
+
+          {/* Operator (de-emphasized) */}
+          <OperatorSection metrics={metrics} />
+
+          <p style={{ fontSize: 12, color: "var(--text-muted)", textAlign: "center", lineHeight: 1.6 }}>
+            This page is linked from the <strong style={{ color: "var(--text-secondary)" }}>coverage card</strong> shown at the top of every result set.
+          </p>
+        </div>
+      </main>
+      <style>{`
+        @media (max-width: 1024px) {
+          .dist-grid { grid-template-columns: 1fr !important; }
+          .op-grid { grid-template-columns: repeat(2, 1fr) !important; }
+          .disc-grid { grid-template-columns: 1fr !important; }
+        }
+      `}</style>
+    </div>
+  );
+};
+
+ReactDOM.createRoot(document.getElementById("root")).render(<App />);
+</script>
+</body>
+</html>

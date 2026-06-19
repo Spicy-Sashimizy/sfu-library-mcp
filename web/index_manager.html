@@ -1,0 +1,765 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Index Manager — SFU Library</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,300;0,9..40,400;0,9..40,500;0,9..40,600;1,9..40,400&family=Lora:ital,wght@0,400;0,500;0,600&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<script src="vendor/react.production.min.js"></script>
+<script src="vendor/react-dom.production.min.js"></script>
+<script src="vendor/babel.min.js"></script>
+<!-- Shared suite client: live backend with mock fallback + demo-data banner -->
+<script src="lib/mock.js"></script>
+<script src="lib/api.js"></script>
+<script src="lib/ui.js"></script>
+<style>
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+  :root {
+    --bg: oklch(97.5% 0.006 80);
+    --bg-panel: oklch(99% 0.004 80);
+    --bg-soft: oklch(95% 0.008 80);
+    --bg-sidebar: oklch(18% 0.012 250);
+    --bg-sidebar-hover: oklch(24% 0.014 250);
+    --bg-sidebar-active: oklch(28% 0.016 250);
+    --text: oklch(16% 0.012 250);
+    --text-secondary: oklch(40% 0.014 250);
+    --text-muted: oklch(58% 0.010 250);
+    --text-faint: oklch(72% 0.008 250);
+    --text-sidebar: oklch(78% 0.010 250);
+    --text-sidebar-active: oklch(96% 0.006 80);
+    --border: oklch(88% 0.010 250);
+    --border-light: oklch(93% 0.007 250);
+    --c-red: oklch(58% 0.16 25);
+    --c-red-soft: oklch(92% 0.04 25);
+    --c-teal: oklch(60% 0.10 200);
+    --c-teal-soft: oklch(93% 0.035 200);
+    --c-amber: oklch(72% 0.12 75);
+    --c-amber-soft: oklch(95% 0.04 75);
+    --c-green: oklch(64% 0.11 145);
+    --c-green-soft: oklch(94% 0.04 145);
+    --c-violet: oklch(58% 0.10 295);
+    --c-violet-soft: oklch(94% 0.03 295);
+    --c-indigo: oklch(55% 0.10 260);
+    --shadow-sm: 0 1px 2px oklch(0% 0 0 / 0.04);
+    --radius: 10px;
+    --radius-sm: 6px;
+    --font-ui: 'DM Sans', system-ui, sans-serif;
+    --font-serif: 'Lora', Georgia, serif;
+    --font-mono: 'JetBrains Mono', ui-monospace, monospace;
+    --sidebar-width: 220px;
+  }
+  html, body, #root { height: 100%; overflow: hidden; }
+  body { font-family: var(--font-ui); background: var(--bg); color: var(--text); font-size: 14px; line-height: 1.5; -webkit-font-smoothing: antialiased; }
+  ::selection { background: var(--c-red-soft); }
+  ::-webkit-scrollbar { width: 6px; height: 6px; }
+  ::-webkit-scrollbar-track { background: transparent; }
+  ::-webkit-scrollbar-thumb { background: var(--border); border-radius: 3px; }
+  ::-webkit-scrollbar-thumb:hover { background: var(--text-faint); }
+  button { cursor: pointer; font-family: var(--font-ui); }
+  select, input { font-family: var(--font-ui); }
+</style>
+</head>
+<body>
+<div id="root"></div>
+<script type="text/babel">
+
+// ─── ICONS ───────────────────────────────────────────────────────────────────
+const Icon = ({ name, size = 16, style = {} }) => {
+  const I = {
+    search: <svg width={size} height={size} viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><circle cx="9" cy="9" r="6"></circle><path d="m16 16-3.5-3.5"></path></svg>,
+    bookmark: <svg width={size} height={size} viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d="M5 3h10v14l-5-3-5 3V3Z"></path></svg>,
+    history: <svg width={size} height={size} viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><circle cx="10" cy="10" r="7"></circle><path d="M10 6v4l2.5 2.5"></path></svg>,
+    database: <svg width={size} height={size} viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><ellipse cx="10" cy="5.5" rx="7" ry="2.5"></ellipse><path d="M3 5.5v4c0 1.38 3.13 2.5 7 2.5s7-1.12 7-2.5v-4"></path><path d="M3 9.5v4c0 1.38 3.13 2.5 7 2.5s7-1.12 7-2.5v-4"></path></svg>,
+    chart: <svg width={size} height={size} viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d="M3 17h14"></path><path d="M6 14V9M10 14V5M14 14v-6"></path></svg>,
+    settings: <svg width={size} height={size} viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><circle cx="10" cy="10" r="2.5"></circle><path d="M10 2v2M10 16v2M2 10h2M16 10h2M4.22 4.22l1.42 1.42M14.36 14.36l1.42 1.42M4.22 15.78l1.42-1.42M14.36 5.64l1.42-1.42"></path></svg>,
+    admin: <svg width={size} height={size} viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d="M10 2L3 6v4c0 4.4 3.03 8.52 7 9.5 3.97-.98 7-5.1 7-9.5V6L10 2Z"></path></svg>,
+    server: <svg width={size} height={size} viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><rect x="3" y="3.5" width="14" height="5.5" rx="1.2"></rect><rect x="3" y="11" width="14" height="5.5" rx="1.2"></rect><path d="M6 6.25h.01M6 13.75h.01"></path></svg>,
+    flame: <svg width={size} height={size} viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d="M10 3c2.2 2.9 4.5 4.6 4.5 7.5a4.5 4.5 0 1 1-9 0C5.5 7.6 7.8 5.9 10 3Z"></path></svg>,
+    snow: <svg width={size} height={size} viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d="M10 3v14M4 6.5l12 7M16 6.5l-12 7"></path></svg>,
+    box: <svg width={size} height={size} viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d="M10 2.5 17 6v8l-7 3.5L3 14V6l7-3.5Z"></path><path d="M3 6l7 3.5L17 6M10 9.5v8"></path></svg>,
+    zap: <svg width={size} height={size} viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d="M11 2 4 11h5l-1 7 7-9h-5l1-7Z"></path></svg>,
+    refresh: <svg width={size} height={size} viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d="M16.5 10a6.5 6.5 0 1 1-1.9-4.6"></path><path d="M16.5 2.5v3h-3"></path></svg>,
+    layers: <svg width={size} height={size} viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d="M10 2.5 18 6.5l-8 4-8-4 8-4Z"></path><path d="M2 10.5l8 4 8-4M2 14.5l8 4 8-4"></path></svg>,
+    cpu: <svg width={size} height={size} viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><rect x="5.5" y="5.5" width="9" height="9" rx="1.5"></rect><path d="M8 2v3.5M12 2v3.5M8 14.5V18M12 14.5V18M2 8h3.5M2 12h3.5M14.5 8H18M14.5 12H18"></path></svg>,
+    activity: <svg width={size} height={size} viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d="M2 10.5h3l2-5.5 4.5 11 2-5.5H18"></path></svg>,
+    check: <svg width={size} height={size} viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d="m4 10.5 4 4 8-9"></path></svg>,
+    warning: <svg width={size} height={size} viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d="M10 3 2.5 16h15L10 3Z"></path><path d="M10 8.5v3.5M10 14.5v.5"></path></svg>,
+    info: <svg width={size} height={size} viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><circle cx="10" cy="10" r="7"></circle><path d="M10 9v5M10 6.5v.5"></path></svg>,
+    download: <svg width={size} height={size} viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d="M10 3v10m-4-4 4 4 4-4"></path><path d="M4 16h12"></path></svg>,
+    upload: <svg width={size} height={size} viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d="M10 13V3m-4 4 4-4 4 4"></path><path d="M4 16h12"></path></svg>,
+    drive: <svg width={size} height={size} viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><rect x="2.5" y="7" width="15" height="6.5" rx="1.5"></rect><path d="M2.5 10.25h15M14.5 11.6h.01"></path></svg>,
+  };
+  return <span style={{ display: "inline-flex", alignItems: "center", ...style }}>{I[name] || null}</span>;
+};
+
+// ─── SIDEBAR (matches SFU Library Search / Research Analytics) ───────────────
+const Sidebar = ({ active }) => {
+  const links = { search: "search.html", analytics: "analytics.html" };
+  const top = [
+    { id: "search", icon: "search", label: "Search" },
+    { id: "saved", icon: "bookmark", label: "Saved" },
+    { id: "history", icon: "history", label: "History" },
+    { id: "databases", icon: "database", label: "Databases" },
+    { id: "analytics", icon: "info", label: "About index" },
+    { id: "index", icon: "server", label: "Index" },
+  ];
+  const bot = [
+    { id: "settings", icon: "settings", label: "Settings" },
+    { id: "admin", icon: "admin", label: "Admin" },
+  ];
+  const Item = ({ item }) => (
+    <button
+      onClick={() => {
+        if (active === item.id) return;
+        // In the suite the shell owns app-switching; ask it to navigate.
+        // Standalone, fall back to a hard link where one exists.
+        if (window.parent !== window) window.parent.postMessage({ suiteNav: item.id }, "*");
+        else if (links[item.id]) window.location.href = links[item.id];
+      }}
+      onMouseEnter={e => { if (active !== item.id) e.currentTarget.style.background = "var(--bg-sidebar-hover)"; }}
+      onMouseLeave={e => { if (active !== item.id) e.currentTarget.style.background = "transparent"; }}
+      style={{
+        display: "flex", alignItems: "center", gap: 10, padding: "8px 10px",
+        borderRadius: 6, border: "none",
+        background: active === item.id ? "var(--bg-sidebar-active)" : "transparent",
+        color: active === item.id ? "var(--text-sidebar-active)" : "var(--text-sidebar)",
+        fontSize: 13, fontWeight: active === item.id ? 500 : 400, textAlign: "left", width: "100%",
+        transition: "background 0.15s",
+      }}>
+      <Icon name={item.icon} size={15} />
+      {item.label}
+    </button>
+  );
+  return (
+    <aside style={{ width: "var(--sidebar-width)", background: "var(--bg-sidebar)", display: "flex", flexDirection: "column", height: "100%", flexShrink: 0 }} data-comment-anchor="im-sidebar">
+      <div style={{ padding: "20px 18px 16px", borderBottom: "1px solid oklch(28% 0.010 250)" }}>
+        <div style={{ display: "flex", alignItems: "center", gap: 9 }}>
+          <div style={{ width: 28, height: 28, borderRadius: 6, background: "var(--c-red)", display: "flex", alignItems: "center", justifyContent: "center" }}>
+            <Icon name="search" size={14} style={{ color: "white" }} />
+          </div>
+          <div>
+            <div style={{ color: "var(--text-sidebar-active)", fontSize: 13, fontWeight: 600, lineHeight: 1.2 }}>SFU Library</div>
+            <div style={{ color: "oklch(55% 0.010 250)", fontSize: 11, lineHeight: 1.2 }}>Academic Search</div>
+          </div>
+        </div>
+      </div>
+      <nav style={{ flex: 1, padding: "10px 8px", display: "flex", flexDirection: "column", gap: 2 }}>
+        {top.map(i => <Item key={i.id} item={i} />)}
+      </nav>
+      <div style={{ padding: 8, borderTop: "1px solid oklch(28% 0.010 250)", display: "flex", flexDirection: "column", gap: 2 }}>
+        {bot.map(i => <Item key={i.id} item={i} />)}
+      </div>
+    </aside>
+  );
+};
+
+// ─── PRIMITIVES ──────────────────────────────────────────────────────────────
+const Badge = ({ tone = "muted", children, style = {} }) => {
+  const tones = {
+    hot:    { bg: "var(--c-red-soft)",    color: "oklch(44% 0.13 25)" },
+    cold:   { bg: "var(--c-teal-soft)",   color: "oklch(38% 0.10 200)" },
+    ok:     { bg: "var(--c-green-soft)",  color: "oklch(40% 0.11 145)" },
+    warn:   { bg: "var(--c-amber-soft)",  color: "oklch(46% 0.10 70)" },
+    violet: { bg: "var(--c-violet-soft)", color: "oklch(42% 0.10 295)" },
+    muted:  { bg: "var(--bg-soft)",       color: "var(--text-muted)" },
+  };
+  const t = tones[tone] || tones.muted;
+  return (
+    <span style={{ fontSize: 10.5, fontWeight: 500, letterSpacing: "0.06em", textTransform: "uppercase", padding: "2.5px 8px", borderRadius: 4, background: t.bg, color: t.color, whiteSpace: "nowrap", ...style }}>
+      {children}
+    </span>
+  );
+};
+
+const StatCard = ({ label, value, sub, icon, color = "var(--c-teal)" }) => (
+  <div style={{ background: "var(--bg-panel)", border: "1px solid var(--border-light)", borderRadius: 8, padding: "12px 14px" }}>
+    <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 8 }}>
+      <span style={{ fontSize: 11, color: "var(--text-muted)", textTransform: "uppercase", letterSpacing: "0.05em" }}>{label}</span>
+      {icon && <Icon name={icon} size={14} style={{ color }} />}
+    </div>
+    <div style={{ fontSize: 20, fontWeight: 600, color: "var(--text)", fontVariantNumeric: "tabular-nums", lineHeight: 1.2 }}>{value}</div>
+    {sub && <div style={{ fontSize: 11.5, color: "var(--text-muted)", marginTop: 3 }}>{sub}</div>}
+  </div>
+);
+
+const Panel = ({ title, action, children, style = {}, pad = "14px 16px" }) => (
+  <section style={{ background: "var(--bg-panel)", border: "1px solid var(--border-light)", borderRadius: 8, padding: pad, boxShadow: "var(--shadow-sm)", ...style }}>
+    {(title || action) && (
+      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 10, marginBottom: 12, padding: pad === "0" ? "12px 16px 0" : 0 }}>
+        {title && <div style={{ fontSize: 11, fontWeight: 600, color: "var(--text-muted)", textTransform: "uppercase", letterSpacing: "0.05em" }}>{title}</div>}
+        {action || null}
+      </div>
+    )}
+    {children}
+  </section>
+);
+
+const MiniBar = ({ value, max, color = "var(--c-teal)", height = 6 }) => (
+  <div style={{ height, borderRadius: height / 2, background: "var(--bg-soft)", overflow: "hidden", width: "100%" }}>
+    <div style={{ width: `${Math.min(100, (value / max) * 100)}%`, height: "100%", borderRadius: height / 2, background: color, transition: "width 0.4s ease" }}></div>
+  </div>
+);
+
+const GhostBtn = ({ children, onClick, accent = false, disabled = false, small = false, title }) => (
+  <button onClick={onClick} disabled={disabled} title={title} style={{
+    fontSize: small ? 11 : 12, padding: small ? "3px 9px" : "6px 12px",
+    background: accent ? "var(--c-red)" : "var(--bg)",
+    color: accent ? "white" : disabled ? "var(--text-faint)" : "var(--text-secondary)",
+    border: accent ? "none" : "1px solid var(--border)",
+    borderRadius: 5, cursor: disabled ? "default" : "pointer", fontFamily: "var(--font-ui)",
+    fontWeight: accent ? 500 : 400, opacity: disabled ? 0.6 : 1, whiteSpace: "nowrap",
+    display: "inline-flex", alignItems: "center", gap: 5,
+  }}>{children}</button>
+);
+
+const Mono = ({ children, style = {} }) => (
+  <span style={{ fontFamily: "var(--font-mono)", fontSize: "0.92em", ...style }}>{children}</span>
+);
+
+const Toggle = ({ on, setOn, label }) => (
+  <button onClick={() => setOn(!on)} style={{ display: "inline-flex", alignItems: "center", gap: 8, background: "transparent", border: "none", padding: 0 }}>
+    <span style={{ width: 34, height: 19, borderRadius: 10, background: on ? "var(--c-green)" : "var(--border)", position: "relative", transition: "background 0.2s", flexShrink: 0, display: "inline-block" }}>
+      <span style={{ position: "absolute", top: 2, left: on ? 17 : 2, width: 15, height: 15, borderRadius: "50%", background: "white", boxShadow: "0 1px 2px oklch(0% 0 0 / 0.2)", transition: "left 0.2s", display: "inline-block" }}></span>
+    </span>
+    {label && <Mono style={{ fontSize: 11.5, color: "var(--text-secondary)" }}>{label}</Mono>}
+  </button>
+);
+
+// ─── DATA: sections + personas (THIN_CLIENT_SWAP / STACK_RESEARCH / BUDGET) ──
+// Post-lever lexical artifacts (tantivy 44.8 + BMP b256 76.7 = 121.5 GB total),
+// split by measured section shares; packed = live / 2.10 (measured artifact ratio).
+const IM_SECTIONS = [
+  { id: "social_sciences__recent",  base: "social_sciences", era: "recent",  docsM: 27.4, live: 20.5, packed: 9.8,  ratio: "2.1×" },
+  { id: "social_sciences__archive", base: "social_sciences", era: "archive", docsM: 7.8,  live: 7.9,  packed: 3.8,  ratio: "2.1×" },
+  { id: "med_bio__recent",          base: "med_bio",         era: "recent",  docsM: 12.6, live: 10.4, packed: 5.0,  ratio: "2.1×" },
+  { id: "med_bio__archive",         base: "med_bio",         era: "archive", docsM: 4.5,  live: 3.5,  packed: 1.7,  ratio: "2.1×" },
+  { id: "phys_eng__recent",         base: "phys_eng",        era: "recent",  docsM: 6.1,  live: 5.0,  packed: 2.4,  ratio: "2.1×" },
+  { id: "phys_eng__archive",        base: "phys_eng",        era: "archive", docsM: 2.2,  live: 1.7,  packed: 0.8,  ratio: "2.1×" },
+  { id: "cs_math__recent",          base: "cs_math",         era: "recent",  docsM: 11.4, live: 9.4,  packed: 4.5,  ratio: "2.1×" },
+  { id: "cs_math__archive",         base: "cs_math",         era: "archive", docsM: 4.1,  live: 3.1,  packed: 1.5,  ratio: "2.1×" },
+  { id: "other__recent",            base: "other",           era: "recent",  docsM: 54.6, live: 44.1, packed: 21.0, ratio: "2.1×" },
+  { id: "other__archive",           base: "other",           era: "archive", docsM: 19.7, live: 15.9, packed: 7.6,  ratio: "2.1×" },
+];
+
+const IM_PERSONAS = [
+  { id: "political_science",            hot: ["social_sciences__recent"], kind: "Subject · recent era" },
+  { id: "political_science_historical", hot: ["social_sciences__archive"], kind: "Subject · archive era" },
+  { id: "computer_science",             hot: ["cs_math__recent"], kind: "Subject · recent era" },
+  { id: "health_science",               hot: ["med_bio__recent"], kind: "Subject · recent era" },
+  { id: "interdisciplinary",            hot: ["social_sciences__recent", "med_bio__recent", "cs_math__recent"], kind: "3 hot sections" },
+  { id: "contemporary",                 hot: IM_SECTIONS.filter(s => s.era === "recent").map(s => s.id), kind: "Era-wide · ≥ 2010" },
+  { id: "historical",                   hot: IM_SECTIONS.filter(s => s.era === "archive").map(s => s.id), kind: "Era-wide · < 2010" },
+  { id: "all_hot",                      hot: IM_SECTIONS.map(s => s.id), kind: "Testbed · everything live", testbed: true },
+];
+
+const META_GB = 10.2;   // meta.sqlite v2 (measured ~10 GB at 150M)
+const DENSE_GB = 7.2;   // b1 binary codes at 150M
+const sidecarGB = (docsM) => docsM * 0.352; // abstracts v3: 52.9 GB / 150.4M ≈ 0.35 KB/doc
+
+// ─── SCREEN 1: PERSONAS & SECTIONS ───────────────────────────────────────────
+const PersonasScreen = () => {
+  const [personaId, setPersonaId] = React.useState("political_science");
+  const [unpacked, setUnpacked] = React.useState({});
+  const [unpacking, setUnpacking] = React.useState({});
+  const persona = IM_PERSONAS.find(p => p.id === personaId);
+
+  const stateOf = (s) => persona.hot.includes(s.id) ? "hot" : unpacking[s.id] != null ? "unpacking" : unpacked[s.id] ? "unpacked" : "cold";
+
+  const startUnpack = (id) => {
+    if (unpacking[id] != null) return;
+    // Fire the real backend unpack (MCP request_section_unpack); the progress
+    // animation below is local feedback. No-op in demo mode.
+    if (window.SFUApi) window.SFUApi.unpack(id);
+    setUnpacking(u => ({ ...u, [id]: 0 }));
+    const t = setInterval(() => {
+      setUnpacking(u => {
+        if (u[id] == null) { clearInterval(t); return u; }
+        const v = u[id] + 0.07 + Math.random() * 0.05;
+        if (v >= 1) {
+          clearInterval(t);
+          setUnpacked(d => ({ ...d, [id]: true }));
+          const { [id]: _, ...rest } = u;
+          return rest;
+        }
+        return { ...u, [id]: v };
+      });
+    }, 320);
+  };
+  const repack = (id) => setUnpacked(d => { const { [id]: _, ...rest } = d; return rest; });
+
+  const hotSecs = IM_SECTIONS.filter(s => stateOf(s) === "hot");
+  const tempSecs = IM_SECTIONS.filter(s => stateOf(s) === "unpacked");
+  const coldSecs = IM_SECTIONS.filter(s => ["cold", "unpacking"].includes(stateOf(s)));
+  const hotLive = hotSecs.reduce((a, s) => a + s.live, 0);
+  const sidecars = hotSecs.reduce((a, s) => a + sidecarGB(s.docsM), 0);
+  const tempLive = tempSecs.reduce((a, s) => a + s.live, 0);
+  const coldPacked = coldSecs.reduce((a, s) => a + s.packed, 0) + tempSecs.reduce((a, s) => a + s.packed, 0);
+  const total = hotLive + sidecars + tempLive + coldPacked + META_GB + DENSE_GB;
+
+  const segs = [
+    { label: "Hot live", gb: hotLive, color: "var(--c-red)" },
+    { label: "Abstract sidecars (v3)", gb: sidecars, color: "var(--c-amber)" },
+    ...(tempLive > 0 ? [{ label: "Temp unpacked", gb: tempLive, color: "var(--c-violet)" }] : []),
+    { label: "Cold packed (zstd-19)", gb: coldPacked, color: "var(--c-teal)" },
+    { label: "meta.sqlite v2", gb: META_GB, color: "var(--c-green)" },
+    { label: "Dense seed (b1)", gb: DENSE_GB, color: "var(--c-indigo)" },
+  ];
+
+  const eraLabel = (era) => era === "recent" ? "≥ 2010" : "< 2010";
+  const cols = "minmax(200px,1.4fr) 64px 64px 1fr 86px 86px 120px";
+
+  return (
+    <div data-screen-label="Personas & Sections" style={{ display: "grid", gridTemplateColumns: "292px 1fr", gap: 14, alignItems: "start" }}>
+      <Panel title="Persona" pad="12px 12px">
+        <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
+          {IM_PERSONAS.map(p => {
+            const active = p.id === personaId;
+            return (
+              <button key={p.id} onClick={() => setPersonaId(p.id)} style={{
+                display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8,
+                padding: "8px 10px", borderRadius: 6, textAlign: "left", width: "100%",
+                border: `1px solid ${active ? "var(--c-red)" : "var(--border-light)"}`,
+                background: active ? "var(--c-red-soft)" : "var(--bg-panel)",
+                transition: "border-color 0.15s, background 0.15s",
+              }}>
+                <span style={{ minWidth: 0 }}>
+                  <span style={{ display: "block", fontSize: 12, fontWeight: active ? 600 : 500, color: "var(--text)", fontFamily: "var(--font-mono)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{p.id}</span>
+                  <span style={{ display: "block", fontSize: 11, color: "var(--text-muted)" }}>{p.kind}</span>
+                </span>
+                {p.testbed ? <Badge tone="violet">testbed</Badge> : active ? <Badge tone="hot">active</Badge> : null}
+              </button>
+            );
+          })}
+        </div>
+        <p style={{ fontSize: 11, color: "var(--text-muted)", lineHeight: 1.5, marginTop: 10, paddingTop: 10, borderTop: "1px dashed var(--border-light)" }}>
+          Subject personas default to the recent era; <Mono>*_historical</Mono> variants pin the archive. Year-filtered queries prune the contradicting era at query time (<Mono>retriever._era_skip</Mono>).
+        </p>
+      </Panel>
+
+      <div style={{ display: "flex", flexDirection: "column", gap: 14, minWidth: 0 }}>
+        <Panel title={`Disk footprint — ${persona.id}`} action={
+          <div style={{ display: "flex", gap: 6 }}>
+            <GhostBtn small title="MCP tool"><Icon name="info" size={12} /> get_index_status</GhostBtn>
+            <GhostBtn small title="MCP tool"><Icon name="refresh" size={12} /> reload_index</GhostBtn>
+          </div>
+        }>
+          <div style={{ display: "flex", alignItems: "baseline", gap: 10, marginBottom: 10, flexWrap: "wrap" }}>
+            <span style={{ fontSize: 26, fontWeight: 600, color: "var(--text)", fontVariantNumeric: "tabular-nums" }}>{total.toFixed(1)} GB</span>
+            <span style={{ fontSize: 12, color: "var(--text-muted)" }}>steady state on disk · all-hot all-live ≈ 192 GB (188.8 GB budget + dense seed, meta v2 measured)</span>
+          </div>
+          <div style={{ display: "flex", height: 18, borderRadius: 5, overflow: "hidden", border: "1px solid var(--border-light)" }}>
+            {segs.map(s => s.gb > 0 && (
+              <div key={s.label} title={`${s.label}: ${s.gb.toFixed(1)} GB`} style={{ width: `${(s.gb / total) * 100}%`, background: s.color, minWidth: 2 }}></div>
+            ))}
+          </div>
+          <div style={{ display: "flex", gap: 14, flexWrap: "wrap", marginTop: 10 }}>
+            {segs.map(s => s.gb > 0 && (
+              <span key={s.label} style={{ display: "inline-flex", alignItems: "center", gap: 6, fontSize: 11.5, color: "var(--text-secondary)" }}>
+                <span style={{ width: 9, height: 9, borderRadius: 2.5, background: s.color, display: "inline-block" }}></span>
+                {s.label} <strong style={{ fontVariantNumeric: "tabular-nums" }}>{s.gb.toFixed(1)} GB</strong>
+              </span>
+            ))}
+          </div>
+        </Panel>
+
+        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 14 }}>
+          <Panel title="Hot policy">
+            <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 6 }}>
+              <Icon name="flame" size={15} style={{ color: "var(--c-red)" }} />
+              <span style={{ fontSize: 13, fontWeight: 500, color: "var(--text)" }}>Live + local abstract sidecar</span>
+            </div>
+            <p style={{ fontSize: 12, color: "var(--text-secondary)", lineHeight: 1.55 }}>
+              Sidecar v3: script-bucketed 32 KB blocks, zstd-19 with per-script trained dicts (≈0.35 KB/doc, 52.9 GB at 150M). Everyday queries stay fully offline at full rerank quality.
+            </p>
+          </Panel>
+          <Panel title="Cold policy">
+            <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 6 }}>
+              <Icon name="snow" size={15} style={{ color: "var(--c-teal)" }} />
+              <span style={{ fontSize: 13, fontWeight: 500, color: "var(--text)" }}>Packed (tar + zstd-19 LDM)</span>
+            </div>
+            <p style={{ fontSize: 12, color: "var(--text-secondary)", lineHeight: 1.55 }}>
+              No local abstracts — OpenAlex mget of ~100 docs (≈150 KB, +100–300 ms) before rerank. Unpack is pure decompression at disk speed with SHA-256 parity. Never title-only rerank.
+            </p>
+          </Panel>
+        </div>
+
+        <Panel title="Era sub-sections (10)" pad="0" action={<span style={{ fontSize: 11, color: "var(--text-muted)" }}>era boundary: publication_year 2010</span>}>
+          <div style={{ display: "grid", gridTemplateColumns: cols, padding: "8px 16px", background: "var(--bg)", borderBottom: "1px solid var(--border)", gap: 8, marginTop: 0 }}>
+            {["Section", "Era", "Docs", "State", "Live", "Packed", "Actions"].map(h => (
+              <span key={h} style={{ fontSize: 11, fontWeight: 600, color: "var(--text-muted)", textTransform: "uppercase", letterSpacing: "0.05em" }}>{h}</span>
+            ))}
+          </div>
+          {IM_SECTIONS.map((s, i) => {
+            const st = stateOf(s);
+            return (
+              <div key={s.id} style={{ display: "grid", gridTemplateColumns: cols, padding: "9px 16px", gap: 8, alignItems: "center", borderBottom: i < IM_SECTIONS.length - 1 ? "1px solid var(--border-light)" : "none", background: st === "hot" ? "oklch(98.5% 0.008 25)" : st === "unpacked" ? "oklch(98.5% 0.006 295)" : "transparent" }}>
+                <span style={{ display: "flex", alignItems: "center", gap: 7, minWidth: 0 }}>
+                  <Icon name={st === "hot" ? "flame" : st === "unpacked" ? "box" : "snow"} size={13} style={{ color: st === "hot" ? "var(--c-red)" : st === "unpacked" ? "var(--c-violet)" : "var(--c-teal)", flexShrink: 0 }} />
+                  <Mono style={{ fontSize: 11.5, color: "var(--text)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{s.id}</Mono>
+                </span>
+                <span style={{ fontSize: 11.5, color: "var(--text-muted)", fontVariantNumeric: "tabular-nums" }}>{eraLabel(s.era)}</span>
+                <span style={{ fontSize: 12, color: "var(--text-secondary)", fontVariantNumeric: "tabular-nums" }}>{s.docsM}M</span>
+                <span>
+                  {st === "hot" && <Badge tone="hot">hot · live + sidecar</Badge>}
+                  {st === "cold" && <Badge tone="cold">cold · packed {s.ratio}</Badge>}
+                  {st === "unpacked" && <Badge tone="violet">live · temp unpack</Badge>}
+                  {st === "unpacking" && (
+                    <span style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                      <span style={{ flex: 1, maxWidth: 110, display: "inline-block" }}><MiniBar value={unpacking[s.id]} max={1} color="var(--c-violet)" /></span>
+                      <span style={{ fontSize: 11, color: "var(--text-muted)", fontVariantNumeric: "tabular-nums" }}>{Math.round(unpacking[s.id] * 100)}%</span>
+                    </span>
+                  )}
+                </span>
+                <span style={{ fontSize: 12, color: st === "cold" ? "var(--text-faint)" : "var(--text)", fontVariantNumeric: "tabular-nums" }}>{s.live.toFixed(1)} GB</span>
+                <span style={{ fontSize: 12, color: "var(--text-secondary)", fontVariantNumeric: "tabular-nums" }}>{s.packed.toFixed(1)} GB</span>
+                <span style={{ display: "flex", gap: 4 }}>
+                  {st === "cold" && <GhostBtn small onClick={() => startUnpack(s.id)} title="MCP: request_section_unpack"><Icon name="upload" size={11} /> Unpack</GhostBtn>}
+                  {st === "unpacked" && <GhostBtn small onClick={() => repack(s.id)} title="Archive kept after unpack — repack just deletes the live dir"><Icon name="download" size={11} /> Repack</GhostBtn>}
+                  {st === "unpacking" && <span style={{ fontSize: 11, color: "var(--text-muted)" }}>decompressing…</span>}
+                  {st === "hot" && <span style={{ fontSize: 11, color: "var(--text-faint)" }}>persona home</span>}
+                </span>
+              </div>
+            );
+          })}
+        </Panel>
+
+        <p style={{ fontSize: 11.5, color: "var(--text-muted)", lineHeight: 1.55, display: "flex", gap: 6, alignItems: "flex-start" }}>
+          <Icon name="info" size={13} style={{ marginTop: 1, flexShrink: 0 }} />
+          <span>Unpack requests surface through the <Mono>request_section_unpack</Mono> MCP tool; archives are kept after unpack, so repacking an unwritten section just deletes the live directory. Peak disk = steady + largest cold section temporarily live.</span>
+        </p>
+      </div>
+    </div>
+  );
+};
+
+// ─── SCREEN 2: DENSE WARM CACHE ──────────────────────────────────────────────
+const HIT_SERIES = [0, 2, 5, 9, 14, 21, 26, 33, 38, 44, 48, 51, 55, 57, 58, 60, 61, 61, 62, 63];
+
+const WarmCacheScreen = () => {
+  const [enabled, setEnabled] = React.useState(true);
+  const dim = enabled ? 1 : 0.45;
+
+  const ingestLog = [
+    { t: "14:41:05", id: "W4391882041", leg: "SPLADE", action: "encoded", batch: "32/32 · 367 ms" },
+    { t: "14:41:05", id: "W4382011957", leg: "BM25F", action: "encoded", batch: "32/32 · 367 ms" },
+    { t: "14:41:04", id: "W2971912755", leg: "dense", action: "dedup skip", batch: "seed id" },
+    { t: "14:41:04", id: "W4377209114", leg: "SPLADE", action: "encoded", batch: "32/32 · 371 ms" },
+    { t: "14:38:52", id: "W3214559808", leg: "BM25F", action: "dedup skip", batch: "delta id" },
+    { t: "14:38:51", id: "W4365998120", leg: "dense", action: "encoded", batch: "27/32 · 344 ms" },
+    { t: "14:38:51", id: "W4221056733", leg: "SPLADE", action: "encoded", batch: "27/32 · 344 ms" },
+  ];
+
+  // hit-rate chart geometry
+  const W = 520, H = 150, PAD = 28;
+  const pts = HIT_SERIES.map((v, i) => {
+    const x = PAD + (i / (HIT_SERIES.length - 1)) * (W - PAD - 10);
+    const y = H - PAD - (v / 80) * (H - PAD - 14);
+    return [x, y];
+  });
+  const yOf = (v) => H - PAD - (v / 80) * (H - PAD - 14);
+
+  return (
+    <div data-screen-label="Warm Cache">
+      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 14, gap: 12, flexWrap: "wrap" }}>
+        <p style={{ fontSize: 12.5, color: "var(--text-secondary)", maxWidth: "70ch", lineHeight: 1.55 }}>
+          Query-driven dense delta over the static seed — every hydrated local result is enqueued fire-and-forget, CPU-encoded in the background, and becomes retrievable for <em>future</em> queries. The cache converges to the user's active domain.
+        </p>
+        <div style={{ display: "flex", alignItems: "center", gap: 10, flexShrink: 0 }}>
+          <Toggle on={enabled} setOn={setEnabled} label="SFU_DENSE_WARMCACHE" />
+          {enabled ? <Badge tone="ok">on · default</Badge> : <Badge tone="muted">disabled</Badge>}
+        </div>
+      </div>
+
+      <div style={{ opacity: dim, transition: "opacity 0.25s", pointerEvents: enabled ? "auto" : "none" }}>
+        <div style={{ display: "grid", gridTemplateColumns: "repeat(6, 1fr)", gap: 10, marginBottom: 14 }}>
+          <StatCard label="Cached docs" value="38,412" sub="cap 500,000" icon="layers" color="var(--c-violet)" />
+          <StatCard label="Delta on disk" value="412 MB" sub="dense/delta.sqlite" icon="drive" color="var(--c-teal)" />
+          <StatCard label="RAM (b1 codes)" value="19.6 MB" sub="brute-force Hamming" icon="cpu" color="var(--c-indigo)" />
+          <StatCard label="Hit rate · dense leg" value="61%" sub="last 100 queries" icon="zap" color="var(--c-amber)" />
+          <StatCard label="Encode rate" value="87 docs/s" sub="CPU · batch 32" icon="activity" color="var(--c-green)" />
+          <StatCard label="p95 search_rrf" value="+0 ms" sub="cache on vs off" icon="check" color="var(--c-green)" />
+        </div>
+
+        <div style={{ display: "grid", gridTemplateColumns: "1.2fr 1fr", gap: 14, marginBottom: 14 }}>
+          <Panel title="Cache-hit fraction vs queries served">
+            <svg viewBox={`0 0 ${W} ${H}`} style={{ width: "100%", height: "auto", display: "block" }}>
+              {[0, 25, 50, 75].map(v => (
+                <g key={v}>
+                  <line x1={PAD} x2={W - 10} y1={yOf(v)} y2={yOf(v)} stroke="var(--border-light)" strokeWidth="1" strokeDasharray={v === 75 ? "4 3" : "0"}></line>
+                  <text x={PAD - 6} y={yOf(v) + 3.5} textAnchor="end" fontSize="9.5" fill="var(--text-faint)" fontFamily="var(--font-mono)">{v}%</text>
+                </g>
+              ))}
+              <text x={W - 12} y={yOf(75) - 5} textAnchor="end" fontSize="9.5" fill="var(--text-muted)" fontFamily="var(--font-ui)">75% — Frieder et al. ceiling (temporal locality)</text>
+              <polyline points={pts.map(p => p.join(",")).join(" ")} fill="none" stroke="var(--c-violet)" strokeWidth="2" strokeLinejoin="round" strokeLinecap="round"></polyline>
+              {pts.filter((_, i) => i % 3 === 0).map((p, i) => <circle key={i} cx={p[0]} cy={p[1]} r="2.4" fill="var(--c-violet)"></circle>)}
+              <text x={PAD} y={H - 8} fontSize="9.5" fill="var(--text-faint)" fontFamily="var(--font-mono)">0</text>
+              <text x={W - 10} y={H - 8} textAnchor="end" fontSize="9.5" fill="var(--text-faint)" fontFamily="var(--font-mono)">1,900 queries</text>
+            </svg>
+            <p style={{ fontSize: 11.5, color: "var(--text-muted)", marginTop: 6, lineHeight: 1.5 }}>
+              In-domain payoff expected after ~10–50 queries (LOCALIZED §5 model). Background cost ≈ 0.6–1.7 s CPU per query, ~0.5 GB RAM per 1M cached docs.
+            </p>
+          </Panel>
+
+          <Panel title="Two-tier delta · FreshDiskANN-style">
+            <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+              <div style={{ border: "1px solid var(--border-light)", borderRadius: 6, padding: "9px 12px", background: "var(--bg)" }}>
+                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 2 }}>
+                  <span style={{ fontSize: 12.5, fontWeight: 600, color: "var(--text)" }}>Seed</span>
+                  <Badge tone="muted">immutable · mmap view</Badge>
+                </div>
+                <span style={{ fontSize: 11.5, color: "var(--text-secondary)" }}>Static <Mono>dense/</Mono> artifacts — b1.usearch + int8 memmap. Untouched by the cache.</span>
+              </div>
+              <div style={{ textAlign: "center", color: "var(--text-faint)", lineHeight: 1 }}><Icon name="upload" size={13} /></div>
+              <div style={{ border: "1px solid var(--c-violet)", borderRadius: 6, padding: "9px 12px", background: "var(--c-violet-soft)" }}>
+                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 2 }}>
+                  <span style={{ fontSize: 12.5, fontWeight: 600, color: "var(--text)" }}>Delta</span>
+                  <Badge tone="violet">mutable · exact</Badge>
+                </div>
+                <span style={{ fontSize: 11.5, color: "var(--text-secondary)" }}>SQLite durability → in-RAM packed b1 codes, brute-force Hamming (popcount LUT) + int8 rescore. Sub-ms below ~200k docs; sidesteps HNSW insert-order degradation.</span>
+              </div>
+              <p style={{ fontSize: 11.5, color: "var(--text-muted)", lineHeight: 1.5 }}>
+                Scores are corpus-independent dot products → seed and delta merge exactly by score. Delta rows carry their own metadata, so warm docs hydrate even when absent from <Mono>meta.sqlite</Mono>.
+              </p>
+            </div>
+          </Panel>
+        </div>
+
+        <div style={{ display: "grid", gridTemplateColumns: "1.2fr 1fr", gap: 14 }}>
+          <Panel title="Ingest worker · fire-and-forget" pad="0" action={<span style={{ fontSize: 11, color: "var(--text-muted)" }}>queue 18 / 2,048 · drop-newest on overflow</span>}>
+            <div style={{ display: "grid", gridTemplateColumns: "70px 120px 70px 1fr 120px", padding: "8px 16px", background: "var(--bg)", borderBottom: "1px solid var(--border)", gap: 8 }}>
+              {["Time", "Doc", "Leg", "Action", "Batch"].map(h => (
+                <span key={h} style={{ fontSize: 11, fontWeight: 600, color: "var(--text-muted)", textTransform: "uppercase", letterSpacing: "0.05em" }}>{h}</span>
+              ))}
+            </div>
+            {ingestLog.map((r, i) => (
+              <div key={i} style={{ display: "grid", gridTemplateColumns: "70px 120px 70px 1fr 120px", padding: "7px 16px", gap: 8, alignItems: "center", borderBottom: i < ingestLog.length - 1 ? "1px solid var(--border-light)" : "none" }}>
+                <Mono style={{ fontSize: 11, color: "var(--text-faint)" }}>{r.t}</Mono>
+                <Mono style={{ fontSize: 11.5, color: "var(--text)" }}>{r.id}</Mono>
+                <span style={{ fontSize: 11.5, color: "var(--text-secondary)" }}>{r.leg}</span>
+                <span>{r.action === "encoded" ? <Badge tone="ok">encoded</Badge> : <Badge tone="muted">dedup skip</Badge>}</span>
+                <Mono style={{ fontSize: 11, color: "var(--text-muted)" }}>{r.batch}</Mono>
+              </div>
+            ))}
+          </Panel>
+
+          <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
+            <Panel title="Success metrics (v1)">
+              <div style={{ display: "flex", flexDirection: "column", gap: 7 }}>
+                {[
+                  { ok: true, text: "Delta-vs-exact recall ≥ 0.97 — trivially exact (brute force)" },
+                  { ok: true, text: "p95 search_rrf unchanged with cache on" },
+                  { ok: null, text: "Cross-query recall growth on replayed query log — tracking" },
+                  { ok: null, text: "Cache-hit fraction of dense leg vs query count — tracking" },
+                ].map((m, i) => (
+                  <div key={i} style={{ display: "flex", gap: 8, alignItems: "flex-start" }}>
+                    <Icon name={m.ok ? "check" : "clock"} size={13} style={{ color: m.ok ? "var(--c-green)" : "var(--c-amber)", marginTop: 2, flexShrink: 0 }} />
+                    <span style={{ fontSize: 12, color: "var(--text-secondary)", lineHeight: 1.45 }}>{m.text}</span>
+                  </div>
+                ))}
+              </div>
+            </Panel>
+            <Panel title="Deferred to v2" action={<GhostBtn small disabled title="v2"><Icon name="download" size={11} /> merge_dense_delta</GhostBtn>}>
+              <ul style={{ listStyle: "none", display: "flex", flexDirection: "column", gap: 6 }}>
+                {[
+                  "usearch mutable delta index above the brute-force threshold",
+                  "Fold delta into seed artifacts (bulk rebuild erases graph debt), truncate delta",
+                  "OpenAlex live-API ingest hook — v1 captures the local legs only",
+                  "ONNX-int8 export of the v5 encoder (2–3× CPU encode)",
+                ].map((t, i) => (
+                  <li key={i} style={{ display: "flex", gap: 8, alignItems: "flex-start", fontSize: 12, color: "var(--text-secondary)", lineHeight: 1.45 }}>
+                    <span style={{ width: 4, height: 4, borderRadius: 2, background: "var(--text-faint)", marginTop: 7, flexShrink: 0 }}></span>{t}
+                  </li>
+                ))}
+              </ul>
+            </Panel>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+};
+
+// ─── SCREEN 3: STORAGE BUDGET ────────────────────────────────────────────────
+const StorageScreen = () => {
+  const levers = [
+    { comp: "BMP SPLADE shards", before: 167.6, after: 76.7, lever: "bsize 256 + clustered (section, top-SPLADE-term) insertion", note: "−54.2% · recall@50 0.967 vs 0.966 · −61% latency", status: { tone: "ok", label: "shipped af09836" } },
+    { comp: "Abstract sidecar", before: 64.7, after: 52.9, lever: "clustered 32 KB blocks + per-(script) zstd-19 dicts (3.42×)", note: "bit-exact · 100-doc rerank fetch ≪ 300 ms budget", status: { tone: "ok", label: "shipped d978ba3" } },
+    { comp: "meta.sqlite", before: 24.1, after: 10.2, lever: "v2: W-id INTEGER PK + TEXT overflow + dict-zstd titles/DOIs", note: "measured ~10 GB at 150M — beats the 14.4 GB lever estimate", status: { tone: "ok", label: "shipped 9a6d195" } },
+    { comp: "tantivy BM25F", before: 44.5, after: 44.8, lever: "clustered ordering tested", note: "+0.7% — null result; tantivy already delta/bit-packs postings", status: { tone: "muted", label: "not adopted" } },
+  ];
+  const bmpMatrix = [
+    { v: "b32 corpus (paper config)", b: "1404.8", d: "—", ms: "27.2", r: "0.966", adopted: false },
+    { v: "b32 clustered", b: "1160.1", d: "−17.4%", ms: "13.3", r: "0.960", adopted: false },
+    { v: "b64 clustered", b: "961.9", d: "−31.5%", ms: "14.1", r: "0.962", adopted: false },
+    { v: "b128 clustered", b: "789.5", d: "−43.8%", ms: "13.6", r: "0.966", adopted: false },
+    { v: "b256 clustered", b: "642.9", d: "−54.2%", ms: "10.7", r: "0.967", adopted: true },
+  ];
+  const mainline = [
+    { label: "Original live index", gb: 274, color: "var(--text-faint)" },
+    { label: "Lossless config (combined2)", gb: 141.3, color: "var(--c-teal)" },
+    { label: "+ abstracts → sidecar", gb: 112, color: "var(--c-green)", approx: true },
+    { label: "+ BP doc-ID reordering", gb: 108, color: "var(--c-green)", approx: true, est: true },
+  ];
+  const maxBefore = 170;
+
+  return (
+    <div data-screen-label="Storage Budget">
+      <div style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: 10, marginBottom: 14 }}>
+        <StatCard label="As built · all hot" value="300.9 GB" sub="150.4M docs, all sections live" icon="drive" color="var(--text-muted)" />
+        <StatCard label="All levers applied" value="188.8 GB" sub="−112.1 GB · −37.3% · all lossless" icon="download" color="var(--c-green)" />
+        <StatCard label="Persona steady state" value="≈95 GB" sub="political_science · hot live + cold packed" icon="flame" color="var(--c-red)" />
+        <StatCard label="15M laptop tier" value="≈19 GB" sub="all-live · ~10 GB persona steady" icon="zap" color="var(--c-violet)" />
+      </div>
+
+      <Panel title="Measured levers — thin-client DB @150M" pad="0" style={{ marginBottom: 14 }}>
+        <div style={{ display: "grid", gridTemplateColumns: "150px 1fr 280px 110px 130px", padding: "8px 16px", background: "var(--bg)", borderBottom: "1px solid var(--border)", gap: 10 }}>
+          {["Component", "As built → after", "Lever", "Sizes", "Status"].map(h => (
+            <span key={h} style={{ fontSize: 11, fontWeight: 600, color: "var(--text-muted)", textTransform: "uppercase", letterSpacing: "0.05em" }}>{h}</span>
+          ))}
+        </div>
+        {levers.map((l, i) => (
+          <div key={l.comp} style={{ display: "grid", gridTemplateColumns: "150px 1fr 280px 110px 130px", padding: "11px 16px", gap: 10, alignItems: "center", borderBottom: i < levers.length - 1 ? "1px solid var(--border-light)" : "none" }}>
+            <span style={{ fontSize: 12.5, fontWeight: 500, color: "var(--text)" }}>{l.comp}</span>
+            <span style={{ display: "flex", flexDirection: "column", gap: 4 }}>
+              <MiniBar value={l.before} max={maxBefore} color="var(--border)" height={5} />
+              <MiniBar value={l.after} max={maxBefore} color={l.after < l.before ? "var(--c-green)" : "var(--c-amber)"} height={5} />
+            </span>
+            <span style={{ fontSize: 11.5, color: "var(--text-secondary)", lineHeight: 1.4 }}>{l.lever}<br /><span style={{ color: "var(--text-muted)" }}>{l.note}</span></span>
+            <span style={{ fontSize: 12, fontVariantNumeric: "tabular-nums", color: "var(--text-secondary)" }}>{l.before} → <strong style={{ color: l.after < l.before ? "oklch(40% 0.11 145)" : "var(--text)" }}>{l.after} GB</strong></span>
+            <span><Badge tone={l.status.tone}>{l.status.label}</Badge></span>
+          </div>
+        ))}
+        <div style={{ display: "flex", justifyContent: "space-between", padding: "10px 16px", borderTop: "1px solid var(--border)", background: "var(--bg)" }}>
+          <span style={{ fontSize: 12, fontWeight: 600, color: "var(--text)" }}>Total (all live, all hot)</span>
+          <span style={{ fontSize: 12.5, fontVariantNumeric: "tabular-nums", color: "var(--text)" }}>300.9 → <strong style={{ color: "oklch(40% 0.11 145)" }}>188.8 GB</strong> <span style={{ color: "var(--text-muted)" }}>(−37.3%, all lossless)</span></span>
+        </div>
+      </Panel>
+
+      <div style={{ display: "grid", gridTemplateColumns: "1.2fr 1fr", gap: 14 }}>
+        <Panel title="BMP matrix — 100k real docs, production SPLADE, alpha 0.8" pad="0">
+          <div style={{ display: "grid", gridTemplateColumns: "1.5fr 80px 80px 70px 100px", padding: "8px 16px", background: "var(--bg)", borderBottom: "1px solid var(--border)", gap: 8 }}>
+            {["Variant", "B/doc", "Δ size", "ms/q", "recall@50"].map(h => (
+              <span key={h} style={{ fontSize: 11, fontWeight: 600, color: "var(--text-muted)", textTransform: "uppercase", letterSpacing: "0.05em" }}>{h}</span>
+            ))}
+          </div>
+          {bmpMatrix.map((r, i) => (
+            <div key={r.v} style={{ display: "grid", gridTemplateColumns: "1.5fr 80px 80px 70px 100px", padding: "8px 16px", gap: 8, alignItems: "center", borderBottom: i < bmpMatrix.length - 1 ? "1px solid var(--border-light)" : "none", background: r.adopted ? "oklch(98% 0.008 145)" : "transparent" }}>
+              <span style={{ fontSize: 12, color: "var(--text)", fontWeight: r.adopted ? 600 : 400, display: "flex", alignItems: "center", gap: 7 }}>
+                {r.v}{r.adopted && <Badge tone="ok">adopted</Badge>}
+              </span>
+              <Mono style={{ fontSize: 11.5, color: "var(--text-secondary)" }}>{r.b}</Mono>
+              <Mono style={{ fontSize: 11.5, color: r.d === "—" ? "var(--text-faint)" : "oklch(40% 0.11 145)" }}>{r.d}</Mono>
+              <Mono style={{ fontSize: 11.5, color: "var(--text-secondary)" }}>{r.ms}</Mono>
+              <Mono style={{ fontSize: 11.5, color: "var(--text-secondary)" }}>{r.r}</Mono>
+            </div>
+          ))}
+          <p style={{ fontSize: 11.5, color: "var(--text-muted)", lineHeight: 1.5, padding: "10px 16px", borderTop: "1px dashed var(--border-light)" }}>
+            Quantization scale 70 (saturation-free for SPLADE log1p ≤ 3.64); tail shards &lt; 5,000 docs absorbed into the previous shard; per-shard <Mono>vocab.zst</Mono> sidecars guard all-terms-absent panics.
+          </p>
+        </Panel>
+
+        <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
+          <Panel title="Same tech on the mainline Lucene DB (hypothetical)">
+            <div style={{ display: "flex", flexDirection: "column", gap: 9 }}>
+              {mainline.map(m => (
+                <div key={m.label}>
+                  <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 3 }}>
+                    <span style={{ fontSize: 12, color: "var(--text-secondary)" }}>{m.label}{m.est && <span style={{ color: "var(--text-faint)" }}> · est.</span>}</span>
+                    <span style={{ fontSize: 12, fontVariantNumeric: "tabular-nums", color: "var(--text)" }}>{m.approx ? "≈" : ""}{m.gb} GB</span>
+                  </div>
+                  <MiniBar value={m.gb} max={274} color={m.color} height={7} />
+                </div>
+              ))}
+            </div>
+            <p style={{ fontSize: 11.5, color: "var(--text-muted)", lineHeight: 1.5, marginTop: 10 }}>
+              274 → ~112 GB (−59%), fully lossless. The thin-client pays ~77 GB more disk than optimized mainline at 150M for BMP's block-max speed structures — in exchange for the no-JVM laptop properties.
+            </p>
+          </Panel>
+          <Panel title="Rejected lossy options (for the record)">
+            <ul style={{ listStyle: "none", display: "flex", flexDirection: "column", gap: 6 }}>
+              {[
+                ["truncate-128tok", "4.34× but cosine 0.955 — fails the 0.98 embedding-cosine gate"],
+                ["stopword-drop", "2.25× but cosine 0.968 — fails the same gate"],
+                ["SLM rank-decode (gpt2)", "misses the 300 ms rerank budget by 1,411× and same-machine bit-exactness"],
+              ].map(([k, v]) => (
+                <li key={k} style={{ display: "flex", gap: 8, alignItems: "flex-start", fontSize: 12, lineHeight: 1.45 }}>
+                  <Icon name="warning" size={12} style={{ color: "var(--c-amber)", marginTop: 2.5, flexShrink: 0 }} />
+                  <span style={{ color: "var(--text-secondary)" }}><Mono style={{ color: "var(--text)" }}>{k}</Mono> — {v}</span>
+                </li>
+              ))}
+            </ul>
+          </Panel>
+        </div>
+      </div>
+    </div>
+  );
+};
+
+// ─── APP ─────────────────────────────────────────────────────────────────────
+const TABS = [
+  { id: "personas", label: "Personas & Sections" },
+  { id: "warmcache", label: "Warm Cache" },
+  { id: "storage", label: "Storage Budget" },
+];
+
+const App = () => {
+  const [tab, setTab] = React.useState(() => localStorage.getItem("im-tab") || "personas");
+  const [live, setLive] = React.useState(null); // null=unknown, true=live, false=demo
+  const pick = (t) => { setTab(t); localStorage.setItem("im-tab", t); };
+
+  // Probe the backend on mount: drives the demo-data banner + header badge.
+  React.useEffect(() => {
+    let cancelled = false;
+    if (window.SFUApi) {
+      window.SFUApi.indexStatus().then(res => {
+        if (cancelled) return;
+        const isLive = res.source === "live";
+        setLive(isLive);
+        if (window.SFUUI) window.SFUUI.setMockBanner(!isLive);
+      });
+    }
+    return () => { cancelled = true; };
+  }, []);
+
+  return (
+    <div style={{ display: "flex", height: "100%" }}>
+      <Sidebar active="index" />
+      <main style={{ flex: 1, minWidth: 0, overflow: "auto", padding: "20px 24px" }}>
+        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12, marginBottom: 16, flexWrap: "wrap" }}>
+          <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+            <div style={{ width: 28, height: 28, borderRadius: 6, background: "var(--c-red)", display: "flex", alignItems: "center", justifyContent: "center" }}>
+              <Icon name="server" size={14} style={{ color: "white" }} />
+            </div>
+            <div>
+              <h2 style={{ fontFamily: "var(--font-serif)", fontSize: 17, fontWeight: 500, color: "var(--text)", lineHeight: 1.2 }}>Index Manager</h2>
+              <span style={{ fontSize: 11, color: "var(--text-muted)" }}>Thin-client testbed · 150.4M docs · tantivy + BMP + usearch</span>
+            </div>
+          </div>
+          <div style={{ display: "flex", gap: 6, alignItems: "center" }}>
+            <Badge tone={live === false ? "warn" : "ok"}>{live === false ? "backend: demo data" : "backend: thinclient"}</Badge>
+            <Badge tone="muted">SPLADE fallback armed</Badge>
+          </div>
+        </div>
+
+        <div style={{ display: "flex", gap: 0, borderBottom: "1px solid var(--border-light)", marginBottom: 20 }}>
+          {TABS.map(t => (
+            <button key={t.id} onClick={() => pick(t.id)} style={{ padding: "8px 16px", border: "none", background: "transparent", fontSize: 13, fontWeight: tab === t.id ? 500 : 400, color: tab === t.id ? "var(--c-red)" : "var(--text-secondary)", borderBottom: `2px solid ${tab === t.id ? "var(--c-red)" : "transparent"}`, transition: "color 0.15s" }}>
+              {t.label}
+            </button>
+          ))}
+        </div>
+
+        {tab === "personas" && <PersonasScreen />}
+        {tab === "warmcache" && <WarmCacheScreen />}
+        {tab === "storage" && <StorageScreen />}
+      </main>
+    </div>
+  );
+};
+
+ReactDOM.createRoot(document.getElementById("root")).render(<App />);
+</script>
+</body>
+</html>
