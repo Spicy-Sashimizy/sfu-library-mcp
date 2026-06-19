@@ -211,9 +211,17 @@ JSON is negligible.
    Decide: finish sidecars vs accept live-fetch vs scope demo to social_sciences.
 3. **Dense leg not built** (`dense_done:false`) → natural-language queries weaker
    (loses the measured +0.17 NDCG@10 NL win). Decide: build full-corpus dense vs accept.
-4. **CPU rerank throughput.** Cross-encoder is torch/CPU (~5 s warm/query, no int8/ONNX
-   export yet). At 5–15 concurrent this is the bottleneck. Highest-leverage pre-demo
-   task: **export an int8 ONNX cross-encoder** + run multiple uvicorn workers.
+4. **CPU rerank throughput.** ✅ **int8 ONNX export DONE + MEASURED 2026-06-19**
+   (`scripts/export_ce_onnx_int8.py`, results
+   `data/eval_results/ce_onnx_int8_bench_20260619_0302.json`). On this 16-core AVX2
+   host, `models/sfu-cross-encoder-v1` (6-layer BERT, 384-hid) dynamic-int8:
+   **p50 latency 114.0 ms → 5.96 ms (19.1×), throughput 5.5 → 144 pairs/s, model
+   90.9 → 23.2 MB (3.9×)**; ranking-safe: Pearson r = 0.994 on logits, **top-half
+   ordering Jaccard = 1.0** (int8 preserves the order). This removes the rerank
+   bottleneck — a 50-candidate rerank drops from ~5.7 s to ~0.3 s. Remaining: run
+   multiple uvicorn workers on the droplet; **NDCG quality parity is a separate
+   LLM-judge eval** (`eval_cross_encoder.py`), not yet run — do not claim quality
+   parity from the latency bench alone.
 5. **Reaper correctness = budget safety.** The idle reaper MUST reliably destroy; the
    hard daily killswitch is the backstop. Test both before going live.
 6. **Auth.** Server has no native auth. Add a **bearer token** (link token + MCP header)
@@ -249,3 +257,15 @@ Per repo doc rules, the following are UNMEASURED and must be filled from the Pha
 run before the demo is called ready: wake latency (click→serving), warm single-query
 latency at 150M, sustained latency at 5/10/15 concurrent, $/demo-hour actuals. Mark any
 pre-measurement numbers `*est.*`.
+
+**MEASURED so far (interim work, 2026-06-19):**
+- **int8 ONNX cross-encoder** (rerank bottleneck, risk #4): p50 114.0→5.96 ms (19.1×),
+  5.5→144 pairs/s, 90.9→23.2 MB, logit r=0.994, top-half ranking Jaccard 1.0.
+  Script `scripts/export_ce_onnx_int8.py`, results
+  `data/eval_results/ce_onnx_int8_bench_20260619_0302.json`. Quality (NDCG) parity
+  still UNMEASURED (separate LLM-judge eval).
+- **Broker schedule decision core** (`scripts/demo_broker/scheduler.py`): 13/13 unit
+  tests (hot-window keep-alive, prewarm boot, after-hours scale-to-zero, idle reaper,
+  daily killswitch). Control-plane only; no live DO timing yet (dry-run).
+- **Resumable seed** (`scripts/seed_demo_volume.sh`): interrupt→resume→checksum-verify
+  validated; dry-run enumerated the real 41 GB / 30M Qdrant storage (2,509 files).

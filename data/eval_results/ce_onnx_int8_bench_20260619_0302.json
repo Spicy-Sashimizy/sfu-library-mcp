@@ -1,0 +1,37 @@
+{
+  "date": "2026-06-19T03:02:31Z",
+  "model": "models/sfu-cross-encoder-v1",
+  "out": "models/sfu-cross-encoder-v1-onnx-int8",
+  "host": {
+    "cpu_count": 16,
+    "isa": "avx2",
+    "quant": "dynamic int8 per-channel"
+  },
+  "n_pairs": 64,
+  "size_mb": {
+    "torch_safetensors": 90.9,
+    "onnx_fp32": 91.0,
+    "onnx_int8": 23.2
+  },
+  "score_parity": {
+    "pearson_r": 0.99384,
+    "max_abs_logit_diff": 0.70909,
+    "top_half_jaccard": 1.0
+  },
+  "latency": {
+    "torch_fp32": {
+      "p50_ms": 114.047,
+      "p95_ms": 571.984,
+      "mean_ms": 181.246,
+      "throughput_pairs_s": 5.5
+    },
+    "onnx_int8": {
+      "p50_ms": 5.955,
+      "p95_ms": 15.149,
+      "mean_ms": 6.941,
+      "throughput_pairs_s": 144.1
+    },
+    "speedup_p50": 19.15
+  },
+  "note": "Latency/throughput + logit parity only. NDCG quality parity is a SEPARATE eval (eval_cross_encoder.py, LLM-judge) and is NOT measured here."
+}
