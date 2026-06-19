@@ -142,6 +142,10 @@ Manual test push: `python3 notify.py "hello"` (uses the env above).
 - **Zotero writes blocked** for visitors (`save_to_zotero`/`batch_save_to_zotero`)
   by inspecting the JSON-RPC `tools/call` name → 403.
 - **Per-session rate + daily caps** → 429, protecting the shared OpenAlex pool.
+  Counted **per `tools/call` (search)** only — the MCP handshake
+  (initialize/tools/list/notifications) is exempt so it can't exhaust the quota.
+- The proxy **forwards `Mcp-Session-Id`** back to the client and **streams**
+  responses (handles MCP SSE), not buffered — needs live validation in Phase 5.
 
 ### Tests
 ```bash

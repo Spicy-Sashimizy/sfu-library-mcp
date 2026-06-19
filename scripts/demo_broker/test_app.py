@@ -52,6 +52,19 @@ class TestBrokerWiring(unittest.TestCase):
         self.assertEqual(rep["events_by_kind"].get("blocked"), 1)
         self.assertEqual(rep["events_by_kind"].get("session_start"), 1)
 
+    def test_rpc_info_classification(self):
+        # only tools/call is billable; protocol messages are not (so the MCP
+        # handshake can't exhaust a session's rate quota)
+        app = self.app
+        self.assertEqual(app._rpc_info(b'{"method":"tools/call","params":{"name":"search"}}'), (True, None))
+        self.assertEqual(
+            app._rpc_info(b'{"method":"tools/call","params":{"name":"save_to_zotero"}}'),
+            (True, "save_to_zotero"))
+        self.assertEqual(app._rpc_info(b'{"method":"initialize"}'), (False, None))
+        self.assertEqual(app._rpc_info(b'{"method":"tools/list"}'), (False, None))
+        self.assertEqual(app._rpc_info(b""), (False, None))
+        self.assertEqual(app._rpc_info(b"not json"), (False, None))
+
 
 if __name__ == "__main__":
     unittest.main(verbosity=2)

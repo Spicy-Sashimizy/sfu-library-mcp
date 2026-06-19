@@ -95,7 +95,13 @@ class StateStore:
         day = now.date().isoformat()
         accrued = (self.get("runtime_seconds") or 0.0) if self.get("runtime_day") == day else 0.0
         booted_at = self.get("booted_at") or 0
-        live = max(0.0, time.time() - booted_at) if booted_at else 0.0
+        if booted_at:
+            # clamp the live portion to today's local midnight so a run that crosses
+            # midnight doesn't charge yesterday's hours against today's killswitch cap
+            midnight = now.replace(hour=0, minute=0, second=0, microsecond=0).timestamp()
+            live = max(0.0, time.time() - max(booted_at, midnight))
+        else:
+            live = 0.0
         return (accrued + live) / 3600.0
 
     # --- snapshot for the scheduler ---

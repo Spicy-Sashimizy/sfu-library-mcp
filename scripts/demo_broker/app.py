@@ -27,8 +27,8 @@ import time
 import urllib.request
 from datetime import datetime
 
-from fastapi import FastAPI, HTTPException, Request, Response
-from fastapi.responses import HTMLResponse
+from fastapi import FastAPI, HTTPException, Request
+from fastapi.responses import HTMLResponse, StreamingResponse
 
 from config import CONFIG
 from do_client import DOClient
@@ -174,20 +174,28 @@ def start(request: Request, t: str = ""):
     return HTMLResponse(_waiting_room(mcp_url, sess.bearer))
 
 
-def _blocked_tool(body: bytes) -> str | None:
-    """Return the tool name if this MCP call invokes a visitor-blocked tool."""
+def _rpc_info(body: bytes) -> tuple[bool, str | None]:
+    """Parse the JSON-RPC body → (is_tool_call, blocked_tool_or_None).
+
+    Only `tools/call` is a billable query. Protocol messages (initialize,
+    tools/list, notifications/*) must NOT count toward the rate caps, or the MCP
+    handshake every session performs would exhaust its own quota.
+    """
     if not body:
-        return None
+        return False, None
     try:
         msg = json.loads(body)
     except Exception:
-        return None
+        return False, None
+    is_call = False
+    blocked = None
     for m in (msg if isinstance(msg, list) else [msg]):
         if isinstance(m, dict) and m.get("method") == "tools/call":
+            is_call = True
             name = (m.get("params") or {}).get("name")
             if name in CONFIG.blocked_tools:
-                return name
-    return None
+                blocked = name
+    return is_call, blocked
 
 
 def _proxy(request: Request, subpath: str, body: bytes) -> Response:
@@ -198,21 +206,23 @@ def _proxy(request: Request, subpath: str, body: bytes) -> Response:
     if sess is None:
         raise HTTPException(status_code=401, detail="missing/invalid session bearer; open your /start link")
 
-    # 2) visitor tool-blocking (e.g. writes to the owner's Zotero)
-    blocked = _blocked_tool(body)
-    if blocked:
+    # 2) classify: only tools/call is billable; protocol msgs pass freely
+    is_call, blocked = _rpc_info(body)
+    if blocked:  # visitor tool-blocking (e.g. writes to the owner's Zotero)
         tenants.bump(sess.session_id, blocked=1)
         tenants.record(sess.session_id, blocked, "blocked", status=403)
         jlog(event="blocked", session=sess.session_id, tool=blocked, name=sess.name)
         raise HTTPException(status_code=403, detail=f"tool '{blocked}' is disabled in the demo")
 
-    # 3) per-session rate caps
-    ok, why = tenants.rate_ok(sess.session_id, CONFIG.session_rate_window_s,
-                              CONFIG.session_rate_max, CONFIG.session_daily_max)
-    if not ok:
-        tenants.record(sess.session_id, "ratelimit", "blocked", status=429, detail=why)
-        jlog(event="ratelimited", session=sess.session_id, why=why)
-        raise HTTPException(status_code=429, detail=f"rate limit: {why}")
+    # 3) per-session rate caps — count ONLY tool calls (searches), so the MCP
+    #    handshake (initialize/tools/list/notifications) never exhausts quota
+    if is_call:
+        ok, why = tenants.rate_ok(sess.session_id, CONFIG.session_rate_window_s,
+                                  CONFIG.session_rate_max, CONFIG.session_daily_max)
+        if not ok:
+            tenants.record(sess.session_id, "ratelimit", "blocked", status=429, detail=why)
+            jlog(event="ratelimited", session=sess.session_id, why=why)
+            raise HTTPException(status_code=429, detail=f"rate limit: {why}")
 
     # 4) compute must be up
     did = store.droplet_id()
@@ -221,15 +231,17 @@ def _proxy(request: Request, subpath: str, body: bytes) -> Response:
 
     ip = do.droplet_ip(did)
     url = f"http://{ip}:{CONFIG.droplet_port}/{subpath}"
-    req = urllib.request.Request(url, data=body or None, method=request.method)
+    upreq = urllib.request.Request(url, data=body or None, method=request.method)
     for h in ("content-type", "accept", "mcp-session-id"):
         if h in request.headers:
-            req.add_header(h, request.headers[h])
-    req.add_header("X-Demo-Session", sess.session_id)  # tag upstream for attribution
+            upreq.add_header(h, request.headers[h])
+    upreq.add_header("X-Demo-Session", sess.session_id)  # tag upstream for attribution
     t0 = time.perf_counter()
     try:
-        with urllib.request.urlopen(req, timeout=120) as r:
-            data, code, ctype = r.read(), r.status, r.headers.get("content-type", "application/json")
+        # NOT a context manager: the body is streamed (and closed) by the generator
+        # below so MCP SSE (text/event-stream) responses pass through — a buffered
+        # .read() would hang on a long-lived event stream.
+        resp = urllib.request.urlopen(upreq, timeout=CONFIG.upstream_timeout_s)
     except Exception as e:
         dt = (time.perf_counter() - t0) * 1000
         tenants.bump(sess.session_id, error=1)
@@ -237,14 +249,32 @@ def _proxy(request: Request, subpath: str, body: bytes) -> Response:
         jlog(event="error", session=sess.session_id, detail=str(e)[:500])
         raise HTTPException(status_code=502, detail=f"upstream error: {e}")
 
-    dt = (time.perf_counter() - t0) * 1000
-    store.touch_activity()
-    tenants.bump(sess.session_id, query=1)
-    tenants.record(sess.session_id, subpath, "query", status=code, latency_ms=dt)
-    jlog(event="query", session=sess.session_id, name=sess.name, status=code, latency_ms=round(dt, 1))
-    if CONFIG.notify_on_query:
-        notify(CONFIG, "SFU demo query", f"{sess.name}: {subpath} ({code}, {dt:.0f}ms)")
-    return Response(content=data, status_code=code, media_type=ctype)
+    code = resp.status
+    ctype = resp.headers.get("content-type", "application/json")
+    # forward Mcp-Session-Id (REQUIRED: client must echo it on later calls) + caching
+    fwd = {h: resp.headers[h] for h in ("mcp-session-id", "cache-control") if h in resp.headers}
+
+    def _stream():
+        try:
+            while True:
+                chunk = resp.read(8192)
+                if not chunk:
+                    break
+                yield chunk
+        finally:
+            resp.close()
+            dt = (time.perf_counter() - t0) * 1000
+            store.touch_activity()
+            if is_call:
+                tenants.bump(sess.session_id, query=1)
+            tenants.record(sess.session_id, subpath, "query" if is_call else "mcp",
+                           status=code, latency_ms=dt)
+            jlog(event="query" if is_call else "mcp", session=sess.session_id,
+                 name=sess.name, status=code, latency_ms=round(dt, 1))
+            if is_call and CONFIG.notify_on_query:
+                notify(CONFIG, "SFU demo query", f"{sess.name}: {subpath} ({code}, {dt:.0f}ms)")
+
+    return StreamingResponse(_stream(), status_code=code, media_type=ctype, headers=fwd)
 
 
 @app.api_route("/mcp", methods=["GET", "POST"])

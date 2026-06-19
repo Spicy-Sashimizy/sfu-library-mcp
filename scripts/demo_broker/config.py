@@ -107,6 +107,7 @@ class Config:
     # --- proxy ---
     droplet_port: int = field(default_factory=lambda: _i("DEMO_DROPLET_PORT", 8080))
     health_timeout_s: float = field(default_factory=lambda: _f("DEMO_HEALTH_TIMEOUT_S", 3.0))
+    upstream_timeout_s: float = field(default_factory=lambda: _f("DEMO_UPSTREAM_TIMEOUT_S", 300.0))
     state_path: str = field(default_factory=lambda: os.environ.get("DEMO_STATE_PATH", "data/demo_broker/state.db"))
 
     @property

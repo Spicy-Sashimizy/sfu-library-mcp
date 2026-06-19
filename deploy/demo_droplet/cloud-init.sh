@@ -31,9 +31,19 @@ test -d "$IDX_VOL/thinclient_index" || { echo "!! thinclient_index missing on vo
 
 echo ">> [2/4] bring up qdrant + thin-client MCP"
 cd "$REPO/deploy/demo_droplet"
-docker compose -f docker-compose.demo.yml up -d --build
+# no --build: the snapshot already carries the baked sfu-library-mcp:demo image, so
+# a wake is just a container start (rebuilding here would add minutes to every wake).
+docker compose -f docker-compose.demo.yml up -d
 
-echo ">> [3/4] wait for MCP /health (container up; models may still be cold)"
+echo ">> [3/4] wait for Qdrant readiness, then MCP /health"
+# Qdrant has no shell/curl; probe it from inside the MCP container (which has curl)
+# over the compose network. The MCP would degrade to BM25F if we skipped this, but
+# we want the SPLADE leg live before declaring ready.
+for i in $(seq 1 40); do
+  docker exec demo-sfu-mcp curl -sf http://qdrant:6333/readyz >/dev/null 2>&1 && { echo "   qdrant ready"; break; }
+  docker exec demo-sfu-mcp curl -sf http://qdrant:6333/ >/dev/null 2>&1 && { echo "   qdrant up"; break; }
+  sleep 5
+done
 for i in $(seq 1 60); do
   curl -sf http://localhost:8080/health >/dev/null 2>&1 && break
   sleep 5
