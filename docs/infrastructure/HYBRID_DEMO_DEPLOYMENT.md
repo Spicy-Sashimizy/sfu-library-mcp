@@ -267,5 +267,16 @@ pre-measurement numbers `*est.*`.
 - **Broker schedule decision core** (`scripts/demo_broker/scheduler.py`): 13/13 unit
   tests (hot-window keep-alive, prewarm boot, after-hours scale-to-zero, idle reaper,
   daily killswitch). Control-plane only; no live DO timing yet (dry-run).
+- **Multi-tenant broker (per-person, account-free)** (`scripts/demo_broker/`,
+  added 2026-06-19): per-invitee unguessable-token links (`mint_invite.py`) →
+  isolated sessions with their own `/mcp` bearer; **push notification to owner on
+  session start + errors** (ntfy/Slack/Discord webhook); **durable usage+debug**
+  (sqlite `invites`/`sessions`/`events` + rotating JSONL) and owner-gated
+  `/admin/report`; **safety caps** = per-session rate/daily limits + Zotero-write
+  blocked for visitors (JSON-RPC `tools/call` inspected at the proxy, 403).
+  **No OpenAlex key per user** — OpenAlex is keyless; the droplet uses one shared
+  polite-pool identity, rate-capped. Tested: 13 tenancy unit tests + a full
+  `/start`→`/mcp`→`/admin/report` integration test (dry-run, no DO spend). Live
+  wake-time / per-tenant latency still UNMEASURED (needs a real droplet).
 - **Resumable seed** (`scripts/seed_demo_volume.sh`): interrupt→resume→checksum-verify
   validated; dry-run enumerated the real 41 GB / 30M Qdrant storage (2,509 files).

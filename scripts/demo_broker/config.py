@@ -56,6 +56,26 @@ class Config:
     live: bool = field(default_factory=lambda: _b("DEMO_BROKER_LIVE", False))  # OFF => dry-run, no spend
     link_token: str = field(default_factory=lambda: os.environ.get("DEMO_LINK_TOKEN", ""))
     bearer_token: str = field(default_factory=lambda: os.environ.get("DEMO_BEARER_TOKEN", ""))
+    admin_token: str = field(default_factory=lambda: os.environ.get("DEMO_ADMIN_TOKEN", ""))
+
+    # --- multi-tenant (per-person, account-free) ---
+    public_base: str = field(default_factory=lambda: os.environ.get("DEMO_PUBLIC_BASE", "https://demo.example.org"))
+    # per-session safety caps (protect the shared OpenAlex polite-pool + droplet)
+    session_rate_max: int = field(default_factory=lambda: _i("DEMO_SESSION_RATE_MAX", 30))        # reqs ...
+    session_rate_window_s: int = field(default_factory=lambda: _i("DEMO_SESSION_RATE_WINDOW_S", 60))  # ... per window
+    session_daily_max: int = field(default_factory=lambda: _i("DEMO_SESSION_DAILY_MAX", 500))     # reqs/session/day
+    # MCP tool names blocked for visitors (writes to YOUR Zotero, etc.)
+    blocked_tools: frozenset[str] = field(
+        default_factory=lambda: frozenset(
+            os.environ.get("DEMO_BLOCKED_TOOLS", "save_to_zotero,batch_save_to_zotero").replace(" ", "").split(",")))
+
+    # --- notifications (push/webhook; ntfy/slack/discord/generic) ---
+    notify_webhook: str = field(default_factory=lambda: os.environ.get("DEMO_NOTIFY_WEBHOOK", ""))
+    notify_kind: str = field(default_factory=lambda: os.environ.get("DEMO_NOTIFY_KIND", "ntfy"))  # ntfy|slack|discord|json
+    notify_on_query: bool = field(default_factory=lambda: _b("DEMO_NOTIFY_ON_QUERY", False))  # default: session-start + errors only
+
+    # --- durable logging ---
+    log_path: str = field(default_factory=lambda: os.environ.get("DEMO_LOG_PATH", "data/demo_broker/broker.jsonl"))
 
     # --- business-hours hot/cold schedule ---
     tz: str = field(default_factory=lambda: os.environ.get("DEMO_TZ", "America/Vancouver"))
