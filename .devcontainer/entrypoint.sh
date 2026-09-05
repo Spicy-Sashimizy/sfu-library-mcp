@@ -269,6 +269,12 @@ install_or_update_claude_code() {
     mkdir -p /home/vscode/.local/bin
     chown -R vscode:vscode /home/vscode/.local
 
+    # Ensure ~/.cache is owned by vscode BEFORE the installer runs â€” the
+    # native installer needs ~/.cache/claude, and a root-owned .cache makes
+    # it fail with EACCES every boot, silently degrading to a stale npm
+    # fallback (bit sfu-library-mcp after the Sep 4 volume wipe).
+    mkdir -p /home/vscode/.cache
+    chown -R vscode:vscode /home/vscode/.cache 2>/dev/null || true
     # Ensure ~/.claude is owned by vscode (shared volume may be root-owned)
     if [ -d /home/vscode/.claude ]; then
         chown -R vscode:vscode /home/vscode/.claude
@@ -479,6 +485,20 @@ main() {
     echo ""
 
     # Execute the original command (sleep infinity or whatever)
+    # ClaudeBox Remote Control autostart (dashboard-managed feature).
+    # The dashboard's Remote Control start writes runner.sh + the autostart
+    # marker to the persistent claude-local volume; the runner reads its own
+    # validated arguments from that marker. Relaunching it here keeps phone
+    # sessions available across container rebuilds. Dashboard stop deletes
+    # the marker (durable opt-out).
+    RC_HOME="/home/vscode/.local/share/claude-rc"
+    if [ -f "$RC_HOME/autostart" ] && [ -f "$RC_HOME/runner.sh" ]; then
+        echo "[entrypoint] Remote Control autostart enabled - launching runner..."
+        rm -f /tmp/claudebox-rc.stop
+        chown -R vscode:vscode "$RC_HOME" 2>/dev/null || true
+        su vscode -c "nohup bash '$RC_HOME/runner.sh' >/dev/null 2>&1 &" || true
+    fi
+
     exec "$@"
 }
 
