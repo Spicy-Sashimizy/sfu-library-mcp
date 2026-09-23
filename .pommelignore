@@ -1,11 +1,29 @@
+# Directory-style patterns
 node_modules/
 .git/
-*.log
 .claude/
-__pycache__/
-*.pyc
 .pommel/
+.pommel-bin/
+__pycache__/
 venv/
 .venv/
+chromedriver/
 dist/
 build/
+*.log
+*.pyc
+
+# Glob-style equivalents (Pommel daemon exclude_patterns use this form)
+**/node_modules/**
+**/.git/**
+**/.claude/**
+**/.pommel/**
+**/__pycache__/**
+**/venv/**
+**/.venv/**
+**/chromedriver/**
+**/dist/**
+**/build/**
+.venv/**
+venv/**
+chromedriver/**
